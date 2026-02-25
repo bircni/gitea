@@ -121,13 +121,18 @@ async function deleteArtifact(name: string) {
             <template v-for="artifact in artifacts" :key="artifact.name">
               <li class="job-artifacts-item">
                 <template v-if="artifact.status !== 'expired'">
-                  <a class="flex-text-inline" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
+                  <a class="flex-text-inline" target="_blank" :href="artifactPreviewURL(artifact.name)">
                     <SvgIcon name="octicon-file" class="tw-text-text"/>
                     <span class="gt-ellipsis">{{ artifact.name }}</span>
                   </a>
-                  <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">
-                    <SvgIcon name="octicon-trash" class="tw-text-text"/>
-                  </a>
+                  <span class="job-artifact-actions">
+                    <a target="_blank" :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
+                      <SvgIcon name="octicon-download" class="tw-text-text"/>
+                    </a>
+                    <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">
+                      <SvgIcon name="octicon-trash" class="tw-text-text"/>
+                    </a>
+                  </span>
                 </template>
                 <span v-else class="flex-text-inline tw-text-grey-light">
                   <SvgIcon name="octicon-file"/>
@@ -250,6 +255,13 @@ async function deleteArtifact(name: string) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.job-artifact-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .job-artifacts-list {
