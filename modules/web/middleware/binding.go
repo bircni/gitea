@@ -138,7 +138,7 @@ func Validate(errs binding.Errors, data map[string]any, f Form, l translation.Lo
 				data["ErrorMsg"] = trName + l.TrString("form.username_error")
 			case validation.ErrInvalidGroupTeamMap:
 				data["ErrorMsg"] = trName + l.TrString("form.invalid_group_team_map_error", errs[0].Message)
-			case validation.ErrInvalidSlug:
+			case validation.ErrInvalidBadgeSlug:
 				data["ErrorMsg"] = l.TrString("form.invalid_slug_error")
 			default:
 				msg := errs[0].Classification

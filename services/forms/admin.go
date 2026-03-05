@@ -27,7 +27,7 @@ type AdminCreateUserForm struct {
 
 // AdminCreateBadgeForm form for admin to create badge
 type AdminCreateBadgeForm struct {
-	Slug        string `binding:"Required;Slug"`
+	Slug        string `binding:"Required;BadgeSlug"`
 	Description string `binding:"Required"`
 	ImageURL    string `binding:"ValidUrl"`
 }

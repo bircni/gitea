@@ -36,12 +36,6 @@ func Badges(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("admin.badges")
 	ctx.Data["PageIsAdminBadges"] = true
 
-	sortType := ctx.FormString("sort")
-	if sortType == "" {
-		sortType = BadgeSearchDefaultAdminSort
-		ctx.SetFormString("sort", sortType)
-	}
-
 	RenderBadgeSearch(ctx, &user_model.SearchBadgeOptions{
 		Actor: ctx.Doer,
 		ListOptions: db.ListOptions{
@@ -281,7 +275,7 @@ func RenderBadgeSearch(ctx *context.Context, opts *user_model.SearchBadgeOptions
 
 	sortOrder := ctx.FormString("sort")
 	if sortOrder == "" {
-		sortOrder = setting.UI.ExploreDefaultSort
+		sortOrder = BadgeSearchDefaultAdminSort
 	}
 	ctx.Data["SortType"] = sortOrder
 
