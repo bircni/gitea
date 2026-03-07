@@ -201,6 +201,7 @@ type FindRunnerOptions struct {
 	Sort          string
 	Filter        string
 	IsOnline      optional.Option[bool]
+	IsDisabled    optional.Option[bool]
 	WithAvailable bool // not only runners belong to, but also runners can be used
 }
 
@@ -240,6 +241,10 @@ func (opts FindRunnerOptions) ToConds() builder.Cond {
 		} else {
 			cond = cond.And(builder.Lte{"last_online": time.Now().Add(-RunnerOfflineTime).Unix()})
 		}
+	}
+
+	if opts.IsDisabled.Has() {
+		cond = cond.And(builder.Eq{"is_disabled": opts.IsDisabled.Value()})
 	}
 	return cond
 }

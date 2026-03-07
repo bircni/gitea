@@ -346,15 +346,9 @@ func updateRunnerDisabled(ctx *context.Context, isDisabled bool) {
 		failedKey = "actions.runners.disable_runner_failed"
 	}
 
-	if runner.IsDisabled == isDisabled {
-		ctx.Flash.Success(ctx.Tr(successKey))
-		ctx.Redirect(redirectTo)
-		return
-	}
-
 	if err := actions_model.SetRunnerDisabled(ctx, runner, isDisabled); err != nil {
 		log.Warn("updateRunnerDisabled.SetRunnerDisabled failed: %v, url: %s", err, ctx.Req.URL)
-		ctx.Flash.Warning(ctx.Tr(failedKey))
+		ctx.Flash.Error(ctx.Tr(failedKey))
 		ctx.Redirect(redirectTo)
 		return
 	}

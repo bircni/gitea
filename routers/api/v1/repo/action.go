@@ -554,6 +554,11 @@ func (Action) ListRunners(ctx *context.APIContext) {
 	//   description: name of the repo
 	//   type: string
 	//   required: true
+	// - name: disabled
+	//   in: query
+	//   description: filter by disabled status (true or false)
+	//   type: boolean
+	//   required: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/definitions/ActionRunnersResponse"

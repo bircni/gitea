@@ -9,6 +9,7 @@ import (
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/util"
@@ -46,11 +47,15 @@ func ListRunners(ctx *context.APIContext, ownerID, repoID int64) {
 	if ownerID != 0 && repoID != 0 {
 		setting.PanicInDevOrTesting("ownerID and repoID should not be both set")
 	}
-	runners, total, err := db.FindAndCount[actions_model.ActionRunner](ctx, &actions_model.FindRunnerOptions{
+	opts := &actions_model.FindRunnerOptions{
 		OwnerID:     ownerID,
 		RepoID:      repoID,
 		ListOptions: utils.GetListOptions(ctx),
-	})
+	}
+	if ctx.FormString("disabled") != "" {
+		opts.IsDisabled = optional.Some(ctx.FormBool("disabled"))
+	}
+	runners, total, err := db.FindAndCount[actions_model.ActionRunner](ctx, opts)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return

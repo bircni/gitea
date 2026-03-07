@@ -400,6 +400,75 @@ jobs:
 	})
 }
 
+// TestRunnerDisableEnableTasksVersionPath verifies that when the runner sends
+// the current TasksVersion (not 0), the server still re-evaluates after disable
+// and does not assign a task to a disabled runner (version bump on disable).
+func TestRunnerDisableEnableTasksVersionPath(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		session := loginUser(t, user2.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+
+		apiRepo := createActionsTestRepo(t, token, "actions-runner-version-path", false)
+		runner := newMockRunner()
+		runner.registerAsRepoRunner(t, user2.Name, apiRepo.Name, "mock-runner-version-path", []string{"ubuntu-latest"}, false)
+
+		wfTreePath := ".gitea/workflows/runner-version-path.yml"
+		wfContent := `name: runner-version-path
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo version-path
+`
+		opts := getWorkflowCreateFileOptions(user2, apiRepo.DefaultBranch, "create workflow", wfContent)
+		createWorkflowFile(t, token, user2.Name, apiRepo.Name, wfTreePath, opts)
+
+		var firstVersion int64
+		var task1 *runnerv1.Task
+		ddl := time.Now().Add(5 * time.Second)
+		for time.Now().Before(ddl) {
+			task1, firstVersion = runner.fetchTaskOnce(t, 0)
+			if task1 != nil {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		require.NotNil(t, task1, "expected to receive first task")
+		require.NotZero(t, firstVersion, "response TasksVersion should be set")
+
+		// Trigger a second run so there is a pending job after we re-enable the runner
+		opts2 := getWorkflowCreateFileOptions(user2, apiRepo.DefaultBranch, "second push", "second run")
+		createWorkflowFile(t, token, user2.Name, apiRepo.Name, "second-push.txt", opts2)
+		time.Sleep(500 * time.Millisecond) // allow workflow run to be created
+
+		req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s/actions/runners", user2.Name, apiRepo.Name)).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusOK)
+		runnerList := api.ActionRunnersResponse{}
+		DecodeJSON(t, resp, &runnerList)
+		require.Len(t, runnerList.Entries, 1)
+		runnerID := runnerList.Entries[0].ID
+
+		req = NewRequest(t, "PUT", fmt.Sprintf("/api/v1/repos/%s/%s/actions/runners/%d/disable", user2.Name, apiRepo.Name, runnerID)).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusOK)
+
+		runner.execTask(t, task1, &mockTaskOutcome{result: runnerv1.Result_RESULT_SUCCESS})
+
+		// Fetch with the version we had before disable. Server has bumped version on disable,
+		// so we enter PickTask with a re-loaded runner (disabled) and get no task.
+		taskAfterDisable, _ := runner.fetchTaskOnce(t, firstVersion)
+		assert.Nil(t, taskAfterDisable, "disabled runner must not receive a task when sending previous TasksVersion")
+
+		req = NewRequest(t, "PUT", fmt.Sprintf("/api/v1/repos/%s/%s/actions/runners/%d/enable", user2.Name, apiRepo.Name, runnerID)).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusOK)
+
+		task2 := runner.fetchTask(t, 5*time.Second)
+		require.NotNil(t, task2, "after re-enable runner should receive tasks again")
+		runner.execTask(t, task2, &mockTaskOutcome{result: runnerv1.Result_RESULT_SUCCESS})
+	})
+}
+
 func TestActionsGiteaContext(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
 		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})

@@ -32,6 +32,12 @@ func ListRunners(ctx *context.APIContext) {
 	// summary: Get all runners
 	// produces:
 	// - application/json
+	// parameters:
+	// - name: disabled
+	//   in: query
+	//   description: filter by disabled status (true or false)
+	//   type: boolean
+	//   required: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/definitions/ActionRunnersResponse"
