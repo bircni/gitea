@@ -232,6 +232,7 @@ func makeTaskStepDisplayName(step *jobparser.Step, limit int) (name string) {
 
 func CreateTaskForRunner(ctx context.Context, runner *ActionRunner) (*ActionTask, bool, error) {
 	if runner.IsDisabled {
+		log.Trace("skip creating task for disabled runner %d", runner.ID)
 		return nil, false, nil
 	}
 
