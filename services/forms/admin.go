@@ -27,15 +27,15 @@ type AdminCreateUserForm struct {
 
 // AdminCreateBadgeForm form for admin to create badge
 type AdminCreateBadgeForm struct {
-	Slug        string `binding:"Required;BadgeSlug"`
-	Description string `binding:"Required"`
-	ImageURL    string `binding:"ValidUrl"`
+	Slug        string `binding:"Required;BadgeSlug" locale:"admin.badges.slug"`
+	Description string `binding:"Required" locale:"admin.badges.description"`
+	ImageURL    string `binding:"ValidUrl" locale:"admin.badges.image_url"`
 }
 
 // AdminEditBadgeForm form for admin to edit badge
 type AdminEditBadgeForm struct {
-	Description string `binding:"Required"`
-	ImageURL    string `binding:"ValidUrl"`
+	Description string `binding:"Required" locale:"admin.badges.description"`
+	ImageURL    string `binding:"ValidUrl" locale:"admin.badges.image_url"`
 }
 
 // Validate validates form fields

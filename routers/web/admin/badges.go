@@ -97,6 +97,7 @@ func prepareBadgeInfo(ctx *context.Context) *user_model.Badge {
 
 	opts := &user_model.GetBadgeUsersOptions{
 		ListOptions: db.ListOptions{
+			Page:     1,
 			PageSize: setting.UI.Admin.UserPagingNum,
 		},
 		BadgeSlug: b.Slug,
@@ -229,6 +230,9 @@ func BadgeUsersPost(ctx *context.Context) {
 	if err = user_model.AddUserBadge(ctx, u, &user_model.Badge{Slug: ctx.PathParam("badge_slug")}); err != nil {
 		if errors.Is(err, util.ErrNotExist) {
 			ctx.Flash.Error(ctx.Tr("admin.badges.not_found"))
+			ctx.Redirect(setting.AppSubURL + ctx.Req.URL.EscapedPath())
+		} else if errors.Is(err, util.ErrAlreadyExist) {
+			ctx.Flash.Error(ctx.Tr("admin.badges.user_already_has"))
 			ctx.Redirect(setting.AppSubURL + ctx.Req.URL.EscapedPath())
 		} else {
 			ctx.ServerError("AddUserBadge", err)

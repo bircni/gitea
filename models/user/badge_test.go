@@ -107,7 +107,9 @@ func testAddAndRemoveUserBadges(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Confirm that it is impossible to duplicate the same badge
-	assert.Error(t, user_model.AddUserBadge(t.Context(), user1, badge1))
+	err = user_model.AddUserBadge(t.Context(), user1, badge1)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, util.ErrAlreadyExist)
 
 	// Nothing happened to the existing badge
 	badges, count, err = user_model.GetUserBadges(t.Context(), user1)
@@ -120,6 +122,10 @@ func testAddAndRemoveUserBadges(t *testing.T) {
 	_, count, err = user_model.GetUserBadges(t.Context(), user1)
 	assert.Equal(t, int64(0), count)
 	assert.NoError(t, err)
+
+	// Removing empty or missing badge selections should be a no-op.
+	assert.NoError(t, user_model.RemoveUserBadges(t.Context(), user1, nil))
+	assert.NoError(t, user_model.RemoveUserBadges(t.Context(), user1, []*user_model.Badge{{Slug: "does-not-exist"}}))
 }
 
 func testSearchBadgesOrderingAndKeyword(t *testing.T) {
