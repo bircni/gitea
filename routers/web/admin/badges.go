@@ -207,7 +207,7 @@ func BadgeUsers(ctx *context.Context) {
 
 	ctx.Data["Users"] = users
 	ctx.Data["Total"] = count
-	ctx.Data["Page"] = context.NewPagination(int(count), setting.UI.Admin.UserPagingNum, page, 5)
+	ctx.Data["Page"] = context.NewPagination(count, setting.UI.Admin.UserPagingNum, page, 5)
 
 	ctx.HTML(http.StatusOK, tplBadgeUsers)
 }
@@ -312,7 +312,7 @@ func RenderBadgeSearch(ctx *context.Context, opts *user_model.SearchBadgeOptions
 	ctx.Data["Total"] = count
 	ctx.Data["Badges"] = badges
 
-	pager := context.NewPagination(int(count), opts.PageSize, opts.Page, 5)
+	pager := context.NewPagination(count, opts.PageSize, opts.Page, 5)
 	pager.AddParamFromRequest(ctx.Req)
 	ctx.Data["Page"] = pager
 
