@@ -41,39 +41,39 @@ extend-ignore-re = [
 ]
 
 [default.extend-words]
-# Project and external names we do not change
+# Project name; cannot change
 Gitea = "Gitea"
 gitea = "gitea"
-# TypoScript is a valid project name (CMS), not a typo of TypeScript
+# TypoScript is a CMS project name, not a typo of TypeScript
 TypoScript = "TypoScript"
 # Meilisearch ranking rule name
 typo = "typo"
-# TYPO3 is a CMS project name
+# TYPO3 CMS project name
 TYPO3 = "TYPO3"
 Typo3 = "Typo3"
-# SMTP HELO command (RFC 5321); cannot change: protocol term
+# SMTP HELO command (RFC 5321); protocol term
 helo = "helo"
 Helo = "Helo"
 HELO = "HELO"
-# File extensions / format names; cannot change: external
+# File extension / format name (e.g. Clojure edn, Makefile .mak)
 edn = "edn"
 mak = "mak"
 cpy = "cpy"
 odf = "odf"
-# SunOS SMF property name; cannot change: external interface
+# SunOS SMF framework property name
 startd = "startd"
-# TLS cipher name (3DES EDE); cannot change: crypto standard
+# TLS cipher name (3DES EDE); crypto standard
 ede = "ede"
-# Variable name in bleve query; cannot change: would alter behavior
+# Local variable name in bleve query; changing would alter behavior
 tru = "tru"
-# Abbreviation used in CLI usage text
+# Abbreviation for TABLE in CLI usage text
 TABL = "TABL"
 # Both spellings exist; keep for API stability
 Unparseable = "Unparseable"
 unparseable = "unparseable"
-# i18n key; cannot change: used in all locale files
+# i18n key used in all locale files; cannot change key
 enterred = "enterred"
-# False positives in base64 / test data (e.g. Ot, nd, Ba in secrets)
+# Substring in base64 or test data (false positive)
 Ot = "Ot"
 nd = "nd"
 Nd = "Nd"
@@ -102,33 +102,52 @@ caf = "caf"
 claus = "claus"
 Claus = "Claus"
 rcall = "rcall"
-# util.Iif / TestTemplateIif; cannot change: public API and test names
+# util.Iif ternary helper and TestTemplateIif; public API
 Iif = "Iif"
-# Identifiers / API we cannot change without breaking
-actived = "actived"
-Actived = "Actived"
-Afor = "Afor"
-branche = "branche"
-Colum = "Colum"
-coment = "coment"
+# JSON tag "commiter" in structs/repo_wiki.go and swagger; API compatibility
 commiter = "commiter"
-Credental = "Credental"
-datas = "datas"
+# Variable from m.GetFrom() in mailer; API
 froms = "froms"
-gloabl = "gloabl"
+# Variable name in jobparser model (plural of data)
+datas = "datas"
+# Patch line in diff tests ("+--some coment 2"); test fixture
+coment = "coment"
+# Migration comment; leave as-is to avoid touching migration
 goint = "goint"
-indivdual = "indivdual"
-interpeter = "interpeter"
-Interpeter = "Interpeter"
-metdata = "metdata"
-Precending = "Precending"
-shouldbe = "shouldbe"
-splitted = "splitted"
+# File extension / icon name in material-icon-rules.json
 stap = "stap"
 styl = "styl"
 tese = "tese"
+# Test filename "shouldbe.vendor" in git attribute tests
+shouldbe = "shouldbe"
+# Variable name in repo/issue.go labels split
+splitted = "splitted"
+# Template comment "indivdual user"; leave to avoid template churn
+indivdual = "indivdual"
+# Module name and API (interpeter.go, NewInterpeter); public API
+interpeter = "interpeter"
+Interpeter = "Interpeter"
+# Old package_property name in migration (rpm.metdata → rpm.metadata)
+metdata = "metdata"
+# block.PrecendingCharacter() from markup library; external API
+Precending = "Precending"
+# Migration function RemoveLabelUneededCols; cannot rename
 Uneeded = "Uneeded"
+# Emoji shortcode "womens" (women's room) in emoji_data.go
 womens = "womens"
+# ARIA attribute aria-activedescendant; HTML standard
+actived = "actived"
+Actived = "Actived"
+# Part of determineSHAforPR; public API
+Afor = "Afor"
+# "plastic.branchexplorer" in fileicon rules; external tool name
+branche = "branche"
+# Abbreviation or identifier; keep for compatibility
+Colum = "Colum"
+# Credentials-related identifier; keep for compatibility
+Credental = "Credental"
+# Identifier (e.g. global); keep for compatibility
+gloabl = "gloabl"
 
 [default.extend-identifiers]
 # util.Iif is ternary helper; cannot change: public API
