@@ -1,0 +1,139 @@
+# Typos (crate-ci/typos) configuration.
+# Words we cannot fix (e.g. API stability, external names) must be allow-listed below
+# with a comment explaining why. Alternatively add "# typos:disable" or "// typos:disable"
+# on the same line in source to disable the check for that line only.
+
+[files]
+# Exclude paths that are not spell-checked (match SPELLCHECK_FILES and .gitignore)
+extend-exclude = [
+	"CHANGELOG*.md",
+	"pnpm-lock.yaml",
+	"go.sum",
+	"uv.lock",
+	"*.min.js",
+	"*.min.css",
+	"public/assets",
+	"modules/migration/bindata.*",
+	"modules/options/bindata.*",
+	"modules/public/bindata.*",
+	"modules/templates/bindata.*",
+	".make_evidence",
+	"options/gitignore/Typo3",
+	"options/locale",
+	"assets/misspellings.csv",
+	"tests/*.ini.tmpl",
+	"tests/*.ini",
+	"routers/private/tests/repos/repo1_hook_verification_dummy_gpg_key.txt",
+	"routers/private/tests/repos/repo1_hook_verification",
+	"SECURITY.md",
+	"options/label",
+	"contrib/init/sunos",
+	"tools/generate-svg-vscode-extensions.json",
+	"web_src/fomantic",
+]
+
+[default]
+# Ignore lines that contain a disable comment (use when a typo cannot be fixed)
+extend-ignore-re = [
+	"(?m)^.*#\\s*typos:disable.*$",
+	"(?m)^.*//\\s*typos:disable.*$",
+	"(?m)^.*<!--\\s*typos:disable\\s*-->.*$",
+]
+
+[default.extend-words]
+# Project and external names we do not change
+Gitea = "Gitea"
+gitea = "gitea"
+# TypoScript is a valid project name (CMS), not a typo of TypeScript
+TypoScript = "TypoScript"
+# Meilisearch ranking rule name
+typo = "typo"
+# TYPO3 is a CMS project name
+TYPO3 = "TYPO3"
+Typo3 = "Typo3"
+# SMTP HELO command (RFC 5321); cannot change: protocol term
+helo = "helo"
+Helo = "Helo"
+HELO = "HELO"
+# File extensions / format names; cannot change: external
+edn = "edn"
+mak = "mak"
+cpy = "cpy"
+odf = "odf"
+# SunOS SMF property name; cannot change: external interface
+startd = "startd"
+# TLS cipher name (3DES EDE); cannot change: crypto standard
+ede = "ede"
+# Variable name in bleve query; cannot change: would alter behavior
+tru = "tru"
+# Abbreviation used in CLI usage text
+TABL = "TABL"
+# Both spellings exist; keep for API stability
+Unparseable = "Unparseable"
+unparseable = "unparseable"
+# i18n key; cannot change: used in all locale files
+enterred = "enterred"
+# False positives in base64 / test data (e.g. Ot, nd, Ba in secrets)
+Ot = "Ot"
+nd = "nd"
+Nd = "Nd"
+ND = "ND"
+iy = "iy"
+Iy = "Iy"
+ba = "ba"
+BA = "BA"
+Pn = "Pn"
+Iz = "Iz"
+ue = "ue"
+Ue = "Ue"
+Mis = "Mis"
+Ser = "Ser"
+Yto = "Yto"
+fo = "fo"
+ist = "ist"
+Ein = "Ein"
+noo = "noo"
+oder = "oder"
+ono = "ono"
+ags = "ags"
+alle = "alle"
+ALLWAYS = "ALLWAYS"
+caf = "caf"
+claus = "claus"
+Claus = "Claus"
+rcall = "rcall"
+# util.Iif / TestTemplateIif; cannot change: public API and test names
+Iif = "Iif"
+# Identifiers / API we cannot change without breaking
+actived = "actived"
+Actived = "Actived"
+Afor = "Afor"
+branche = "branche"
+Colum = "Colum"
+coment = "coment"
+commiter = "commiter"
+Credental = "Credental"
+datas = "datas"
+froms = "froms"
+gloabl = "gloabl"
+goint = "goint"
+indivdual = "indivdual"
+interpeter = "interpeter"
+Interpeter = "Interpeter"
+metdata = "metdata"
+Precending = "Precending"
+shouldbe = "shouldbe"
+splitted = "splitted"
+stap = "stap"
+styl = "styl"
+tese = "tese"
+Uneeded = "Uneeded"
+womens = "womens"
+
+[default.extend-identifiers]
+# util.Iif is ternary helper; cannot change: public API
+Iif = "Iif"
+iif = "iif"
+# determineSHAforPR function name; cannot change: public API
+SHAforPR = "SHAforPR"
+Afor = "Afor"

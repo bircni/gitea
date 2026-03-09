@@ -8,3 +8,4 @@
 - Before committing any files, remove all trailing whitespace from source code lines
 - Never force-push to pull request branches
 - Always start issue and pull request comments with an authorship attribution
+- Typos check: run `make lint-typos` when changing prose. For words that cannot be fixed (e.g. API stability), add `# typos:disable` or `// typos:disable` on that line, or allow-list the word in `_typos.toml` with a comment explaining why

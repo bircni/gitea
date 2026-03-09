@@ -108,6 +108,10 @@ jobs:
           go-version-file: go.mod
           check-latest: true
       - run: make lint-spell
+      - name: Typos check
+        uses: crate-ci/typos@v1.44.0
+        with:
+          config: _typos.toml
 
   lint-go-windows:
     if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'

@@ -273,10 +273,10 @@ checks-frontend: lockfile-check svg-check ## check frontend files
 checks-backend: tidy-check swagger-check fmt-check swagger-validate security-check ## check backend files
 
 .PHONY: lint
-lint: lint-frontend lint-backend lint-spell ## lint everything
+lint: lint-frontend lint-backend lint-spell lint-typos ## lint everything
 
 .PHONY: lint-fix
-lint-fix: lint-frontend-fix lint-backend-fix lint-spell-fix ## lint everything and fix issues
+lint-fix: lint-frontend-fix lint-backend-fix lint-spell-fix ## lint everything and fix issues (typos: run lint-typos and fix manually or add to _typos.toml)
 
 .PHONY: lint-frontend
 lint-frontend: lint-js lint-css ## lint frontend files
@@ -327,6 +327,11 @@ lint-spell: ## lint spelling
 .PHONY: lint-spell-fix
 lint-spell-fix: ## lint spelling and fix issues
 	@git ls-files $(SPELLCHECK_FILES) | xargs go run $(MISSPELL_PACKAGE) -dict assets/misspellings.csv -w
+
+.PHONY: lint-typos
+lint-typos: ## lint typos (crate-ci/typos); use "# typos:disable" in source for unfixable words
+	@command -v typos >/dev/null 2>&1 || { echo "typos not installed (see https://github.com/crate-ci/typos#installation), skipping"; exit 0; }
+	typos
 
 .PHONY: lint-go
 lint-go: ## lint go files
