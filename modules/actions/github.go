@@ -26,8 +26,8 @@ const (
 )
 
 // IsDefaultBranchWorkflow returns true if the event only triggers workflows on the default branch
-func IsDefaultBranchWorkflow(triggedEvent webhook_module.HookEventType) bool {
-	switch triggedEvent {
+func IsDefaultBranchWorkflow(triggeredEvent webhook_module.HookEventType) bool {
+	switch triggeredEvent {
 	case webhook_module.HookEventDelete:
 		// GitHub "delete" event
 		// https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#delete
@@ -65,17 +65,17 @@ func IsDefaultBranchWorkflow(triggedEvent webhook_module.HookEventType) bool {
 }
 
 // canGithubEventMatch check if the input Github event can match any Gitea event.
-func canGithubEventMatch(eventName string, triggedEvent webhook_module.HookEventType) bool {
+func canGithubEventMatch(eventName string, triggeredEvent webhook_module.HookEventType) bool {
 	switch eventName {
 	case GithubEventRegistryPackage:
-		return triggedEvent == webhook_module.HookEventPackage
+		return triggeredEvent == webhook_module.HookEventPackage
 
 	// See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#gollum
 	case GithubEventGollum:
-		return triggedEvent == webhook_module.HookEventWiki
+		return triggeredEvent == webhook_module.HookEventWiki
 
 	case GithubEventIssues:
-		switch triggedEvent {
+		switch triggeredEvent {
 		case webhook_module.HookEventIssues,
 			webhook_module.HookEventIssueAssign,
 			webhook_module.HookEventIssueLabel,
@@ -87,7 +87,7 @@ func canGithubEventMatch(eventName string, triggedEvent webhook_module.HookEvent
 		}
 
 	case GithubEventPullRequest, GithubEventPullRequestTarget:
-		switch triggedEvent {
+		switch triggeredEvent {
 		case webhook_module.HookEventPullRequest,
 			webhook_module.HookEventPullRequestSync,
 			webhook_module.HookEventPullRequestAssign,
@@ -101,7 +101,7 @@ func canGithubEventMatch(eventName string, triggedEvent webhook_module.HookEvent
 		}
 
 	case GithubEventPullRequestReview:
-		switch triggedEvent {
+		switch triggeredEvent {
 		case webhook_module.HookEventPullRequestReviewApproved,
 			webhook_module.HookEventPullRequestReviewComment,
 			webhook_module.HookEventPullRequestReviewRejected:
@@ -112,14 +112,14 @@ func canGithubEventMatch(eventName string, triggedEvent webhook_module.HookEvent
 		}
 
 	case GithubEventSchedule:
-		return triggedEvent == webhook_module.HookEventSchedule
+		return triggeredEvent == webhook_module.HookEventSchedule
 
 	case GithubEventIssueComment:
 		// https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_comment-use-issue_comment
-		return triggedEvent == webhook_module.HookEventIssueComment ||
-			triggedEvent == webhook_module.HookEventPullRequestComment
+		return triggeredEvent == webhook_module.HookEventIssueComment ||
+			triggeredEvent == webhook_module.HookEventPullRequestComment
 
 	default:
-		return eventName == string(triggedEvent)
+		return eventName == string(triggeredEvent)
 	}
 }

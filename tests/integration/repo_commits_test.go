@@ -55,7 +55,7 @@ func TestRepoCommits(t *testing.T) {
 		assert.Equal(t, "/user2", authorHref)
 	})
 
-	t.Run("CommitListNonExistingCommiter", func(t *testing.T) {
+	t.Run("CommitListNonExistingCommitter", func(t *testing.T) {
 		// check the commit list for a repository with no gitea user
 		// * commit 985f0301dba5e7b34be866819cd15ad3d8f508ee (branch2)
 		// * Author: 6543 <6543@obermui.de>
@@ -69,7 +69,7 @@ func TestRepoCommits(t *testing.T) {
 		assert.Equal(t, "6543", strings.TrimSpace(authorElem.Text()))
 	})
 
-	t.Run("LastCommitNonExistingCommiter", func(t *testing.T) {
+	t.Run("LastCommitNonExistingCommitter", func(t *testing.T) {
 		req := NewRequest(t, "GET", "/user2/repo1/src/branch/branch2")
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		doc := NewHTMLParser(t, resp.Body)
