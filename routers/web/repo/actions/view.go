@@ -51,7 +51,10 @@ func getRunIndex(ctx *context_module.Context) int64 {
 func View(ctx *context_module.Context) {
 	ctx.Data["PageIsActions"] = true
 	runIndex := getRunIndex(ctx)
-	jobIndex := ctx.PathParamInt("job")
+	jobIndex := -1
+	if ctx.PathParam("job") != "" {
+		jobIndex = ctx.PathParamInt("job")
+	}
 	ctx.Data["RunIndex"] = runIndex
 	ctx.Data["JobIndex"] = jobIndex
 	ctx.Data["ActionsURL"] = ctx.Repo.RepoLink + "/actions"
@@ -128,6 +131,10 @@ type ViewResponse struct {
 			IsSchedule        bool          `json:"isSchedule"`
 			Jobs              []*ViewJob    `json:"jobs"`
 			Commit            ViewCommit    `json:"commit"`
+			// Summary view: run duration and trigger time/event
+			Duration     string `json:"duration"`
+			TriggeredAt  int64  `json:"triggeredAt"`  // unix seconds for relative time
+			TriggerEvent string `json:"triggerEvent"` // e.g. pull_request, push, schedule
 		} `json:"run"`
 		CurrentJob struct {
 			Title  string         `json:"title"`
@@ -209,7 +216,11 @@ func getActionsViewArtifacts(ctx context.Context, repoID, runIndex int64) (artif
 func ViewPost(ctx *context_module.Context) {
 	req := web.GetForm(ctx).(*ViewRequest)
 	runIndex := getRunIndex(ctx)
-	jobIndex := ctx.PathParamInt("job")
+	isSummary := ctx.PathParam("job") == ""
+	jobIndex := -1
+	if !isSummary {
+		jobIndex = ctx.PathParamInt("job")
+	}
 
 	current, jobs := getRunJobs(ctx, runIndex, jobIndex)
 	if ctx.Written() {
@@ -281,37 +292,42 @@ func ViewPost(ctx *context_module.Context) {
 		Pusher:   pusher,
 		Branch:   branch,
 	}
+	resp.State.Run.Duration = run.Duration().String()
+	resp.State.Run.TriggeredAt = run.Created.AsTime().Unix()
+	resp.State.Run.TriggerEvent = run.TriggerEvent
 
-	var task *actions_model.ActionTask
-	if current.TaskID > 0 {
-		var err error
-		task, err = actions_model.GetTaskByID(ctx, current.TaskID)
-		if err != nil {
-			ctx.ServerError("actions_model.GetTaskByID", err)
-			return
-		}
-		task.Job = current
-		if err := task.LoadAttributes(ctx); err != nil {
-			ctx.ServerError("task.LoadAttributes", err)
-			return
-		}
-	}
-
-	resp.State.CurrentJob.Title = current.Name
-	resp.State.CurrentJob.Detail = current.Status.LocaleString(ctx.Locale)
-	if run.NeedApproval {
-		resp.State.CurrentJob.Detail = ctx.Locale.TrString("actions.need_approval_desc")
-	}
 	resp.State.CurrentJob.Steps = make([]*ViewJobStep, 0) // marshal to '[]' instead fo 'null' in json
 	resp.Logs.StepsLog = make([]*ViewStepLog, 0)          // marshal to '[]' instead fo 'null' in json
-	if task != nil {
-		steps, logs, err := convertToViewModel(ctx, ctx.Locale, req.LogCursors, task)
-		if err != nil {
-			ctx.ServerError("convertToViewModel", err)
-			return
+
+	if !isSummary {
+		resp.State.CurrentJob.Title = current.Name
+		resp.State.CurrentJob.Detail = current.Status.LocaleString(ctx.Locale)
+		if run.NeedApproval {
+			resp.State.CurrentJob.Detail = ctx.Locale.TrString("actions.need_approval_desc")
 		}
-		resp.State.CurrentJob.Steps = append(resp.State.CurrentJob.Steps, steps...)
-		resp.Logs.StepsLog = append(resp.Logs.StepsLog, logs...)
+		var task *actions_model.ActionTask
+		if current.TaskID > 0 {
+			var err error
+			task, err = actions_model.GetTaskByID(ctx, current.TaskID)
+			if err != nil {
+				ctx.ServerError("actions_model.GetTaskByID", err)
+				return
+			}
+			task.Job = current
+			if err := task.LoadAttributes(ctx); err != nil {
+				ctx.ServerError("task.LoadAttributes", err)
+				return
+			}
+		}
+		if task != nil {
+			steps, logs, err := convertToViewModel(ctx, ctx.Locale, req.LogCursors, task)
+			if err != nil {
+				ctx.ServerError("convertToViewModel", err)
+				return
+			}
+			resp.State.CurrentJob.Steps = append(resp.State.CurrentJob.Steps, steps...)
+			resp.Logs.StepsLog = append(resp.Logs.StepsLog, logs...)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)

@@ -7,7 +7,9 @@ export function initRepositoryActionView() {
 
   // TODO: the parent element's full height doesn't work well now,
   // but we can not pollute the global style at the moment, only fix the height problem for pages with this component
-  const parentFullHeight = document.querySelector<HTMLElement>('body > div.full.height');
+  const parentFullHeight = document.querySelector<HTMLElement>(
+    'body > div.full.height',
+  );
   if (parentFullHeight) parentFullHeight.classList.add('tw-pb-0');
 
   const view = createApp(RepoActionView, {
@@ -23,10 +25,16 @@ export function initRepositoryActionView() {
       commit: el.getAttribute('data-locale-runs-commit'),
       pushedBy: el.getAttribute('data-locale-runs-pushed-by'),
       workflowGraph: el.getAttribute('data-locale-runs-workflow-graph'),
+      summary: el.getAttribute('data-locale-summary'),
+      allJobs: el.getAttribute('data-locale-all-jobs'),
+      triggeredVia: el.getAttribute('data-locale-triggered-via'),
+      totalDuration: el.getAttribute('data-locale-total-duration'),
       artifactsTitle: el.getAttribute('data-locale-artifacts-title'),
       areYouSure: el.getAttribute('data-locale-are-you-sure'),
       artifactExpired: el.getAttribute('data-locale-artifact-expired'),
-      confirmDeleteArtifact: el.getAttribute('data-locale-confirm-delete-artifact'),
+      confirmDeleteArtifact: el.getAttribute(
+        'data-locale-confirm-delete-artifact',
+      ),
       showTimeStamps: el.getAttribute('data-locale-show-timestamps'),
       showLogSeconds: el.getAttribute('data-locale-show-log-seconds'),
       showFullScreen: el.getAttribute('data-locale-show-full-screen'),
@@ -41,8 +49,12 @@ export function initRepositoryActionView() {
         skipped: el.getAttribute('data-locale-status-skipped'),
         blocked: el.getAttribute('data-locale-status-blocked'),
       },
-      logsAlwaysAutoScroll: el.getAttribute('data-locale-logs-always-auto-scroll'),
-      logsAlwaysExpandRunning: el.getAttribute('data-locale-logs-always-expand-running'),
+      logsAlwaysAutoScroll: el.getAttribute(
+        'data-locale-logs-always-auto-scroll',
+      ),
+      logsAlwaysExpandRunning: el.getAttribute(
+        'data-locale-logs-always-expand-running',
+      ),
     },
   });
   view.mount(el);
