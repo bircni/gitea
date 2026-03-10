@@ -734,18 +734,6 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
               keySplines="0.4, 0, 0.2, 1"
             />
           </rect>
-
-          <text
-            v-if="job.needs?.length"
-            :x="job.x + nodeWidth / 2"
-            :y="job.y - 8"
-            fill="var(--color-text-light-2)"
-            font-size="10"
-            text-anchor="middle"
-            class="job-deps-label"
-          >
-            ← {{ job.needs.length }} deps
-          </text>
         </g>
 
         <defs>
@@ -862,8 +850,7 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
 }
 
 .job-status,
-.job-duration,
-.job-deps-label {
+.job-duration {
   user-select: none;
   pointer-events: none;
 }

@@ -613,7 +613,7 @@ export default defineComponent({
           <div class="action-run-summary-block">
             <p class="tw-mb-1">
               {{ locale.triggeredVia }}
-              <span class="tw-capitalize">{{ runTriggerEventLabel }} </span><relative-time v-if="runTriggeredAtISO" :datetime="runTriggeredAtISO"/>
+              <span class="tw-capitalize">{{ runTriggerEventLabel }}</span> <relative-time v-if="runTriggeredAtISO" :datetime="runTriggeredAtISO" prefix=" "/>
             </p>
             <p class="tw-mb-0">
               <ActionRunStatus :locale-status="locale.status[run.status]" :status="run.status" :size="16"/>
