@@ -110,8 +110,8 @@ export default defineComponent({
     WorkflowGraph,
   },
   props: {
-    runIndex: {type: Number, required: true},
-    jobIndex: {type: Number, required: true},
+    runId: {type: Number, required: true},
+    jobId: {type: Number, required: true},
     actionsURL: {type: String, required: true},
     locale: {
       type: Object as PropType<Record<string, any>>,
@@ -196,7 +196,7 @@ export default defineComponent({
 
   computed: {
     isSummaryMode(): boolean {
-      return this.jobIndex === -1;
+      return this.jobId === -1;
     },
     runTriggeredAtISO(): string {
       const t = this.run.triggeredAt;
@@ -384,8 +384,8 @@ export default defineComponent({
         ? []
         : this.currentJobStepsStates.map((it, idx) => ({step: idx, cursor: it.cursor, expanded: it.expanded}));
       const url = this.isSummaryMode
-        ? `${this.actionsURL}/runs/${this.runIndex}`
-        : `${this.actionsURL}/runs/${this.runIndex}/jobs/${this.jobIndex}`;
+        ? `${this.actionsURL}/runs/${this.runId}`
+        : `${this.actionsURL}/runs/${this.runId}/jobs/${this.jobId}`;
       const resp = await POST(url, {
         signal: abortController.signal,
         data: {logCursors},
@@ -569,13 +569,13 @@ export default defineComponent({
             </a>
             <div class="ui divider tw-mt-2 tw-mb-1"/>
             <div class="tw-text-sm tw-text-grey tw-mt-1 tw-mb-1">{{ locale.allJobs }}</div>
-            <a class="job-brief-item" :href="run.link+'/jobs/'+index" :class="jobIndex === index ? 'selected' : ''" v-for="(job, index) in run.jobs" :key="job.id">
+            <a class="job-brief-item" :href="run.link+'/jobs/'+job.id" :class="jobId === job.id ? 'selected' : ''" v-for="job in run.jobs" :key="job.id">
               <div class="job-brief-item-left">
                 <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
                 <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ job.name }}</span>
               </div>
               <span class="job-brief-item-right">
-                <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${index}/rerun`" v-if="job.canRerun"/>
+                <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
                 <span class="step-summary-duration">{{ job.duration }}</span>
               </span>
             </a>
@@ -617,14 +617,15 @@ export default defineComponent({
             </p>
             <p class="tw-mb-0">
               <ActionRunStatus :locale-status="locale.status[run.status]" :status="run.status" :size="16"/>
-              <span class="tw-ml-2">{{ locale.status[run.status] }} </span><span class="tw-ml-3">{{ locale.totalDuration }}: {{ run.duration || '–' }}</span>
-              <span class="tw-ml-3">{{ locale.artifactsTitle }}: {{ artifacts ? artifacts.length : '–' }}</span>
+              <span class="tw-ml-2">{{ locale.status[run.status] }}</span>
+              <span class="tw-ml-3">{{ locale.totalDuration }}: {{ run.duration || '–' }}</span>
+              <span class="tw-ml-3">{{ locale.artifactsTitle }}: {{ artifacts.length || '–' }}</span>
             </p>
           </div>
           <WorkflowGraph
             v-if="run.jobs.length > 0"
             :jobs="run.jobs"
-            :current-job-index="-1"
+            :current-job-id="-1"
             :run-link="run.link"
             :workflow-id="run.workflowID"
             class="workflow-graph-container"
@@ -634,7 +635,7 @@ export default defineComponent({
           <WorkflowGraph
             v-if="showWorkflowGraph && run.jobs.length > 1"
             :jobs="run.jobs"
-            :current-job-index="jobIndex"
+            :current-job-id="jobId"
             :run-link="run.link"
             :workflow-id="run.workflowID"
             class="workflow-graph-container"
@@ -679,7 +680,7 @@ export default defineComponent({
                   </a>
 
                   <div class="divider"/>
-                  <a :class="['item', !currentJob.steps.length ? 'disabled' : '']" :href="run.link+'/jobs/'+jobIndex+'/logs'" download>
+                  <a :class="['item', !currentJob.steps.length ? 'disabled' : '']" :href="run.link+'/jobs/'+jobId+'/logs'" download>
                     <i class="icon"><SvgIcon name="octicon-download"/></i>
                     {{ locale.downloadLogs }}
                   </a>
