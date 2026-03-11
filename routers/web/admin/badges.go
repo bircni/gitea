@@ -37,7 +37,6 @@ func Badges(ctx *context.Context) {
 	ctx.Data["PageIsAdminBadges"] = true
 
 	RenderBadgeSearch(ctx, &user_model.SearchBadgeOptions{
-		Actor: ctx.Doer,
 		ListOptions: db.ListOptions{
 			Page:     max(ctx.FormInt("page"), 1),
 			PageSize: setting.UI.Admin.UserPagingNum,
@@ -94,22 +93,6 @@ func prepareBadgeInfo(ctx *context.Context) *user_model.Badge {
 		return nil
 	}
 	ctx.Data["Badge"] = b
-
-	opts := &user_model.GetBadgeUsersOptions{
-		ListOptions: db.ListOptions{
-			Page:     1,
-			PageSize: setting.UI.Admin.UserPagingNum,
-		},
-		BadgeSlug: b.Slug,
-	}
-	users, count, err := user_model.GetBadgeUsers(ctx, opts)
-	if err != nil {
-		ctx.ServerError("GetBadgeUsers", err)
-		return nil
-	}
-	ctx.Data["Users"] = users
-	ctx.Data["UsersTotal"] = int(count)
-
 	return b
 }
 
@@ -121,6 +104,22 @@ func ViewBadge(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
+
+	badge := ctx.Data["Badge"].(*user_model.Badge)
+	opts := &user_model.GetBadgeUsersOptions{
+		ListOptions: db.ListOptions{
+			Page:     1,
+			PageSize: setting.UI.Admin.UserPagingNum,
+		},
+		BadgeSlug: badge.Slug,
+	}
+	users, count, err := user_model.GetBadgeUsers(ctx, opts)
+	if err != nil {
+		ctx.ServerError("GetBadgeUsers", err)
+		return
+	}
+	ctx.Data["Users"] = users
+	ctx.Data["UsersTotal"] = int(count)
 
 	ctx.HTML(http.StatusOK, tplBadgeView)
 }
@@ -139,8 +138,6 @@ func EditBadge(ctx *context.Context) {
 
 // EditBadgePost response for editing badge
 func EditBadgePost(ctx *context.Context) {
-	ctx.Data["Title"] = ctx.Tr("admin.badges.edit_badge")
-	ctx.Data["PageIsAdminBadges"] = true
 	b := prepareBadgeInfo(ctx)
 	if ctx.Written() {
 		return
@@ -148,7 +145,7 @@ func EditBadgePost(ctx *context.Context) {
 
 	form := web.GetForm(ctx).(*forms.AdminEditBadgeForm)
 	if ctx.HasError() {
-		ctx.HTML(http.StatusOK, tplBadgeEdit)
+		ctx.JSONError(ctx.GetErrMsg())
 		return
 	}
 
@@ -163,7 +160,7 @@ func EditBadgePost(ctx *context.Context) {
 	log.Trace("Badge updated by admin (%s): %s", ctx.Doer.Name, b.Slug)
 
 	ctx.Flash.Success(ctx.Tr("admin.badges.update_success"))
-	ctx.Redirect(setting.AppSubURL + "/-/admin/badges/slug/" + url.PathEscape(ctx.PathParam("badge_slug")))
+	ctx.JSONRedirect(setting.AppSubURL + "/-/admin/badges/slug/" + url.PathEscape(ctx.PathParam("badge_slug")))
 }
 
 // DeleteBadge response for deleting a badge

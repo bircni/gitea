@@ -122,7 +122,7 @@ func DeleteBadge(ctx context.Context, badge *Badge) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		// First delete all user_badge entries for this badge
 		if _, err := db.GetEngine(ctx).
-			Where("badge_id = (SELECT id FROM badge WHERE slug = ?)", badge.Slug).
+			Where("badge_id = ?", badge.ID).
 			Delete(&UserBadge{}); err != nil {
 			return err
 		}
@@ -226,7 +226,6 @@ type SearchBadgeOptions struct {
 	Slug    string
 	ID      int64
 	OrderBy db.SearchOrderBy
-	Actor   *User // The user doing the search
 }
 
 func (opts *SearchBadgeOptions) ToConds() builder.Cond {

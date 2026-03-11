@@ -140,8 +140,3 @@ func IsValidBadgeSlug(slug string) bool {
 	vars := globalVars()
 	return vars.validBadgeSlugPattern.MatchString(slug) && !vars.invalidBadgeSlugPattern.MatchString(slug)
 }
-
-// IsValidSlug checks if slug is valid.
-func IsValidSlug(slug string) bool {
-	return IsValidBadgeSlug(slug)
-}

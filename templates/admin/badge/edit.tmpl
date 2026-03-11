@@ -4,7 +4,7 @@
 			{{ctx.Locale.Tr "admin.badges.edit_badge"}}
 		</h4>
 			<div class="ui attached segment">
-				<form class="ui form" action="./edit" method="post">
+				<form class="ui form form-fetch-action" action="./edit" method="post">
 					<div class="field">
 					<label>{{ctx.Locale.Tr "admin.badges.slug"}}</label>
 					<input value="{{.Badge.Slug}}" readonly>
