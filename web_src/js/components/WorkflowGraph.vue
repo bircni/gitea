@@ -758,9 +758,11 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--color-secondary-alpha-20);
-  gap: 15px;
+  padding: 8px 14px;
+  border-radius: var(--border-radius);
+  background: var(--color-box-header);
+  border: 1px solid var(--color-secondary-alpha-30);
+  gap: 20px;
   flex-wrap: wrap;
 }
 
@@ -774,7 +776,10 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
 }
 
 .graph-stats {
-  color: var(--color-text-light-2);
+  display: flex;
+  align-items: baseline;
+  column-gap: 8px;
+  color: var(--color-text-light-1);
   font-size: 13px;
   white-space: nowrap;
 }
