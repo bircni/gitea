@@ -123,7 +123,7 @@ export default defineComponent({
 .action-run-summary-actor {
   display: inline-flex;
   align-items: center;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
 }
 
