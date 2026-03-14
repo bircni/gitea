@@ -355,6 +355,10 @@ class RelativeTime extends HTMLElement {
     return this.getAttribute('datetime') || '';
   }
 
+  set datetime(v: string) {
+    this.setAttribute('datetime', v);
+  }
+
   get date(): Date | null {
     const parsed = Date.parse(this.datetime);
     return Number.isNaN(parsed) ? null : new Date(parsed);
