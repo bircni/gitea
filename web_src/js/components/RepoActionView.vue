@@ -28,9 +28,11 @@ export default defineComponent({
 
   data() {
     return {
+      // internal state
       loadingAbortController: null as AbortController | null,
       intervalID: null as IntervalId | null,
       artifacts: [] as Array<Record<string, any>>,
+      // provided by backend
       run: {
         link: '',
         title: '',
@@ -91,6 +93,7 @@ export default defineComponent({
   },
 
   async mounted() {
+    // load run data and then auto-reload periodically
     await this.loadRun();
     this.intervalID = setInterval(() => this.loadRun(), 1000);
   },
@@ -99,6 +102,8 @@ export default defineComponent({
   },
 
   unmounted() {
+    // clear the interval timer when the component is unmounted
+    // even our page is rendered once, not spa style
     if (this.intervalID) {
       clearInterval(this.intervalID);
       this.intervalID = null;
@@ -106,14 +111,17 @@ export default defineComponent({
   },
 
   methods: {
+    // cancel a run
     cancelRun() {
       POST(`${this.run.link}/cancel`);
     },
+    // approve a run
     approveRun() {
       POST(`${this.run.link}/approve`);
     },
     async deleteArtifact(name: string) {
       if (!window.confirm(this.locale.confirmDeleteArtifact.replace('%s', name))) return;
+      // TODO: should escape the "name"?
       await DELETE(`${this.run.link}/artifacts/${name}`);
       await this.loadRunForce();
     },
@@ -140,6 +148,7 @@ export default defineComponent({
 
         this.artifacts = job.artifacts || [];
         this.run = job.state.run;
+        // clear the interval timer if the job is done
         if (this.run.done && this.intervalID) {
           clearInterval(this.intervalID);
           this.intervalID = null;
@@ -456,8 +465,6 @@ export default defineComponent({
 }
 
 /* end fomantic button overrides */
-
-/* begin fomantic dropdown menu overrides */
 
 @media (max-width: 767.98px) {
   .action-view-body {

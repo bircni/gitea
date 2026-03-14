@@ -21,8 +21,13 @@ type LogLineCommandName = 'group' | 'endgroup' | 'command' | 'error' | 'hidden';
 type LogLineCommand = {
   name: LogLineCommandName,
   prefix: string,
-};
+}
 
+// How GitHub Actions logs work:
+// * Workflow command outputs log commands like "::group::the-title", "::add-matcher::...."
+// * Workflow runner parses and processes the commands to "##[group]", apply "matchers", hide secrets, etc.
+// * The reported logs are the processed logs.
+// HOWEVER: Gitea runner does not completely process those commands. Many works are done by the frontend at the moment.
 const LogLinePrefixCommandMap: Record<string, LogLineCommandName> = {
   '::group::': 'group',
   '##[group]': 'group',
@@ -40,6 +45,7 @@ const LogLinePrefixCommandMap: Record<string, LogLineCommandName> = {
 };
 
 export function parseLogLineCommand(line: LogLine): LogLineCommand | null {
+  // TODO: in the future it can be refactored to be a general parser that can parse arguments, drop the "prefix match"
   for (const prefix in LogLinePrefixCommandMap) {
     if (line.message.startsWith(prefix)) {
       return {name: LogLinePrefixCommandMap[prefix], prefix};
@@ -50,8 +56,10 @@ export function parseLogLineCommand(line: LogLine): LogLineCommand | null {
 
 export function createLogLineMessage(line: LogLine, cmd: LogLineCommand | null) {
   const logMsgAttrs = {class: 'log-msg'};
-  if (cmd?.name) logMsgAttrs.class += ` log-cmd-${cmd?.name}`;
+  if (cmd?.name) logMsgAttrs.class += ` log-cmd-${cmd?.name}`; // make it easier to add styles to some commands like "error"
 
+  // TODO: for some commands (::group::), the "prefix removal" works well, for some commands with "arguments" (::remove-matcher ...::),
+  // it needs to do further processing in the future (fortunately, at the moment we don't need to handle these commands)
   const msgContent = cmd ? line.message.substring(cmd.prefix.length) : line.message;
 
   const logMsg = createElementFromAttrs('span', logMsgAttrs);
@@ -59,8 +67,9 @@ export function createLogLineMessage(line: LogLine, cmd: LogLineCommand | null) 
   return logMsg;
 }
 
-function isLogElementInViewport(el: Element, {extraViewPortHeight} = {extraViewPortHeight: 0}): boolean {
+function isLogElementInViewport(el: Element, {extraViewPortHeight}={extraViewPortHeight: 0}): boolean {
   const rect = el.getBoundingClientRect();
+  // only check whether bottom is in viewport, because the log element can be a log group which is usually tall
   return 0 <= rect.bottom && rect.bottom <= window.innerHeight + extraViewPortHeight;
 }
 
@@ -68,17 +77,20 @@ type Step = {
   summary: string,
   duration: string,
   status: ActionsRunStatus,
-};
+}
 
 type JobStepState = {
-  cursor: string | null,
+  cursor: string|null,
   expanded: boolean,
-  manuallyCollapsed: boolean,
-};
+  manuallyCollapsed: boolean, // whether the user manually collapsed the step, used to avoid auto-expanding it again
+}
 
 type StepContainerElement = HTMLElement & {
+  // To remember the last active logs container, for example: a batch of logs only starts a group but doesn't end it,
+  // then the following batches of logs should still use the same group (active logs container).
+  // maybe it can be refactored to decouple from the HTML element in the future.
   _stepLogsActiveContainer?: HTMLElement;
-};
+}
 
 type LocaleStorageOptions = {
   autoScroll: boolean;
@@ -117,6 +129,7 @@ export default defineComponent({
       localUserSettings.getJsonObject('actions-view-options', defaultViewOptions);
 
     return {
+      // internal state
       loadingAbortController: null as AbortController | null,
       intervalID: null as IntervalId | null,
       currentJobStepsStates: [] as Array<JobStepState>,
@@ -131,7 +144,13 @@ export default defineComponent({
       currentJob: {
         title: '',
         detail: '',
-        steps: [] as Array<Step>,
+        steps: [
+          // {
+          //   summary: '',
+          //   duration: '',
+          //   status: '',
+          // }
+        ] as Array<Step>,
       },
     };
   },
@@ -144,10 +163,13 @@ export default defineComponent({
     },
   },
   async mounted() {
+    // load job data and then auto-reload periodically
+    // need to await first loadJob so this.currentJobStepsStates is initialized and can be used in hashChangeListener
     await this.loadJob();
 
-    const container = this.elStepsContainer();
-    addDelegatedEventListener(container, 'click', 'summary.job-log-group-summary', (el, _) => {
+    // auto-scroll to the bottom of the log group when it is opened
+    // "toggle" event doesn't bubble, so we need to use 'click' event delegation to handle it
+    addDelegatedEventListener(this.elStepsContainer(), 'click', 'summary.job-log-group-summary', (el, _) => {
       if (!this.optionAlwaysAutoScroll) return;
       const elJobLogGroup = el.closest('details.job-log-group') as HTMLDetailsElement;
       setTimeout(() => {
@@ -167,6 +189,8 @@ export default defineComponent({
     window.removeEventListener('hashchange', this.hashChangeListener);
   },
   unmounted() {
+    // clear the interval timer when the component is unmounted
+    // even our page is rendered once, not spa style
     if (this.intervalID) {
       clearInterval(this.intervalID);
       this.intervalID = null;
@@ -182,13 +206,16 @@ export default defineComponent({
       };
       localUserSettings.setJsonObject('actions-view-options', opts);
     },
+    // get the job step logs container ('.job-step-logs')
     getJobStepLogsContainer(stepIndex: number): StepContainerElement {
       return (this.$refs.logs as any)[stepIndex];
     },
+    // get the active logs container element, either the `job-step-logs` or the `job-log-list` in the `job-log-group`
     getActiveLogsContainer(stepIndex: number): StepContainerElement {
       const el = this.getJobStepLogsContainer(stepIndex);
       return el._stepLogsActiveContainer ?? el;
     },
+    // begin a log group
     beginLogGroup(stepIndex: number, startTime: number, line: LogLine, cmd: LogLineCommand) {
       const el = (this.$refs.logs as any)[stepIndex] as StepContainerElement;
       const elJobLogGroupSummary = createElementFromAttrs('summary', {class: 'job-log-group-summary'},
@@ -202,15 +229,17 @@ export default defineComponent({
       el.append(elJobLogGroup);
       el._stepLogsActiveContainer = elJobLogList;
     },
+    // end a log group
     endLogGroup(stepIndex: number, startTime: number, line: LogLine, cmd: LogLineCommand) {
-      const el = (this.$refs.logs as any)[stepIndex] as StepContainerElement;
-      el._stepLogsActiveContainer = undefined;
+      const el = (this.$refs.logs as any)[stepIndex];
+      el._stepLogsActiveContainer = null;
       el.append(this.createLogLine(stepIndex, startTime, line, cmd));
     },
+    // show/hide the step logs for a step
     toggleStepLogs(idx: number) {
       this.currentJobStepsStates[idx].expanded = !this.currentJobStepsStates[idx].expanded;
       if (this.currentJobStepsStates[idx].expanded) {
-        this.loadJobForce();
+        this.loadJobForce(); // try to load the data immediately instead of waiting for next timer interval
       } else if (this.currentJob.steps[idx].status === 'running') {
         this.currentJobStepsStates[idx].manuallyCollapsed = true;
       }
@@ -220,12 +249,12 @@ export default defineComponent({
         String(line.index),
       );
       const logTimeStamp = createElementFromAttrs('span', {class: 'log-time-stamp'},
-        formatDatetime(new Date(line.timestamp * 1000)),
+        formatDatetime(new Date(line.timestamp * 1000)), // for "Show timestamps"
       );
       const logMsg = createLogLineMessage(line, cmd);
       const seconds = Math.floor(line.timestamp - startTime);
       const logTimeSeconds = createElementFromAttrs('span', {class: 'log-time-seconds'},
-        `${seconds}s`,
+        `${seconds}s`, // for "Show seconds"
       );
 
       toggleElem(logTimeStamp, this.timeVisible['log-time-stamp']);
@@ -238,7 +267,9 @@ export default defineComponent({
     shouldAutoScroll(stepIndex: number): boolean {
       if (!this.optionAlwaysAutoScroll) return false;
       const el = this.getJobStepLogsContainer(stepIndex);
+      // if the logs container is empty, then auto-scroll if the step is expanded
       if (!el.lastChild) return this.currentJobStepsStates[stepIndex].expanded;
+      // use extraViewPortHeight to tolerate some extra "virtual view port" height (for example: the last line is partially visible)
       return isLogElementInViewport(el.lastChild as Element, {extraViewPortHeight: 5});
     },
     appendLogs(stepIndex: number, startTime: number, logLines: LogLine[]) {
@@ -254,12 +285,18 @@ export default defineComponent({
             this.endLogGroup(stepIndex, startTime, line, cmd);
             continue;
         }
+        // the active logs container may change during the loop, for example: entering and leaving a group
         const el = this.getActiveLogsContainer(stepIndex);
         el.append(this.createLogLine(stepIndex, startTime, line, cmd));
       }
     },
     async fetchJobData(abortController: AbortController) {
-      const logCursors = this.currentJobStepsStates.map((it, idx) => ({step: idx, cursor: it.cursor, expanded: it.expanded}));
+      const logCursors = this.currentJobStepsStates.map((it, idx) => {
+        // cursor is used to indicate the last position of the logs
+        // it's only used by backend, frontend just reads it and passes it back, it can be any type.
+        // for example: make cursor=null means the first time to fetch logs, cursor=eof means no more logs, etc
+        return {step: idx, cursor: it.cursor, expanded: it.expanded};
+      });
       const url = `${this.actionsURL}/runs/${this.runId}/jobs/${this.jobId}`;
       const resp = await POST(url, {
         signal: abortController.signal,
@@ -282,26 +319,35 @@ export default defineComponent({
 
         this.currentJob = job.state.currentJob;
 
+        // sync the currentJobStepsStates to store the job step states
         for (let i = 0; i < this.currentJob.steps.length; i++) {
           const autoExpand = this.optionAlwaysExpandRunning && this.currentJob.steps[i].status === 'running';
           if (!this.currentJobStepsStates[i]) {
-            this.currentJobStepsStates[i] = {cursor: null, expanded: autoExpand, manuallyCollapsed: false};
-          } else if (autoExpand && !this.currentJobStepsStates[i].manuallyCollapsed) {
-            this.currentJobStepsStates[i].expanded = true;
+            // initial states for job steps
+            this.currentJobStepsStates[i] = {cursor: null, expanded: autoExpand,  manuallyCollapsed: false};
+          } else {
+            // if the step is not manually collapsed by user, then auto-expand it if option is enabled
+            if (autoExpand && !this.currentJobStepsStates[i].manuallyCollapsed) {
+              this.currentJobStepsStates[i].expanded = true;
+            }
           }
         }
 
+        // find the step indexes that need to auto-scroll
         const autoScrollStepIndexes = new Map<number, boolean>();
         for (const logs of job.logs.stepsLog ?? []) {
           if (autoScrollStepIndexes.has(logs.step)) continue;
           autoScrollStepIndexes.set(logs.step, this.shouldAutoScroll(logs.step));
         }
 
+        // append logs to the UI
         for (const logs of job.logs.stepsLog ?? []) {
+          // save the cursor, it will be passed to backend next time
           this.currentJobStepsStates[logs.step].cursor = logs.cursor;
           this.appendLogs(logs.step, logs.started, logs.lines);
         }
 
+        // auto-scroll to the last log line of the last step
         let autoScrollJobStepElement: StepContainerElement | undefined;
         for (let stepIndex = 0; stepIndex < this.currentJob.steps.length; stepIndex++) {
           if (!autoScrollStepIndexes.get(stepIndex)) continue;
@@ -312,11 +358,13 @@ export default defineComponent({
           lastLogElem.scrollIntoView({behavior: 'smooth', block: 'end'});
         }
 
+        // clear the interval timer if the job is done
         if (this.run.done && this.intervalID) {
           clearInterval(this.intervalID);
           this.intervalID = null;
         }
       } catch (e) {
+        // avoid network error while unloading page, and ignore "abort" error
         if (e instanceof TypeError || abortController.signal.aborted) return;
         throw e;
       } finally {
@@ -337,8 +385,7 @@ export default defineComponent({
     },
     toggleTimeDisplay(type: 'seconds' | 'stamp') {
       this.timeVisible[`log-time-${type}`] = !this.timeVisible[`log-time-${type}`];
-      const container = this.elStepsContainer();
-      for (const el of container.querySelectorAll(`.log-time-${type}`)) {
+      for (const el of this.elStepsContainer().querySelectorAll(`.log-time-${type}`)) {
         toggleElem(el, this.timeVisible[`log-time-${type}`]);
       }
       this.saveLocaleStorageOptions();
@@ -355,11 +402,11 @@ export default defineComponent({
       if (!this.currentJobStepsStates[stepNum]) return;
       if (!this.currentJobStepsStates[stepNum].expanded && this.currentJobStepsStates[stepNum].cursor === null) {
         this.currentJobStepsStates[stepNum].expanded = true;
+        // need to await for load job if the step log is loaded for the first time
+        // so logline can be selected by querySelector
         await this.loadJob();
       }
-      const container = this.elStepsContainer();
-      if (!container) return;
-      const logLine = container.querySelector(selectedLogStep) as HTMLElement | null;
+      const logLine = this.elStepsContainer().querySelector(selectedLogStep);
       if (!logLine) return;
       logLine.querySelector<HTMLAnchorElement>('.line-num')!.click();
     },
@@ -413,6 +460,7 @@ export default defineComponent({
         </div>
       </div>
     </div>
+    <!-- always create the node because we have our own event listeners on it, don't use "v-if" -->
     <div class="job-step-container" ref="stepsContainer" v-show="currentJob.steps.length">
       <div class="job-step-section" v-for="(jobStep, i) in currentJob.steps" :key="i">
         <div
@@ -420,6 +468,9 @@ export default defineComponent({
           @click.stop="isExpandable(jobStep.status) && toggleStepLogs(i)"
           :class="[currentJobStepsStates[i].expanded ? 'selected' : '', isExpandable(jobStep.status) && 'step-expandable']"
         >
+          <!-- If the job is done and the job step log is loaded for the first time, show the loading icon
+            currentJobStepsStates[i].cursor === null means the log is loaded for the first time
+          -->
           <SvgIcon
             v-if="isDone(run.status) && currentJobStepsStates[i].expanded && currentJobStepsStates[i].cursor === null"
             name="gitea-running"
@@ -434,12 +485,16 @@ export default defineComponent({
           <span class="step-summary-msg gt-ellipsis">{{ jobStep.summary }}</span>
           <span class="step-summary-duration">{{ jobStep.duration }}</span>
         </div>
+        <!-- the log elements could be a lot, do not use v-if to destroy/reconstruct the DOM,
+        use native DOM elements for "log line" to improve performance, Vue is not suitable for managing so many reactive elements. -->
         <div class="job-step-logs" ref="logs" v-show="currentJobStepsStates[i].expanded"/>
       </div>
     </div>
   </div>
 </template>
 <style scoped>
+/* begin fomantic dropdown menu overrides */
+
 .action-view-right .ui.dropdown .menu {
   background: var(--color-console-menu-bg);
   border-color: var(--color-console-menu-border);
@@ -468,6 +523,8 @@ export default defineComponent({
   box-shadow: -1px -1px 0 0 var(--color-console-menu-border);
 }
 
+/* end fomantic dropdown menu overrides */
+
 .job-info-header {
   display: flex;
   justify-content: space-between;
@@ -476,7 +533,7 @@ export default defineComponent({
   position: sticky;
   top: 0;
   height: 60px;
-  z-index: 1;
+  z-index: 1; /* above .job-step-container */
   background: var(--color-console-bg);
   border-radius: 3px;
 }
@@ -536,6 +593,8 @@ export default defineComponent({
   background-color: var(--color-console-active-bg);
   position: sticky;
   top: 60px;
+  /* workaround ansi_up issue related to faintStyle generating a CSS stacking context via `opacity`
+     inline style which caused such elements to render above the .job-step-summary header. */
   z-index: 1;
 }
 </style>
