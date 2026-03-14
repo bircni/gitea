@@ -41,7 +41,7 @@ export default defineComponent({
       <p class="action-run-summary-trigger">
         {{ locale.triggeredVia }}
         <span class="tw-capitalize">{{ runTriggerEventLabel }}</span>
-        &nbsp;•&nbsp;<relative-time v-if="runTriggeredAtIso" :datetime="runTriggeredAtIso" prefix=" "/>
+        &nbsp;•&nbsp;<relative-time :datetime="runTriggeredAtIso" prefix=" "/>
       </p>
       <div class="action-run-summary-context">
         <template v-if="run.commit?.pusher?.displayName">
@@ -86,7 +86,7 @@ export default defineComponent({
         <ActionRunStatus :locale-status="locale.status[run.status]" :status="run.status" :size="16"/>
         <span class="tw-ml-2">{{ locale.status[run.status] }}</span>
         <span class="tw-ml-3">{{ locale.totalDuration }}: {{ run.duration || '–' }}</span>
-        <span class="tw-ml-3">{{ locale.artifactsTitle }}: {{ artifacts.length || '–' }}</span>
+        <span class="tw-ml-3">{{ locale.artifactsTitle }}: {{ artifacts.length || 0 }}</span>
       </p>
     </div>
     <WorkflowGraph
