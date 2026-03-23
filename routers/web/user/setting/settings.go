@@ -12,6 +12,10 @@ import (
 	"code.gitea.io/gitea/services/context"
 )
 
+func SettingsCtxData(ctx *context.Context) {
+	ctx.Data["UserDisabledFeatures"] = user_model.DisabledFeaturesWithLoginType(ctx.Doer)
+}
+
 func UpdatePreferences(ctx *context.Context) {
 	type preferencesForm struct {
 		CodeViewShowFileTree bool `json:"codeViewShowFileTree"`
