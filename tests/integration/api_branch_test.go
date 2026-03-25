@@ -413,7 +413,7 @@ func TestAPIBranchProtectionBypassAllowlistValidationWhenDisabled(t *testing.T) 
 
 	t.Run("IgnoreInvalidBypassUsernamesWhenDisabled", func(t *testing.T) {
 		ruleName := "bypass-disabled-invalid-user"
-		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/user2/repo1/branch_protections", &api.BranchProtection{
+		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/user2/repo1/branch_protections", &api.CreateBranchProtectionOption{
 			RuleName:                 ruleName,
 			EnableBypassAllowlist:    false,
 			BypassAllowlistUsernames: []string{"nonexistent-user"},
@@ -424,7 +424,7 @@ func TestAPIBranchProtectionBypassAllowlistValidationWhenDisabled(t *testing.T) 
 
 	t.Run("IgnoreInvalidBypassTeamsWhenDisabled", func(t *testing.T) {
 		ruleName := "bypass-disabled-invalid-team"
-		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/org3/repo3/branch_protections", &api.BranchProtection{
+		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/org3/repo3/branch_protections", &api.CreateBranchProtectionOption{
 			RuleName:              ruleName,
 			EnableBypassAllowlist: false,
 			BypassAllowlistTeams:  []string{"nonexistent-team"},

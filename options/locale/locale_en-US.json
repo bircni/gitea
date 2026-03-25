@@ -2408,7 +2408,7 @@
   "repo.settings.protect_merge_whitelist_teams": "Allowlisted teams for merging:",
   "repo.settings.protect_bypass_allowlist": "Bypass branch protection",
   "repo.settings.protect_enable_bypass_allowlist": "Allow selected users or teams to bypass branch protection",
-  "repo.settings.protect_enable_bypass_allowlist_desc": "Allowlisted users or teams can merge even when required approvals or status checks are missing.",
+  "repo.settings.protect_enable_bypass_allowlist_desc": "Allowlisted users or teams can merge or push even when required approvals, status checks, or protected-file rules would otherwise block them.",
   "repo.settings.protect_bypass_allowlist_users": "Allowlisted users for bypassing protection:",
   "repo.settings.protect_bypass_allowlist_teams": "Allowlisted teams for bypassing protection:",
   "repo.settings.protect_check_status_contexts": "Enable Status Check",

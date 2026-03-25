@@ -1056,6 +1056,7 @@ func TestPullForceMergeForBypassAllowlistUser(t *testing.T) {
 			"bypass_allowlist_users":     strconv.FormatInt(bypassUser.ID, 10),
 		})
 		ownerSession.MakeRequest(t, pbCreateReq, http.StatusSeeOther)
+		defer testAPIDeleteBranchProtection(t, "master", http.StatusNoContent)
 
 		token := getTokenForLoggedInUser(t, bypassSession, auth_model.AccessTokenScopeWriteRepository)
 
