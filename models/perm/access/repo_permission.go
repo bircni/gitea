@@ -379,6 +379,15 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 	return perm, nil
 }
 
+// GetUserOrActionsRepoPermission returns the repository permission for a user,
+// dispatching to GetActionsUserRepoPermission when the user is an Actions token user.
+func GetUserOrActionsRepoPermission(ctx context.Context, repo *repo_model.Repository, user *user_model.User) (Permission, error) {
+	if taskID, ok := user_model.GetActionsUserTaskID(user); ok {
+		return GetActionsUserRepoPermission(ctx, repo, user, taskID)
+	}
+	return GetUserRepoPermission(ctx, repo, user)
+}
+
 // GetUserRepoPermission returns the user permissions to the repository
 func GetUserRepoPermission(ctx context.Context, repo *repo_model.Repository, user *user_model.User) (perm Permission, err error) {
 	defer func() {
