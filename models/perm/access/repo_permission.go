@@ -276,77 +276,89 @@ func checkSameOwnerCrossRepoAccess(ctx context.Context, taskRepo, targetRepo *re
 	return slices.Contains(ownerCfg.AllowedCrossRepoIDs, targetRepo.ID)
 }
 
+// taskAuthInfo holds the task-side context needed to compute repo permissions.
+type taskAuthInfo struct {
+	taskRepo          *repo_model.Repository
+	taskRepoID        int64
+	taskRepoOwnerID   int64
+	taskRepoIsPrivate bool
+	isForkPullRequest bool
+	effectivePerms    repo_model.ActionsTokenPermissions
+}
+
+func loadTaskAuthInfoFromPayload(ctx context.Context, payload string, targetRepo *repo_model.Repository) (taskAuthInfo, error) {
+	var info taskAuthInfo
+	taskMeta, err := actions_model.DecodeTaskTokenMetadata(payload)
+	if err != nil {
+		return info, err
+	}
+
+	info.taskRepoID = taskMeta.RepoID
+	info.taskRepoOwnerID = taskMeta.OwnerID
+	info.taskRepoIsPrivate = taskMeta.TaskRepoIsPrivate
+	info.isForkPullRequest = taskMeta.IsForkPullRequest
+
+	if info.taskRepoID == targetRepo.ID {
+		info.taskRepo = targetRepo
+	} else {
+		info.taskRepo, err = repo_model.GetRepositoryByID(ctx, info.taskRepoID)
+		if err != nil {
+			return info, err
+		}
+	}
+
+	info.effectivePerms, err = actions_model.ComputeTaskTokenPermissionsFromMetadata(ctx, taskMeta, info.taskRepo, targetRepo)
+	return info, err
+}
+
+func loadTaskAuthInfoFromDB(ctx context.Context, taskID int64, targetRepo *repo_model.Repository) (taskAuthInfo, error) {
+	var info taskAuthInfo
+	task, err := actions_model.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return info, err
+	}
+	if err := task.LoadJob(ctx); err != nil {
+		return info, err
+	}
+
+	info.taskRepoID = task.RepoID
+	info.taskRepoOwnerID = task.Job.OwnerID
+	info.isForkPullRequest = task.IsForkPullRequest
+
+	if task.RepoID != targetRepo.ID {
+		if err := task.Job.LoadRepo(ctx); err != nil {
+			return info, err
+		}
+		info.taskRepo = task.Job.Repo
+		info.taskRepoIsPrivate = task.Job.Repo.IsPrivate
+	} else {
+		info.taskRepo = targetRepo
+		info.taskRepoIsPrivate = targetRepo.IsPrivate
+	}
+
+	info.effectivePerms, err = actions_model.ComputeTaskTokenPermissions(ctx, task, targetRepo)
+	return info, err
+}
+
 // GetActionsUserRepoPermission returns the actions user permissions to the repository
 func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Repository, actionsUser *user_model.User, taskID int64) (perm Permission, err error) {
 	if actionsUser.ID != user_model.ActionsUserID {
 		return perm, errors.New("api GetActionsUserRepoPermission can only be called by the actions user")
 	}
 
-	var (
-		taskRepo          *repo_model.Repository
-		taskRepoID        int64
-		taskRepoOwnerID   int64
-		taskRepoIsPrivate bool
-		isForkPullRequest bool
-		effectivePerms    repo_model.ActionsTokenPermissions
-	)
-
+	var info taskAuthInfo
 	if payload, ok := user_model.GetActionsUserTaskPayload(actionsUser); ok {
-		taskMeta, err := actions_model.DecodeTaskTokenMetadata(payload)
-		if err != nil {
-			return perm, err
-		}
-
-		taskRepoID = taskMeta.RepoID
-		taskRepoOwnerID = taskMeta.OwnerID
-		taskRepoIsPrivate = taskMeta.TaskRepoIsPrivate
-		isForkPullRequest = taskMeta.IsForkPullRequest
-
-		if taskRepoID == repo.ID {
-			taskRepo = repo
-		} else {
-			taskRepo, err = repo_model.GetRepositoryByID(ctx, taskRepoID)
-			if err != nil {
-				return perm, err
-			}
-		}
-
-		effectivePerms, err = actions_model.ComputeTaskTokenPermissionsFromMetadata(ctx, taskMeta, taskRepo, repo)
-		if err != nil {
-			return perm, err
-		}
+		info, err = loadTaskAuthInfoFromPayload(ctx, payload, repo)
 	} else {
-		task, err := actions_model.GetTaskByID(ctx, taskID)
-		if err != nil {
-			return perm, err
-		}
-
-		if err := task.LoadJob(ctx); err != nil {
-			return perm, err
-		}
-
-		taskRepoID = task.RepoID
-		taskRepoOwnerID = task.Job.OwnerID
-		isForkPullRequest = task.IsForkPullRequest
-
-		if task.RepoID != repo.ID {
-			if err := task.Job.LoadRepo(ctx); err != nil {
-				return perm, err
-			}
-			taskRepo = task.Job.Repo
-			taskRepoIsPrivate = task.Job.Repo.IsPrivate
-		} else {
-			taskRepo = repo
-			taskRepoIsPrivate = repo.IsPrivate
-		}
-
-		effectivePerms, err = actions_model.ComputeTaskTokenPermissions(ctx, task, repo)
-		if err != nil {
-			return perm, err
-		}
+		info, err = loadTaskAuthInfoFromDB(ctx, taskID, repo)
+	}
+	if err != nil {
+		return perm, err
 	}
 
-	if taskRepoID != repo.ID {
+	effectivePerms := info.effectivePerms
+
+	if info.taskRepoID != repo.ID {
 		// Cross-repo access must also respect the target repo's permission ceiling.
 		targetRepoActionsCfg := repo.MustGetUnit(ctx, unit.TypeActions).ActionsConfig()
 		if targetRepoActionsCfg.OverrideOwnerConfig {
@@ -365,20 +377,16 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 	}
 
 	var maxPerm Permission
-
-	// Set up per-unit access modes based on configured permissions
 	maxPerm.units = repo.Units
 	maxPerm.unitsMode = maps.Clone(effectivePerms.UnitAccessModes)
 
-	// Check permission like simple user but limit to read-only (PR #36095)
-	// Enhanced to also grant read-only access if isSameRepo is true and target repository is public
 	botPerm, err := GetUserRepoPermission(ctx, repo, user_model.NewActionsUser())
 	if err != nil {
 		return perm, err
 	}
 	if botPerm.AccessMode >= perm_model.AccessModeRead {
-		// Public repo allows read access, increase permissions to at least read
-		// Otherwise you cannot access your own repository if your permissions are set to none but the repository is public
+		// Public repo: raise per-unit floor to at least Read so own-repo access works
+		// when token permissions are set to none but the repository is public.
 		for _, u := range repo.Units {
 			if botPerm.CanRead(u.Type) {
 				maxPerm.unitsMode[u.Type] = max(maxPerm.unitsMode[u.Type], perm_model.AccessModeRead)
@@ -386,33 +394,26 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 		}
 	}
 
-	if taskRepoID == repo.ID {
+	if info.taskRepoID == repo.ID {
 		return maxPerm, nil
 	}
 
-	if taskRepoOwnerID == repo.OwnerID && checkSameOwnerCrossRepoAccess(ctx, taskRepo, repo, isForkPullRequest) {
+	if info.taskRepoOwnerID == repo.OwnerID && checkSameOwnerCrossRepoAccess(ctx, info.taskRepo, repo, info.isForkPullRequest) {
 		// Access allowed by owner policy (grants access to private repos).
 		// Note: maxPerm has already been restricted to Read-Only in ComputeTaskTokenPermissions
 		// because isSameRepo is false.
 		return maxPerm, nil
 	}
 
-	// Fall through to allow public repository read access via botPerm check below
-
-	// Check if the repo is public or the Bot has explicit access
 	if botPerm.AccessMode >= perm_model.AccessModeRead {
 		return maxPerm, nil
 	}
 
-	// Check Collaborative Owner and explicit Bot permissions
-	// We allow access if:
-	// 1. It's a collaborative owner relationship
-	// 2. The Actions Bot user has been explicitly granted access and repository is private
-	// 3. The repository is public (handled by botPerm above)
-
-	if taskRepoIsPrivate {
+	// Check Collaborative Owner access: allow if the task's owner org has been
+	// granted collaborative access to this repo and the task repo is private.
+	if info.taskRepoIsPrivate {
 		actionsUnit := repo.MustGetUnit(ctx, unit.TypeActions)
-		if actionsUnit.ActionsConfig().IsCollaborativeOwner(taskRepoOwnerID) {
+		if actionsUnit.ActionsConfig().IsCollaborativeOwner(info.taskRepoOwnerID) {
 			return maxPerm, nil
 		}
 	}

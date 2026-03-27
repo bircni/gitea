@@ -56,16 +56,15 @@ func GetOAuthAccessTokenScopeAndUserID(ctx context.Context, accessToken string) 
 	return accessTokenScope, grant.UserID
 }
 
-// CheckTaskIsRunning verifies that the TaskID corresponds to a running task
-func CheckTaskIsRunning(ctx context.Context, taskID int64) bool {
-	// Verify the task exists
+// CheckTaskIsRunning verifies that the TaskID corresponds to a running task.
+// It returns (false, nil) when the task exists but is not running, and
+// (false, err) when the DB lookup itself fails.
+func CheckTaskIsRunning(ctx context.Context, taskID int64) (bool, error) {
 	task, err := actions_model.GetTaskByID(ctx, taskID)
 	if err != nil {
-		return false
+		return false, err
 	}
-
-	// Verify that it's running
-	return task.Status == actions_model.StatusRunning
+	return task.Status == actions_model.StatusRunning, nil
 }
 
 // OAuth2 implements the Auth interface and authenticates requests
@@ -111,6 +110,7 @@ func parseToken(req *http.Request) (string, bool) {
 func (o *OAuth2) userFromToken(ctx context.Context, tokenSHA string, store DataStore) (*user_model.User, error) {
 	// Let's see if token is valid.
 	if strings.Contains(tokenSHA, ".") {
+		// Task JWT: signature + expiry provide the revocation bound; no DB hit needed.
 		if taskMeta, err := actions.ParseTaskAuthorizationToken(tokenSHA); err == nil {
 			payload, err := actions_model.EncodeTaskTokenMetadata(taskMeta)
 			if err != nil {
@@ -119,9 +119,13 @@ func (o *OAuth2) userFromToken(ctx context.Context, tokenSHA string, store DataS
 			return user_model.NewActionsUserWithTaskPayload(taskMeta.TaskID, payload), nil
 		}
 
-		// First attempt to decode an actions JWT, returning the actions user
+		// Legacy actions JWT (gitea_runtime_token): must verify the task is still running.
 		if taskID, err := actions.TokenToTaskID(tokenSHA); err == nil {
-			if CheckTaskIsRunning(ctx, taskID) {
+			running, err := CheckTaskIsRunning(ctx, taskID)
+			if err != nil {
+				return nil, err
+			}
+			if running {
 				return user_model.NewActionsUserWithTaskID(taskID), nil
 			}
 		}

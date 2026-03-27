@@ -72,6 +72,7 @@ func (b *Basic) parseAuthBasic(req *http.Request) (ret struct{ authToken, uname,
 func (b *Basic) VerifyAuthToken(req *http.Request, w http.ResponseWriter, store DataStore, sess SessionStore, authToken string) (*user_model.User, error) {
 	var tokenLookupErr error
 
+	// Task JWT: signature + expiry provide the revocation bound; no DB hit needed.
 	if taskMeta, err := actions_service.ParseTaskAuthorizationToken(authToken); err == nil {
 		payload, err := actions_model.EncodeTaskTokenMetadata(taskMeta)
 		if err != nil {

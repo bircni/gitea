@@ -4,11 +4,13 @@
 package auth
 
 import (
+	"errors"
 	"testing"
 
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/reqctx"
+	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/actions"
 
 	"github.com/stretchr/testify/assert"
@@ -39,18 +41,26 @@ func TestCheckTaskIsRunning(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
 	cases := map[string]struct {
-		TaskID   int64
-		Expected bool
+		TaskID        int64
+		Expected      bool
+		wantNotExists bool
 	}{
 		"Running":   {TaskID: 47, Expected: true},
-		"Missing":   {TaskID: 1, Expected: false},
+		"Missing":   {TaskID: 1, Expected: false, wantNotExists: true},
 		"Cancelled": {TaskID: 46, Expected: false},
 	}
 
 	for name := range cases {
 		c := cases[name]
 		t.Run(name, func(t *testing.T) {
-			actual := CheckTaskIsRunning(t.Context(), c.TaskID)
+			actual, err := CheckTaskIsRunning(t.Context(), c.TaskID)
+			if c.wantNotExists {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, util.ErrNotExist)
+				assert.False(t, actual)
+				return
+			}
+			require.NoError(t, err)
 			assert.Equal(t, c.Expected, actual)
 		})
 	}

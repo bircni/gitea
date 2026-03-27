@@ -116,14 +116,16 @@ func ParseAuthorizationToken(req *http.Request) (int64, error) {
 	return TokenToTaskID(parts[1])
 }
 
+func hmacKeyFunc(t *jwt.Token) (any, error) {
+	if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+	}
+	return setting.GetGeneralTokenSigningSecret(), nil
+}
+
 // TokenToTaskID returns the TaskID associated with the provided JWT token
 func TokenToTaskID(token string) (int64, error) {
-	parsedToken, err := jwt.ParseWithClaims(token, &actionsClaims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return setting.GetGeneralTokenSigningSecret(), nil
-	})
+	parsedToken, err := jwt.ParseWithClaims(token, &actionsClaims{}, hmacKeyFunc)
 	if err != nil {
 		return 0, err
 	}
@@ -137,12 +139,7 @@ func TokenToTaskID(token string) (int64, error) {
 }
 
 func ParseTaskAuthorizationToken(token string) (*actions_model.TaskTokenMetadata, error) {
-	parsedToken, err := jwt.ParseWithClaims(token, &taskTokenClaims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return setting.GetGeneralTokenSigningSecret(), nil
-	})
+	parsedToken, err := jwt.ParseWithClaims(token, &taskTokenClaims{}, hmacKeyFunc)
 	if err != nil {
 		return nil, err
 	}
