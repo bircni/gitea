@@ -111,6 +111,14 @@ func parseToken(req *http.Request) (string, bool) {
 func (o *OAuth2) userFromToken(ctx context.Context, tokenSHA string, store DataStore) (*user_model.User, error) {
 	// Let's see if token is valid.
 	if strings.Contains(tokenSHA, ".") {
+		if taskMeta, err := actions.ParseTaskAuthorizationToken(tokenSHA); err == nil {
+			payload, err := actions_model.EncodeTaskTokenMetadata(taskMeta)
+			if err != nil {
+				return nil, err
+			}
+			return user_model.NewActionsUserWithTaskPayload(taskMeta.TaskID, payload), nil
+		}
+
 		// First attempt to decode an actions JWT, returning the actions user
 		if taskID, err := actions.TokenToTaskID(tokenSHA); err == nil {
 			if CheckTaskIsRunning(ctx, taskID) {

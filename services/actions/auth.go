@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
@@ -24,6 +25,11 @@ type actionsClaims struct {
 	RunID  int64
 	JobID  int64
 	Ac     string `json:"ac"`
+}
+
+type taskTokenClaims struct {
+	jwt.RegisteredClaims
+	TaskToken actions_model.TaskTokenMetadata `json:"task_token"`
 }
 
 type actionsCacheScope struct {
@@ -72,6 +78,29 @@ func CreateAuthorizationToken(taskID, runID, jobID int64) (string, error) {
 	return tokenString, nil
 }
 
+func CreateTaskAuthorizationToken(task *actions_model.ActionTask) (string, error) {
+	meta := actions_model.NewTaskTokenMetadata(task)
+	if meta == nil {
+		return "", errors.New("missing task metadata")
+	}
+
+	now := time.Now()
+	claims := taskTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(1*time.Hour + setting.Actions.EndlessTaskTimeout)),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+		TaskToken: *meta,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString(setting.GetGeneralTokenSigningSecret())
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
+}
+
 func ParseAuthorizationToken(req *http.Request) (int64, error) {
 	h := req.Header.Get("Authorization")
 	if h == "" {
@@ -105,4 +134,26 @@ func TokenToTaskID(token string) (int64, error) {
 	}
 
 	return c.TaskID, nil
+}
+
+func ParseTaskAuthorizationToken(token string) (*actions_model.TaskTokenMetadata, error) {
+	parsedToken, err := jwt.ParseWithClaims(token, &taskTokenClaims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return setting.GetGeneralTokenSigningSecret(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	c, ok := parsedToken.Claims.(*taskTokenClaims)
+	if !parsedToken.Valid || !ok {
+		return nil, errors.New("invalid token claim")
+	}
+	if c.TaskToken.TaskID == 0 || c.TaskToken.RepoID == 0 || c.TaskToken.OwnerID == 0 {
+		return nil, errors.New("invalid task token claim")
+	}
+
+	return &c.TaskToken, nil
 }

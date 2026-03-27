@@ -545,7 +545,7 @@ jobs:
 		assert.Equal(t, actionRun.WorkflowID, gtCtx["workflow"].GetStringValue())
 		assert.Equal(t, setting.Actions.DefaultActionsURL.URL(), gtCtx["gitea_default_actions_url"].GetStringValue())
 		token := gtCtx["token"].GetStringValue()
-		assert.Equal(t, actionTask.TokenLastEight, token[len(token)-8:])
+		assert.Contains(t, token, ".")
 	})
 }
 
@@ -637,7 +637,7 @@ jobs:
 		assert.Equal(t, actionRun.WorkflowID, gtCtx["workflow"].GetStringValue())
 		assert.Equal(t, setting.Actions.DefaultActionsURL.URL(), gtCtx["gitea_default_actions_url"].GetStringValue())
 		token := gtCtx["token"].GetStringValue()
-		assert.Equal(t, actionTask.TokenLastEight, token[len(token)-8:])
+		assert.Contains(t, token, ".")
 
 		// verify CleanupEphemeralRunners does not remove this runner
 		err = actions_service.CleanupEphemeralRunners(t.Context())

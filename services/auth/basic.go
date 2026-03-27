@@ -5,6 +5,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	actions_model "code.gitea.io/gitea/models/actions"
@@ -15,6 +16,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
+	actions_service "code.gitea.io/gitea/services/actions"
 )
 
 // Ensure the struct implements the interface.
@@ -68,6 +70,17 @@ func (b *Basic) parseAuthBasic(req *http.Request) (ret struct{ authToken, uname,
 
 // VerifyAuthToken only the access token provided as parameter, used by other auth methods that want to reuse access token verification logic
 func (b *Basic) VerifyAuthToken(req *http.Request, w http.ResponseWriter, store DataStore, sess SessionStore, authToken string) (*user_model.User, error) {
+	var tokenLookupErr error
+
+	if taskMeta, err := actions_service.ParseTaskAuthorizationToken(authToken); err == nil {
+		payload, err := actions_model.EncodeTaskTokenMetadata(taskMeta)
+		if err != nil {
+			return nil, err
+		}
+		store.GetData()["LoginMethod"] = ActionTokenMethodName
+		return user_model.NewActionsUserWithTaskPayload(taskMeta.TaskID, payload), nil
+	}
+
 	// get oauth2 token's user's ID
 	_, uid := GetOAuthAccessTokenScopeAndUserID(req.Context(), authToken)
 	if uid != 0 {
@@ -105,6 +118,7 @@ func (b *Basic) VerifyAuthToken(req *http.Request, w http.ResponseWriter, store 
 		return u, nil
 	} else if !auth_model.IsErrAccessTokenNotExist(err) && !auth_model.IsErrAccessTokenEmpty(err) {
 		log.Error("GetAccessTokenBySha: %v", err)
+		tokenLookupErr = err
 	}
 
 	// check task token
@@ -113,6 +127,19 @@ func (b *Basic) VerifyAuthToken(req *http.Request, w http.ResponseWriter, store 
 		log.Trace("Basic Authorization: Valid AccessToken for task[%d]", task.ID)
 		store.GetData()["LoginMethod"] = ActionTokenMethodName
 		return user_model.NewActionsUserWithTaskID(task.ID), nil
+	}
+	if err != nil && !errors.Is(err, util.ErrNotExist) {
+		log.Error("GetRunningTaskByToken: %v", err)
+		if tokenLookupErr == nil {
+			tokenLookupErr = err
+		}
+	}
+
+	// Do not fall through into password authentication when backend token lookup failed
+	// for a token-shaped Basic credential. Under load, that can redirect an LFS/API token
+	// request into web/LDAP auth instead of failing the token auth path explicitly.
+	if tokenLookupErr != nil && isLikelyTokenString(authToken) {
+		return nil, tokenLookupErr
 	}
 	return nil, nil //nolint:nilnil // the auth method is not applicable
 }
@@ -130,6 +157,9 @@ func (b *Basic) Verify(req *http.Request, w http.ResponseWriter, store DataStore
 	u, err := b.VerifyAuthToken(req, w, store, sess, authToken)
 	if u != nil || err != nil {
 		return u, err
+	}
+	if uname == user_model.ActionsUserName {
+		return nil, ErrUserAuthMessage("invalid actions token")
 	}
 
 	if !setting.Service.EnableBasicAuth {
@@ -197,4 +227,16 @@ func GetAccessScope(store DataStore) auth_model.AccessTokenScope {
 	default:
 		return ""
 	}
+}
+
+func isLikelyTokenString(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, x := range []byte(s) {
+		if x < '0' || (x > '9' && x < 'a') || x > 'f' {
+			return false
+		}
+	}
+	return true
 }

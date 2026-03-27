@@ -32,9 +32,22 @@ func ComputeTaskTokenPermissions(ctx context.Context, task *ActionTask, targetRe
 		return ret, err
 	}
 
+	isSameRepo := task.Job.RepoID == targetRepo.ID
+	return applyTokenPermissions(task.Job.TokenPermissions, repoActionsCfg, ownerActionsCfg, task.IsForkPullRequest, !isSameRepo), nil
+}
+
+// applyTokenPermissions applies org/repo policy clamping and fork/cross-repo read-only restrictions
+// to produce the effective permissions for a task token.
+func applyTokenPermissions(
+	declared *repo_model.ActionsTokenPermissions,
+	repoActionsCfg *repo_model.ActionsConfig,
+	ownerActionsCfg OwnerActionsConfig,
+	isForkPR bool,
+	isCrossRepo bool,
+) repo_model.ActionsTokenPermissions {
 	var jobDeclaredPerms repo_model.ActionsTokenPermissions
-	if task.Job.TokenPermissions != nil {
-		jobDeclaredPerms = *task.Job.TokenPermissions
+	if declared != nil {
+		jobDeclaredPerms = *declared
 	} else if repoActionsCfg.OverrideOwnerConfig {
 		jobDeclaredPerms = repoActionsCfg.GetDefaultTokenPermissions()
 	} else {
@@ -50,11 +63,9 @@ func ComputeTaskTokenPermissions(ctx context.Context, task *ActionTask, targetRe
 
 	// Cross-repository access and fork pull requests are strictly read-only for security.
 	// This ensures a "task repo" cannot gain write access to other repositories via CrossRepoAccess settings.
-	isSameRepo := task.Job.RepoID == targetRepo.ID
-	restrictCrossRepoAccess := task.IsForkPullRequest || !isSameRepo
-	if restrictCrossRepoAccess {
+	if isForkPR || isCrossRepo {
 		effectivePerms = repo_model.ClampActionsTokenPermissions(effectivePerms, repo_model.MakeRestrictedPermissions())
 	}
 
-	return effectivePerms, nil
+	return effectivePerms
 }

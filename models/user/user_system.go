@@ -55,10 +55,22 @@ func NewActionsUser() *User {
 }
 
 func NewActionsUserWithTaskID(id int64) *User {
+	return newActionsUserWithLoginName("@" + ActionsUserName + "/" + strconv.FormatInt(id, 10))
+}
+
+func NewActionsUserWithTaskPayload(id int64, payload string) *User {
+	loginName := "@" + ActionsUserName + "/" + strconv.FormatInt(id, 10)
+	if payload != "" {
+		loginName += "/" + payload
+	}
+	return newActionsUserWithLoginName(loginName)
+}
+
+func newActionsUserWithLoginName(loginName string) *User {
 	u := NewActionsUser()
 	// LoginName is for only internal usage in this case, so it can be moved to other fields in the future
 	u.LoginSource = -1
-	u.LoginName = "@" + ActionsUserName + "/" + strconv.FormatInt(id, 10)
+	u.LoginName = loginName
 	return u
 }
 
@@ -69,10 +81,27 @@ func GetActionsUserTaskID(u *User) (int64, bool) {
 	prefix, payload, _ := strings.Cut(u.LoginName, "/")
 	if prefix != "@"+ActionsUserName {
 		return 0, false
-	} else if taskID, err := strconv.ParseInt(payload, 10, 64); err == nil {
+	}
+	taskIDStr, _, _ := strings.Cut(payload, "/")
+	if taskID, err := strconv.ParseInt(taskIDStr, 10, 64); err == nil {
 		return taskID, true
 	}
 	return 0, false
+}
+
+func GetActionsUserTaskPayload(u *User) (string, bool) {
+	if u == nil || u.ID != ActionsUserID {
+		return "", false
+	}
+	prefix, payload, _ := strings.Cut(u.LoginName, "/")
+	if prefix != "@"+ActionsUserName {
+		return "", false
+	}
+	_, meta, ok := strings.Cut(payload, "/")
+	if !ok || meta == "" {
+		return "", false
+	}
+	return meta, true
 }
 
 func (u *User) IsGiteaActions() bool {

@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"testing"
 
+	actions_model "code.gitea.io/gitea/models/actions"
+	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/setting"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateAuthorizationToken(t *testing.T) {
@@ -61,4 +64,23 @@ func TestParseAuthorizationTokenNoAuthHeader(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), rTaskID)
+}
+
+func TestCreateTaskAuthorizationToken(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	task := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionTask{ID: 53})
+	require.NoError(t, task.LoadJob(t.Context()))
+	require.NoError(t, task.Job.LoadRepo(t.Context()))
+
+	token, err := CreateTaskAuthorizationToken(task)
+	require.NoError(t, err)
+
+	meta, err := ParseTaskAuthorizationToken(token)
+	require.NoError(t, err)
+	assert.Equal(t, task.ID, meta.TaskID)
+	assert.Equal(t, task.RepoID, meta.RepoID)
+	assert.Equal(t, task.Job.Repo.OwnerID, meta.OwnerID)
+	assert.Equal(t, task.Job.Repo.IsPrivate, meta.TaskRepoIsPrivate)
+	assert.Equal(t, task.IsForkPullRequest, meta.IsForkPullRequest)
 }

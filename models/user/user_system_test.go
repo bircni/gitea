@@ -34,3 +34,40 @@ func TestSystemUser(t *testing.T) {
 	_, err = GetPossibleUserByID(t.Context(), -3)
 	require.Error(t, err)
 }
+
+func TestActionsUserTaskEncoding(t *testing.T) {
+	t.Run("TaskIDOnly", func(t *testing.T) {
+		u := NewActionsUserWithTaskID(47)
+		taskID, ok := GetActionsUserTaskID(u)
+		require.True(t, ok)
+		assert.Equal(t, int64(47), taskID)
+
+		payload, ok := GetActionsUserTaskPayload(u)
+		assert.False(t, ok)
+		assert.Empty(t, payload)
+	})
+
+	t.Run("TaskIDWithPayload", func(t *testing.T) {
+		u := NewActionsUserWithTaskPayload(53, "encoded-payload")
+		taskID, ok := GetActionsUserTaskID(u)
+		require.True(t, ok)
+		assert.Equal(t, int64(53), taskID)
+
+		payload, ok := GetActionsUserTaskPayload(u)
+		require.True(t, ok)
+		assert.Equal(t, "encoded-payload", payload)
+	})
+
+	t.Run("InvalidShape", func(t *testing.T) {
+		u := NewActionsUser()
+		u.LoginName = "@gitea-actions/not-a-number/encoded-payload"
+
+		taskID, ok := GetActionsUserTaskID(u)
+		assert.False(t, ok)
+		assert.Equal(t, int64(0), taskID)
+
+		payload, ok := GetActionsUserTaskPayload(u)
+		require.True(t, ok)
+		assert.Equal(t, "encoded-payload", payload)
+	})
+}
