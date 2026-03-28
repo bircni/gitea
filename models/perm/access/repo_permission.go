@@ -390,6 +390,7 @@ func GetDoerRepoPermission(ctx context.Context, repo *repo_model.Repository, use
 
 // GetIndividualUserRepoPermission returns the permissions for an explicit user identity.
 // In most request paths, callers should use GetDoerRepoPermission instead.
+// Unlike GetDoerRepoPermission, this helper does not resolve Actions task users.
 func GetIndividualUserRepoPermission(ctx context.Context, repo *repo_model.Repository, user *user_model.User) (perm Permission, err error) {
 	defer func() {
 		if err == nil {
@@ -549,6 +550,7 @@ func AccessLevel(ctx context.Context, user *user_model.User, repo *repo_model.Re
 
 // AccessLevelUnit returns the Access a user has to a repository's. Will return NoneAccess if the
 // user does not have access.
+// This helper only supports explicit user identities and does not resolve Actions task users.
 func AccessLevelUnit(ctx context.Context, user *user_model.User, repo *repo_model.Repository, unitType unit.Type) (perm_model.AccessMode, error) { //nolint:revive // export stutter
 	perm, err := GetIndividualUserRepoPermission(ctx, repo, user)
 	if err != nil {
@@ -578,6 +580,7 @@ func CanBeAssigned(ctx context.Context, user *user_model.User, repo *repo_model.
 }
 
 // HasAnyUnitAccess see the comment of "perm.HasAnyUnitAccess"
+// This helper only supports explicit user identities and does not resolve Actions task users.
 func HasAnyUnitAccess(ctx context.Context, userID int64, repo *repo_model.Repository) (bool, error) {
 	var user *user_model.User
 	var err error
@@ -635,6 +638,7 @@ func GetUserIDsWithUnitAccess(ctx context.Context, repo *repo_model.Repository, 
 }
 
 // CheckRepoUnitUser check whether user could visit the unit of this repository
+// This helper only supports explicit user identities and does not resolve Actions task users.
 func CheckRepoUnitUser(ctx context.Context, repo *repo_model.Repository, user *user_model.User, unitType unit.Type) bool {
 	if user != nil && user.IsAdmin {
 		return true
