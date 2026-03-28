@@ -153,26 +153,3 @@ func TestGetActionsUserRepoPermission(t *testing.T) {
 		assert.Equal(t, perm_model.AccessModeRead, perm.UnitAccessMode(unit.TypeCode))
 	})
 }
-
-func TestGetDoerRepoPermission(t *testing.T) {
-	require.NoError(t, unittest.PrepareTestDatabase())
-	ctx := t.Context()
-
-	repo4 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
-	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	task47 := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionTask{ID: 47})
-	actionsDoer := user_model.NewActionsUserWithTaskID(task47.ID)
-	regularUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-
-	actionsPerm, err := GetDoerRepoPermission(ctx, repo4, actionsDoer)
-	require.NoError(t, err)
-	directPerm, err := GetActionsUserRepoPermission(ctx, repo4, actionsDoer, task47.ID)
-	require.NoError(t, err)
-	assert.Equal(t, directPerm, actionsPerm)
-
-	doerPerm, err := GetDoerRepoPermission(ctx, repo1, regularUser)
-	require.NoError(t, err)
-	individualPerm, err := GetIndividualUserRepoPermission(ctx, repo1, regularUser)
-	require.NoError(t, err)
-	assert.Equal(t, individualPerm, doerPerm)
-}

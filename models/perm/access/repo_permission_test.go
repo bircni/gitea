@@ -6,6 +6,7 @@ package access
 import (
 	"testing"
 
+	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/organization"
 	perm_model "code.gitea.io/gitea/models/perm"
@@ -157,8 +158,13 @@ func TestUnitAccessMode(t *testing.T) {
 	assert.Equal(t, perm_model.AccessModeRead, perm.UnitAccessMode(unit.TypeWiki), "has unit, and map, use map")
 }
 
-func TestGetIndividualUserRepoPermission(t *testing.T) {
-	assert.NoError(t, unittest.PrepareTestDatabase())
+func TestGetRepoPermission(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	t.Run("GetIndividualUserRepoPermission", testGetIndividualUserRepoPermission)
+	t.Run("GetDoerRepoPermission", testGetDoerRepoPermission)
+}
+
+func testGetIndividualUserRepoPermission(t *testing.T) {
 	ctx := t.Context()
 	repo32 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 32}) // org public repo
 	require.NoError(t, repo32.LoadOwner(ctx))
@@ -244,4 +250,26 @@ func TestGetIndividualUserRepoPermission(t *testing.T) {
 		require.Len(t, users, 1)
 		assert.Equal(t, user.ID, users[0].ID)
 	})
+}
+
+func testGetDoerRepoPermission(t *testing.T) {
+	ctx := t.Context()
+
+	repo4 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	task47 := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionTask{ID: 47})
+	actionsDoer := user_model.NewActionsUserWithTaskID(task47.ID)
+	regularUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	actionsPerm, err := GetDoerRepoPermission(ctx, repo4, actionsDoer)
+	require.NoError(t, err)
+	directPerm, err := GetActionsUserRepoPermission(ctx, repo4, actionsDoer, task47.ID)
+	require.NoError(t, err)
+	assert.Equal(t, directPerm, actionsPerm)
+
+	doerPerm, err := GetDoerRepoPermission(ctx, repo1, regularUser)
+	require.NoError(t, err)
+	individualPerm, err := GetIndividualUserRepoPermission(ctx, repo1, regularUser)
+	require.NoError(t, err)
+	assert.Equal(t, individualPerm, doerPerm)
 }
