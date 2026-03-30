@@ -11,6 +11,7 @@ import {localUserSettings} from '../modules/user-settings.ts';
 import type {ActionsArtifact, ActionsRun, ActionsRunStatus} from '../modules/gitea-actions.ts';
 import {
   type ActionRunViewStore,
+  type ActionsAttempt,
   createLogLineMessage,
   type LogLine,
   type LogLineCommand,
@@ -53,6 +54,7 @@ type CurrentJob = {
   title: string;
   detail: string;
   steps: Array<Step>;
+  availableAttempts: Array<ActionsAttempt>;
 };
 
 type JobData = {
@@ -112,6 +114,7 @@ const currentJob = ref<CurrentJob>({
   title: '',
   detail: '',
   steps: [] as Array<Step>,
+  availableAttempts: [],
 });
 const stepsContainer = ref<HTMLElement | null>(null);
 const jobStepLogs = ref<Array<StepContainerElement | undefined>>([]);
@@ -296,6 +299,7 @@ async function loadJob() {
     // Use consistent "store" operations to load/update the view data
     store.viewData.runArtifacts = runJobResp.artifacts || [];
     store.viewData.currentRun = runJobResp.state.run;
+    store.viewData.currentJobAttempts = runJobResp.state.currentJob.availableAttempts || [];
 
     currentJob.value = runJobResp.state.currentJob;
     const jobLogs = runJobResp.logs.stepsLog ?? [];

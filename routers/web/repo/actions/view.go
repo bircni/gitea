@@ -151,9 +151,10 @@ type ViewResponse struct {
 			TriggerEvent string `json:"triggerEvent"` // e.g. pull_request, push, schedule
 		} `json:"run"`
 		CurrentJob struct {
-			Title  string         `json:"title"`
-			Detail string         `json:"detail"`
-			Steps  []*ViewJobStep `json:"steps"`
+			Title             string         `json:"title"`
+			Detail            string         `json:"detail"`
+			Steps             []*ViewJobStep `json:"steps"`
+			AvailableAttempts []*ViewAttempt `json:"availableAttempts"`
 		} `json:"currentJob"`
 	} `json:"state"`
 	Logs struct {
@@ -193,6 +194,14 @@ type ViewJobStep struct {
 	Summary  string `json:"summary"`
 	Duration string `json:"duration"`
 	Status   string `json:"status"`
+}
+
+type ViewAttempt struct {
+	Attempt    int64  `json:"attempt"`
+	Status     string `json:"status"`
+	Started    int64  `json:"started"` // unix seconds
+	Stopped    int64  `json:"stopped"` // unix seconds
+	LogExpired bool   `json:"logExpired"`
 }
 
 type ViewStepLog struct {
@@ -325,6 +334,25 @@ func fillViewRunResponseCurrentJob(ctx *context_module.Context, resp *ViewRespon
 			ctx.NotFound(nil)
 		}
 		return
+	}
+
+	// Only query previous attempts when more than one attempt has been made.
+	if current.Attempt > 1 {
+		allTasks, err := actions_model.GetTasksByJobID(ctx, current.ID)
+		if err != nil {
+			ctx.ServerError("actions_model.GetTasksByJobID", err)
+			return
+		}
+		resp.State.CurrentJob.AvailableAttempts = make([]*ViewAttempt, 0, len(allTasks))
+		for _, t := range allTasks {
+			resp.State.CurrentJob.AvailableAttempts = append(resp.State.CurrentJob.AvailableAttempts, &ViewAttempt{
+				Attempt:    t.Attempt,
+				Status:     t.Status.String(),
+				Started:    t.Started.AsTime().Unix(),
+				Stopped:    t.Stopped.AsTime().Unix(),
+				LogExpired: t.LogExpired,
+			})
+		}
 	}
 
 	var task *actions_model.ActionTask
@@ -514,8 +542,9 @@ func Logs(ctx *context_module.Context) {
 		return
 	}
 	jobID := ctx.PathParamInt64("job")
+	attempt := ctx.FormInt64("attempt")
 
-	if err := common.DownloadActionsRunJobLogsWithID(ctx.Base, ctx.Repo.Repository, run.ID, jobID); err != nil {
+	if err := common.DownloadActionsRunJobLogsWithID(ctx.Base, ctx.Repo.Repository, run.ID, jobID, attempt); err != nil {
 		ctx.NotFoundOrServerError("DownloadActionsRunJobLogsWithID", func(err error) bool {
 			return errors.Is(err, util.ErrNotExist)
 		}, err)

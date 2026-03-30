@@ -4,6 +4,7 @@
 package devtest
 
 import (
+	"fmt"
 	mathRand "math/rand/v2"
 	"net/http"
 	"slices"
@@ -62,6 +63,17 @@ func MockActionsView(ctx *context.Context) {
 	ctx.Data["RunID"] = ctx.PathParamInt64("run")
 	ctx.Data["JobID"] = ctx.PathParamInt64("job")
 	ctx.HTML(http.StatusOK, "devtest/repo-action-view")
+}
+
+func MockActionsJobLogs(ctx *context.Context) {
+	runID := ctx.PathParamInt64("run")
+	jobID := ctx.PathParamInt64("job")
+	attempt := ctx.FormInt64("attempt")
+	if attempt <= 0 {
+		attempt = 3
+	}
+
+	ctx.PlainText(http.StatusOK, fmt.Sprintf("mock run=%d job=%d attempt=%d log line 1\nmock run=%d job=%d attempt=%d log line 2\n", runID, jobID, attempt, runID, jobID, attempt))
 }
 
 func MockActionsRunsJobs(ctx *context.Context) {
@@ -178,6 +190,15 @@ func fillViewRunResponseCurrentJob(ctx *context.Context, resp *actions.ViewRespo
 	}
 
 	req := web.GetForm(ctx).(*actions.ViewRequest)
+
+	if ctx.PathParamInt64("run") == 10 && jobID == 100 {
+		resp.State.CurrentJob.AvailableAttempts = []*actions.ViewAttempt{
+			{Attempt: 1, Status: actions_model.StatusFailure.String(), Started: time.Now().Add(-2 * time.Hour).Unix(), Stopped: time.Now().Add(-110 * time.Minute).Unix()},
+			{Attempt: 2, Status: actions_model.StatusCancelled.String(), Started: time.Now().Add(-90 * time.Minute).Unix(), Stopped: time.Now().Add(-80 * time.Minute).Unix()},
+			{Attempt: 3, Status: actions_model.StatusSuccess.String(), Started: time.Now().Add(-30 * time.Minute).Unix(), Stopped: time.Now().Add(-20 * time.Minute).Unix()},
+		}
+	}
+
 	var mockLogOptions []generateMockStepsLogOptions
 	resp.State.CurrentJob.Steps = append(resp.State.CurrentJob.Steps, &actions.ViewJobStep{
 		Summary:  "step 0 (mock slow)",

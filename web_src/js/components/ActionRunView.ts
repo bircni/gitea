@@ -5,6 +5,14 @@ import type {ActionsArtifact, ActionsJob, ActionsRun, ActionsRunStatus} from '..
 import type {IntervalId} from '../types.ts';
 import {POST} from '../modules/fetch.ts';
 
+export type ActionsAttempt = {
+  attempt: number;
+  status: ActionsRunStatus;
+  started: number;
+  stopped: number;
+  logExpired: boolean;
+};
+
 // How GitHub Actions logs work:
 // * Workflow command outputs log commands like "::group::the-title", "::add-matcher::...."
 // * Workflow runner parses and processes the commands to "##[group]", apply "matchers", hide secrets, etc.
@@ -131,6 +139,7 @@ export function createActionRunViewStore(actionsUrl: string, runId: number) {
   const viewData = reactive({
     currentRun: createEmptyActionsRun(),
     runArtifacts: [] as Array<ActionsArtifact>,
+    currentJobAttempts: [] as Array<ActionsAttempt>,
   });
   const loadCurrentRun = async () => {
     if (loadingAbortController) return;

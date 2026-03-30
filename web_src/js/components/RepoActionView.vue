@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {SvgIcon} from '../svg.ts';
 import ActionRunStatus from './ActionRunStatus.vue';
-import {toRefs} from 'vue';
+import {computed, toRefs} from 'vue';
 import {POST, DELETE} from '../modules/fetch.ts';
 import ActionRunSummaryView from './ActionRunSummaryView.vue';
 import ActionRunJobView from './ActionRunJobView.vue';
@@ -20,7 +20,8 @@ const props = defineProps<{
 
 const locale = props.locale;
 const store = createActionRunViewStore(props.actionsUrl, props.runId);
-const {currentRun: run , runArtifacts: artifacts} = toRefs(store.viewData);
+const {currentRun: run, runArtifacts: artifacts, currentJobAttempts} = toRefs(store.viewData);
+const previousLogAttempts = computed(() => currentJobAttempts.value.slice(0, -1));
 
 function cancelRun() {
   POST(`${run.value.link}/cancel`);
@@ -132,6 +133,27 @@ async function deleteArtifact(name: string) {
                 <span v-else class="flex-text-inline tw-text-grey-light">
                   <SvgIcon name="octicon-file"/>
                   <span class="gt-ellipsis">{{ artifact.name }}</span>
+                  <span class="ui label tw-text-grey-light tw-flex-shrink-0">{{ locale.artifactExpired }}</span>
+                </span>
+              </li>
+            </template>
+          </ul>
+        </div>
+        <div class="job-artifacts" v-if="props.jobId && previousLogAttempts.length > 0">
+          <div class="ui divider"/>
+          <div class="left-list-header">{{ locale.previousLogs }} ({{ previousLogAttempts.length }})</div>
+          <ul class="job-artifacts-list">
+            <template v-for="attempt in previousLogAttempts" :key="attempt.attempt">
+              <li class="job-artifacts-item">
+                <template v-if="!attempt.logExpired">
+                  <a class="flex-text-inline" :href="`${run.link}/jobs/${props.jobId}/logs?attempt=${attempt.attempt}`" download>
+                    <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status" class="tw-text-text"/>
+                    <span class="gt-ellipsis">{{ locale.attempt }} {{ attempt.attempt }}</span>
+                  </a>
+                </template>
+                <span v-else class="flex-text-inline tw-text-grey-light">
+                  <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status"/>
+                  <span class="gt-ellipsis">{{ locale.attempt }} {{ attempt.attempt }}</span>
                   <span class="ui label tw-text-grey-light tw-flex-shrink-0">{{ locale.artifactExpired }}</span>
                 </span>
               </li>
