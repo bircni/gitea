@@ -345,6 +345,9 @@ func fillViewRunResponseCurrentJob(ctx *context_module.Context, resp *ViewRespon
 			return
 		}
 		for _, t := range allTasks {
+			if t.Attempt == current.Attempt {
+				continue
+			}
 			resp.State.CurrentJob.AvailableAttempts = append(resp.State.CurrentJob.AvailableAttempts, &ViewAttempt{
 				Attempt:    t.Attempt,
 				Status:     t.Status.String(),
