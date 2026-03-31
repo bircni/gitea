@@ -168,6 +168,7 @@ type ViewJob struct {
 	Name     string   `json:"name"`
 	Status   string   `json:"status"`
 	CanRerun bool     `json:"canRerun"`
+	Attempt  int64    `json:"attempt"`
 	Duration string   `json:"duration"`
 	Needs    []string `json:"needs,omitempty"`
 }
@@ -292,6 +293,7 @@ func fillViewRunResponseSummary(ctx *context_module.Context, resp *ViewResponse,
 			Name:     v.Name,
 			Status:   v.Status.String(),
 			CanRerun: resp.State.Run.CanRerun,
+			Attempt:  v.Attempt,
 			Duration: v.Duration().String(),
 			Needs:    v.Needs,
 		})

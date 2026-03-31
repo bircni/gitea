@@ -107,6 +107,13 @@ async function deleteArtifact(name: string) {
               <div class="job-brief-item-left">
                 <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
                 <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ job.name }}</span>
+                <span
+                  v-if="job.attempt > 1"
+                  class="job-brief-attempt"
+                  :data-tooltip-content="`${locale.attempt} ${job.attempt}`"
+                >
+                  x{{ job.attempt }}
+                </span>
               </div>
               <span class="job-brief-item-right">
                 <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
@@ -322,6 +329,19 @@ async function deleteArtifact(name: string) {
 .job-brief-item .job-brief-item-left span {
   display: flex;
   align-items: center;
+}
+
+.job-brief-attempt {
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px;
+  border: 1px solid var(--color-secondary);
+  border-radius: 9999px;
+  color: var(--color-text-light-2);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
 }
 
 .job-brief-item .job-brief-item-left .job-brief-name {

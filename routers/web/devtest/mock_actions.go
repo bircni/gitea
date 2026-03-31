@@ -134,6 +134,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		Name:     "job 100",
 		Status:   actions_model.StatusRunning.String(),
 		CanRerun: true,
+		Attempt:  3,
 		Duration: "1h",
 	})
 	resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
@@ -142,6 +143,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		Name:     "job 101",
 		Status:   actions_model.StatusWaiting.String(),
 		CanRerun: false,
+		Attempt:  1,
 		Duration: "2h",
 		Needs:    []string{"job-100"},
 	})
@@ -151,6 +153,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		Name:     "ULTRA LOOOOOOOOOOOONG job name 102 that exceeds the limit",
 		Status:   actions_model.StatusFailure.String(),
 		CanRerun: false,
+		Attempt:  2,
 		Duration: "3h",
 		Needs:    []string{"job-100", "job-101"},
 	})
@@ -160,6 +163,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		Name:     "job 103",
 		Status:   actions_model.StatusCancelled.String(),
 		CanRerun: false,
+		Attempt:  1,
 		Duration: "2m",
 		Needs:    []string{"job-100"},
 	})
@@ -173,6 +177,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 				Name:     "job dup test " + strconv.Itoa(i),
 				Status:   actions_model.StatusSuccess.String(),
 				CanRerun: false,
+				Attempt:  1,
 				Duration: "2m",
 				Needs:    []string{"job-103", "job-101", "job-100"},
 			})
