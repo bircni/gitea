@@ -338,15 +338,16 @@ func fillViewRunResponseCurrentJob(ctx *context_module.Context, resp *ViewRespon
 		return
 	}
 
-	// Only query previous attempts when more than one attempt has been made.
 	if current.Attempt > 1 {
 		allTasks, err := actions_model.GetTasksByJobID(ctx, current.ID)
 		if err != nil {
 			ctx.ServerError("actions_model.GetTasksByJobID", err)
 			return
 		}
-		resp.State.CurrentJob.AvailableAttempts = make([]*ViewAttempt, 0, len(allTasks))
 		for _, t := range allTasks {
+			if t.Attempt >= current.Attempt {
+				continue // skip the current attempt — only list previous ones
+			}
 			resp.State.CurrentJob.AvailableAttempts = append(resp.State.CurrentJob.AvailableAttempts, &ViewAttempt{
 				Attempt:    t.Attempt,
 				Status:     t.Status.String(),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {SvgIcon} from '../svg.ts';
 import ActionRunStatus from './ActionRunStatus.vue';
-import {computed, toRefs} from 'vue';
+import {toRefs} from 'vue';
 import {POST, DELETE} from '../modules/fetch.ts';
 import ActionRunSummaryView from './ActionRunSummaryView.vue';
 import ActionRunJobView from './ActionRunJobView.vue';
@@ -20,8 +20,7 @@ const props = defineProps<{
 
 const locale = props.locale;
 const store = createActionRunViewStore(props.actionsUrl, props.runId);
-const {currentRun: run, runArtifacts: artifacts, currentJobAttempts} = toRefs(store.viewData);
-const previousLogAttempts = computed(() => currentJobAttempts.value.slice(0, -1));
+const {currentRun: run, runArtifacts: artifacts, previousJobAttempts} = toRefs(store.viewData);
 
 function cancelRun() {
   POST(`${run.value.link}/cancel`);
@@ -140,11 +139,11 @@ async function deleteArtifact(name: string) {
             </template>
           </ul>
         </div>
-        <div class="job-artifacts" v-if="props.jobId && previousLogAttempts.length > 0">
+        <div class="job-previous-logs" v-if="props.jobId && previousJobAttempts.length > 0">
           <div class="ui divider"/>
-          <div class="left-list-header">{{ locale.previousLogs }} ({{ previousLogAttempts.length }})</div>
+          <div class="left-list-header">{{ locale.previousLogs }} ({{ previousJobAttempts.length }})</div>
           <ul class="job-artifacts-list">
-            <template v-for="attempt in previousLogAttempts" :key="attempt.attempt">
+            <template v-for="attempt in previousJobAttempts" :key="attempt.attempt">
               <li class="job-artifacts-item">
                 <template v-if="!attempt.logExpired">
                   <a class="flex-text-inline" :href="`${run.link}/jobs/${props.jobId}/logs?attempt=${attempt.attempt}`" download>

@@ -299,7 +299,7 @@ async function loadJob() {
     // Use consistent "store" operations to load/update the view data
     store.viewData.runArtifacts = runJobResp.artifacts || [];
     store.viewData.currentRun = runJobResp.state.run;
-    store.viewData.currentJobAttempts = runJobResp.state.currentJob.availableAttempts || [];
+    store.viewData.previousJobAttempts = runJobResp.state.currentJob.availableAttempts || [];
 
     currentJob.value = runJobResp.state.currentJob;
     const jobLogs = runJobResp.logs.stepsLog ?? [];

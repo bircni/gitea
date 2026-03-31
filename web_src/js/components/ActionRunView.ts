@@ -139,7 +139,7 @@ export function createActionRunViewStore(actionsUrl: string, runId: number) {
   const viewData = reactive({
     currentRun: createEmptyActionsRun(),
     runArtifacts: [] as Array<ActionsArtifact>,
-    currentJobAttempts: [] as Array<ActionsAttempt>,
+    previousJobAttempts: [] as Array<ActionsAttempt>,
   });
   const loadCurrentRun = async () => {
     if (loadingAbortController) return;

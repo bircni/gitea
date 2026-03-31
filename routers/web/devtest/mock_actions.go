@@ -200,7 +200,6 @@ func fillViewRunResponseCurrentJob(ctx *context.Context, resp *actions.ViewRespo
 		resp.State.CurrentJob.AvailableAttempts = []*actions.ViewAttempt{
 			{Attempt: 1, Status: actions_model.StatusFailure.String(), Started: time.Now().Add(-2 * time.Hour).Unix(), Stopped: time.Now().Add(-110 * time.Minute).Unix()},
 			{Attempt: 2, Status: actions_model.StatusCancelled.String(), Started: time.Now().Add(-90 * time.Minute).Unix(), Stopped: time.Now().Add(-80 * time.Minute).Unix()},
-			{Attempt: 3, Status: actions_model.StatusSuccess.String(), Started: time.Now().Add(-30 * time.Minute).Unix(), Stopped: time.Now().Add(-20 * time.Minute).Unix()},
 		}
 	}
 
