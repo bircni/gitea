@@ -417,24 +417,22 @@ async function hashChangeListener() {
         {{ currentJob.detail }}
       </p>
     </div>
-    <div v-if="currentJob.availableAttempts.length > 0">
-      <div class="ui dropdown jump button">
-        <SvgIcon name="octicon-download" :size="18" class="tw-mr-1"/>
-        <span class="text">{{ locale.previousLogs }}</span>
-        <SvgIcon name="octicon-triangle-down" :size="18" class="dropdown icon"/>
-        <div class="menu transition action-job-menu">
-          <template v-for="attempt in currentJob.availableAttempts" :key="attempt.attempt">
-            <a v-if="!attempt.logExpired" class="item flex-text-inline" :href="`${run.link}/jobs/${jobId}/logs?attempt=${attempt.attempt}`" download>
-              <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status"/>
-              {{ locale.attempt }} {{ attempt.attempt }}
-            </a>
-            <span v-else class="item disabled flex-text-inline">
-              <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status"/>
-              {{ locale.attempt }} {{ attempt.attempt }}
-              <span class="ui mini label">{{ locale.artifactExpired }}</span>
-            </span>
-          </template>
-        </div>
+    <div v-if="currentJob.availableAttempts.length > 0" class="ui dropdown jump button">
+      <SvgIcon name="octicon-download" :size="18" class="tw-mr-1"/>
+      <span class="text">{{ locale.previousLogs }}</span>
+      <SvgIcon name="octicon-triangle-down" :size="18" class="dropdown icon"/>
+      <div class="menu transition action-job-menu">
+        <template v-for="attempt in currentJob.availableAttempts" :key="attempt.attempt">
+          <a v-if="!attempt.logExpired" class="item flex-text-inline" :href="`${run.link}/jobs/${jobId}/logs?attempt=${attempt.attempt}`" download>
+            <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status"/>
+            {{ locale.attempt }} {{ attempt.attempt }}
+          </a>
+          <span v-else class="item disabled flex-text-inline">
+            <ActionRunStatus :locale-status="locale.status[attempt.status]" :status="attempt.status"/>
+            {{ locale.attempt }} {{ attempt.attempt }}
+            <span class="ui mini label">{{ locale.artifactExpired }}</span>
+          </span>
+        </template>
       </div>
     </div>
     <div class="job-info-header-right">
