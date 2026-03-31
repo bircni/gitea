@@ -905,7 +905,8 @@ func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reade
 		return
 	}
 	ctx.ServeContent(reader, context_module.ServeHeaderOptions{
-		Filename: path,
+		Filename:    path,
+		ContentType: st.GetMimeType(),
 	})
 }
 

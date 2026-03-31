@@ -133,12 +133,12 @@ async function deleteArtifact(name: string) {
             <template v-for="artifact in artifacts" :key="artifact.name">
               <li class="job-artifacts-item">
                 <template v-if="artifact.status !== 'expired'">
-                  <a class="flex-text-inline" target="_blank" :href="artifactPreviewURL(artifact.name)">
+                  <a class="flex-text-inline" :href="artifactPreviewURL(artifact.name)">
                     <SvgIcon name="octicon-file" class="tw-text-text"/>
                     <span class="gt-ellipsis">{{ artifact.name }}</span>
                   </a>
                   <span class="job-artifact-actions">
-                    <a download target="_blank" :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
+                    <a download :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
                       <SvgIcon name="octicon-download" class="tw-text-text"/>
                     </a>
                     <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">

@@ -6,7 +6,6 @@ package devtest
 import (
 	"archive/zip"
 	"fmt"
-	"html/template"
 	"io"
 	mathRand "math/rand/v2"
 	"net/http"
@@ -31,12 +30,13 @@ type mockArtifactFile struct {
 }
 
 type mockArtifactPreviewTemplateData struct {
-	ArtifactName string
-	Files        []mockArtifactPreviewTemplateFile
-	PreviewURL   string
-	PreviewRaw   string
-	DownloadURL  string
-	SelectedPath string
+	ArtifactName  string
+	PreviewFiles  []mockArtifactPreviewTemplateFile
+	RunURL        string
+	PreviewURL    string
+	PreviewRawURL string
+	DownloadURL   string
+	SelectedPath  string
 }
 
 type mockArtifactPreviewTemplateFile struct {
@@ -68,40 +68,6 @@ var mockActionsArtifactFiles = map[string][]mockArtifactFile{
 		},
 	},
 }
-
-var mockArtifactPreviewTemplate = template.Must(template.New("mock-artifact-preview").Parse(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Artifact Preview</title>
-  <style>
-    body { font-family: sans-serif; margin: 16px; }
-    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
-    .files { border: 1px solid #ddd; border-radius: 6px; padding: 8px; }
-    .files a { display: block; padding: 8px; text-decoration: none; color: inherit; border-radius: 4px; }
-    .files a.selected { background: #f0f6ff; }
-    iframe { width: 100%; min-height: 70vh; border: 1px solid #ddd; border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <h2>Preview: {{.ArtifactName}}</h2>
-  <p><a href="{{.PreviewURL}}">Reload</a> | <a href="{{.DownloadURL}}">Download ZIP</a></p>
-  <div class="layout">
-    <div class="files">
-      {{range .Files}}
-        <a class="{{if .Selected}}selected{{end}}" href="{{$.PreviewURL}}?path={{.Path | urlquery}}">{{.Path}}</a>
-      {{end}}
-    </div>
-    <div>
-      {{if .SelectedPath}}
-        <iframe src="{{.PreviewRaw}}/{{.SelectedPath | urlquery}}" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-      {{else}}
-        <p>No files</p>
-      {{end}}
-    </div>
-  </div>
-</body>
-</html>`))
 
 func normalizeMockArtifactPath(path string) string {
 	path = util.PathJoinRelX(path)
@@ -387,19 +353,23 @@ func MockActionsArtifactPreview(ctx *context.Context) {
 	previewRawURL := previewURL + "/raw"
 	downloadURL := fmt.Sprintf("%s/devtest/repo-action-view/runs/%d/artifacts/%s", setting.AppSubURL, runID, url.PathEscape(artifactName))
 	data := mockArtifactPreviewTemplateData{
-		ArtifactName: artifactName,
-		Files:        templateFiles,
-		PreviewURL:   previewURL,
-		PreviewRaw:   previewRawURL,
-		DownloadURL:  downloadURL,
-		SelectedPath: selectedPath,
+		ArtifactName:  artifactName,
+		PreviewFiles:  templateFiles,
+		RunURL:        previewURL,
+		PreviewURL:    previewURL,
+		PreviewRawURL: previewRawURL,
+		DownloadURL:   downloadURL,
+		SelectedPath:  selectedPath,
 	}
 
-	ctx.Resp.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := mockArtifactPreviewTemplate.Execute(ctx.Resp, data); err != nil {
-		ctx.ServerError("mockArtifactPreviewTemplate.Execute", err)
-		return
-	}
+	ctx.Data["ArtifactName"] = data.ArtifactName
+	ctx.Data["PreviewFiles"] = data.PreviewFiles
+	ctx.Data["RunURL"] = data.RunURL
+	ctx.Data["PreviewURL"] = data.PreviewURL
+	ctx.Data["PreviewRawURL"] = data.PreviewRawURL
+	ctx.Data["DownloadURL"] = data.DownloadURL
+	ctx.Data["SelectedPath"] = data.SelectedPath
+	ctx.HTML(http.StatusOK, "devtest/repo-action-artifact-preview")
 }
 
 func MockActionsArtifactPreviewRaw(ctx *context.Context) {
@@ -410,7 +380,11 @@ func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 		return
 	}
 
-	selectedPath := chooseMockArtifactPath(files, normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path")))
+	selectedPath := normalizeMockArtifactPath(strings.TrimPrefix(ctx.PathParam("*"), "/"))
+	if selectedPath == "" {
+		selectedPath = normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path"))
+	}
+	selectedPath = chooseMockArtifactPath(files, selectedPath)
 	if selectedPath == "" {
 		ctx.NotFound(nil)
 		return
@@ -442,5 +416,6 @@ func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 	ctx.ServeContent(strings.NewReader(selectedFile.Content), context.ServeHeaderOptions{
 		Filename:      selectedFile.Path,
 		ContentLength: &size,
+		ContentType:   "text/plain; charset=utf-8",
 	})
 }
