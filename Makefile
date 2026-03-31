@@ -379,6 +379,10 @@ lint-json-fix: node_modules ## lint and fix json files
 watch: ## watch everything and continuously rebuild
 	@bash tools/watch.sh
 
+.PHONY: watch-sqlite
+watch-sqlite: ## watch and use sqlite for testing
+	@TAGS="sqlite sqlite_unlock_notify" $(MAKE) watch
+
 .PHONY: watch-frontend
 watch-frontend: node_modules ## start vite dev server for frontend
 	NODE_ENV=development $(NODE_VARS) pnpm exec vite
