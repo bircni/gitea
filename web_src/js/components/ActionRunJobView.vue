@@ -571,10 +571,6 @@ async function hashChangeListener() {
   padding-left: 8px;
 }
 
-.job-info-header :deep(.ui.dropdown.button > .menu > .item) {
-  padding-left: 8px !important;
-}
-
 .job-step-container {
   max-height: 100%;
   border-radius: 0 0 var(--border-radius) var(--border-radius);
