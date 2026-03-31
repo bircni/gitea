@@ -153,6 +153,7 @@ type ViewResponse struct {
 		CurrentJob struct {
 			Title             string         `json:"title"`
 			Detail            string         `json:"detail"`
+			Attempt           int64          `json:"attempt"`
 			Steps             []*ViewJobStep `json:"steps"`
 			AvailableAttempts []*ViewAttempt `json:"availableAttempts"`
 		} `json:"currentJob"`
@@ -375,6 +376,7 @@ func fillViewRunResponseCurrentJob(ctx *context_module.Context, resp *ViewRespon
 
 	resp.State.CurrentJob.Title = current.Name
 	resp.State.CurrentJob.Detail = current.Status.LocaleString(ctx.Locale)
+	resp.State.CurrentJob.Attempt = current.Attempt
 	if run.NeedApproval {
 		resp.State.CurrentJob.Detail = ctx.Locale.TrString("actions.need_approval_desc")
 	}

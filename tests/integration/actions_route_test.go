@@ -148,9 +148,9 @@ jobs:
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		var viewResp actions_web.ViewResponse
 		DecodeJSON(t, resp, &viewResp)
-		require.Len(t, viewResp.State.CurrentJob.AvailableAttempts, 2)
+		assert.Equal(t, int64(2), viewResp.State.CurrentJob.Attempt)
+		require.Len(t, viewResp.State.CurrentJob.AvailableAttempts, 1)
 		assert.Equal(t, int64(1), viewResp.State.CurrentJob.AvailableAttempts[0].Attempt)
-		assert.Equal(t, int64(2), viewResp.State.CurrentJob.AvailableAttempts[1].Attempt)
 
 		req = NewRequest(t, "GET", fmt.Sprintf("/%s/%s/actions/runs/%d/jobs/%d/logs?attempt=1", user2.Name, repo.Name, run.ID, job.ID))
 		resp = session.MakeRequest(t, req, http.StatusOK)

@@ -31,6 +31,7 @@ func generateMockStepsLog(logCur actions.LogCursor, opts generateMockStepsLogOpt
 	mockedLogs = append(mockedLogs, "::group::test group for: step={step}, cursor={cursor}")
 	mockedLogs = append(mockedLogs, slices.Repeat([]string{"in group msg for: step={step}, cursor={cursor}"}, opts.groupRepeat)...)
 	mockedLogs = append(mockedLogs, "::endgroup::")
+	mockedLogs = append(mockedLogs, "::error::error message for: step={step}, cursor={cursor}")
 	mockedLogs = append(mockedLogs,
 		"message for: step={step}, cursor={cursor}",
 		"message for: step={step}, cursor={cursor}",
@@ -197,9 +198,11 @@ func fillViewRunResponseCurrentJob(ctx *context.Context, resp *actions.ViewRespo
 	req := web.GetForm(ctx).(*actions.ViewRequest)
 
 	if ctx.PathParamInt64("run") == 10 && jobID == 100 {
+		resp.State.CurrentJob.Attempt = 4
 		resp.State.CurrentJob.AvailableAttempts = []*actions.ViewAttempt{
 			{Attempt: 1, Status: actions_model.StatusFailure.String(), Started: time.Now().Add(-2 * time.Hour).Unix(), Stopped: time.Now().Add(-110 * time.Minute).Unix()},
 			{Attempt: 2, Status: actions_model.StatusCancelled.String(), Started: time.Now().Add(-90 * time.Minute).Unix(), Stopped: time.Now().Add(-80 * time.Minute).Unix()},
+			{Attempt: 3, Status: actions_model.StatusSuccess.String(), Started: time.Now().Add(-10 * time.Minute).Unix(), LogExpired: true},
 		}
 	}
 
