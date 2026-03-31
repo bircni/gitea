@@ -32,9 +32,9 @@
 					{{end}}
 				</div>
 			</div>
-			<div class="twelve wide column">
+				<div class="twelve wide column">
 				{{if .SelectedPath}}
-					<iframe class="artifact-preview-frame" src="{{.PreviewRawURL}}?path={{QueryEscape .SelectedPath}}" referrerpolicy="same-origin"></iframe>
+					<iframe class="artifact-preview-frame" src="{{.PreviewRawURL}}/{{PathEscapeSegments .SelectedPath}}" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
 				{{else}}
 					<div class="ui attached segment">{{ctx.Locale.Tr "none"}}</div>
 				{{end}}

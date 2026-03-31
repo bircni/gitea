@@ -5,7 +5,7 @@ import {toRefs} from 'vue';
 import {POST, DELETE} from '../modules/fetch.ts';
 import ActionRunSummaryView from './ActionRunSummaryView.vue';
 import ActionRunJobView from './ActionRunJobView.vue';
-import {createActionRunViewStore} from "./ActionRunView.ts";
+import {createActionRunViewStore} from './ActionRunView.ts';
 
 defineOptions({
   name: 'RepoActionView',
@@ -30,9 +30,21 @@ function approveRun() {
   POST(`${run.value.link}/approve`);
 }
 
+function artifactBaseURL(name: string): string {
+  return `${run.value.link}/artifacts/${encodeURIComponent(name)}`;
+}
+
+function artifactPreviewURL(name: string): string {
+  return `${artifactBaseURL(name)}/preview`;
+}
+
+function artifactDownloadURL(name: string): string {
+  return artifactBaseURL(name);
+}
+
 async function deleteArtifact(name: string) {
   if (!window.confirm(locale.confirmDeleteArtifact.replace('%s', name))) return;
-  await DELETE(`${run.value.link}/artifacts/${encodeURIComponent(name)}`);
+  await DELETE(artifactBaseURL(name));
   await store.forceReloadCurrentRun();
 }
 </script>
@@ -126,7 +138,7 @@ async function deleteArtifact(name: string) {
                     <span class="gt-ellipsis">{{ artifact.name }}</span>
                   </a>
                   <span class="job-artifact-actions">
-                    <a target="_blank" :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
+                    <a download target="_blank" :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
                       <SvgIcon name="octicon-download" class="tw-text-text"/>
                     </a>
                     <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">

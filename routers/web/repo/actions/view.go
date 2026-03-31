@@ -5,7 +5,6 @@ package actions
 
 import (
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -16,6 +15,8 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	actions_model "code.gitea.io/gitea/models/actions"
@@ -132,6 +133,25 @@ type ArtifactsViewItem struct {
 type ArtifactPreviewFile struct {
 	Path     string
 	Selected bool
+}
+
+type readAtBySeeker struct {
+	rs io.ReadSeeker
+	mu sync.Mutex
+}
+
+func (r *readAtBySeeker) ReadAt(p []byte, off int64) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, err := r.rs.Seek(off, io.SeekStart); err != nil {
+		return 0, err
+	}
+	n, err := io.ReadFull(r.rs, p)
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return n, io.EOF
+	}
+	return n, err
 }
 
 type ViewResponse struct {
@@ -688,14 +708,9 @@ func getCurrentRunJobsByPathParam(ctx *context_module.Context) (*actions_model.A
 	return run, jobs
 }
 
-func getRunAndUploadedArtifacts(ctx *context_module.Context, runIndex int64, artifactName string) (*actions_model.ActionRun, []*actions_model.ActionArtifact, bool) {
-	run, err := actions_model.GetRunByIndex(ctx, ctx.Repo.Repository.ID, runIndex)
-	if err != nil {
-		if errors.Is(err, util.ErrNotExist) {
-			ctx.HTTPError(http.StatusNotFound, err.Error())
-			return nil, nil, false
-		}
-		ctx.ServerError("GetRunByIndex", err)
+func getCurrentRunAndUploadedArtifacts(ctx *context_module.Context, artifactName string) (*actions_model.ActionRun, []*actions_model.ActionArtifact, bool) {
+	run := getCurrentRunByPathParam(ctx)
+	if ctx.Written() {
 		return nil, nil, false
 	}
 
@@ -731,6 +746,14 @@ func normalizeArtifactPreviewPath(path string) string {
 	return path
 }
 
+func getRequestedPreviewPath(ctx *context_module.Context) string {
+	path := strings.TrimPrefix(ctx.PathParam("*"), "/")
+	if path == "" {
+		path = ctx.Req.URL.Query().Get("path")
+	}
+	return normalizeArtifactPreviewPath(path)
+}
+
 func artifactPreviewFallbackPath(artifact *actions_model.ActionArtifact) string {
 	path := normalizeArtifactPreviewPath(artifact.ArtifactPath)
 	if path != "" {
@@ -764,25 +787,23 @@ func listPreviewPathsForLegacyArtifacts(artifacts []*actions_model.ActionArtifac
 	return paths
 }
 
-func openArtifactV4ZipReader(artifact *actions_model.ActionArtifact) (*filebuffer.FileBackedBuffer, *zip.Reader, error) {
+func openArtifactV4ZipReader(artifact *actions_model.ActionArtifact) (storage.Object, *zip.Reader, error) {
 	f, err := storage.ActionsArtifacts.Open(artifact.StoragePath)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer f.Close()
-
-	buf := filebuffer.New(int(setting.UI.MaxDisplayFileSize), "")
-	if _, err := io.Copy(buf, f); err != nil {
-		_ = buf.Close()
-		return nil, nil, err
-	}
-
-	reader, err := zip.NewReader(buf, buf.Size())
+	stat, err := f.Stat()
 	if err != nil {
-		_ = buf.Close()
+		_ = f.Close()
 		return nil, nil, err
 	}
-	return buf, reader, nil
+
+	reader, err := zip.NewReader(&readAtBySeeker{rs: f}, stat.Size())
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	return f, reader, nil
 }
 
 func listArtifactV4ZipFiles(reader *zip.Reader) ([]string, map[string]*zip.File) {
@@ -807,14 +828,14 @@ func listArtifactV4ZipFiles(reader *zip.Reader) ([]string, map[string]*zip.File)
 }
 
 func listPreviewPathsForV4Artifact(artifact *actions_model.ActionArtifact) ([]string, error) {
-	buf, reader, err := openArtifactV4ZipReader(artifact)
+	obj, reader, err := openArtifactV4ZipReader(artifact)
 	if err != nil {
 		if errors.Is(err, zip.ErrFormat) {
 			return []string{artifactPreviewFallbackPath(artifact)}, nil
 		}
 		return nil, err
 	}
-	defer buf.Close()
+	defer obj.Close()
 
 	paths, _ := listArtifactV4ZipFiles(reader)
 	return paths, nil
@@ -837,34 +858,18 @@ func setArtifactPreviewCSP(ctx *context_module.Context, st typesniffer.SniffedTy
 	}
 }
 
-func previewArtifactByReader(ctx *context_module.Context, path string, size int64, reader io.Reader) {
-	buf := make([]byte, typesniffer.SniffContentSize)
-	n, err := util.ReadAtMost(reader, buf)
-	if err != nil {
-		ctx.ServerError("ReadAtMost", err)
+func previewArtifactByReader(ctx *context_module.Context, path string, _ int64, reader io.Reader) {
+	buf := filebuffer.New(int(setting.UI.MaxDisplayFileSize), "")
+	defer buf.Close()
+	if _, err := io.Copy(buf, reader); err != nil {
+		ctx.ServerError("io.Copy", err)
 		return
 	}
-	if n < 0 {
-		n = 0
-	}
-	buf = buf[:n]
-
-	st := typesniffer.DetectContentType(buf)
-	if !isPreviewableArtifactType(st) {
-		ctx.HTTPError(http.StatusUnsupportedMediaType, "artifact preview is not supported for this file type")
+	if _, err := buf.Seek(0, io.SeekStart); err != nil {
+		ctx.ServerError("Seek", err)
 		return
 	}
-	setArtifactPreviewCSP(ctx, st)
-
-	stream := io.MultiReader(bytes.NewReader(buf), reader)
-	if st.GetMimeType() == "text/html" {
-		httplib.ServeContentByReader(ctx.Req, ctx.Resp, size, stream, &httplib.ServeHeaderOptions{
-			Filename:    path,
-			ContentType: "text/html",
-		})
-		return
-	}
-	common.ServeContentByReader(ctx.Base, path, size, stream)
+	previewArtifactByReadSeeker(ctx, path, buf)
 }
 
 func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reader io.ReadSeeker) {
@@ -877,6 +882,8 @@ func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reade
 	if n < 0 {
 		n = 0
 	}
+	buf = buf[:n]
+
 	if _, err := reader.Seek(0, io.SeekStart); err != nil {
 		ctx.ServerError("Seek", err)
 		return
@@ -891,20 +898,21 @@ func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reade
 	setArtifactPreviewCSP(ctx, st)
 
 	if st.GetMimeType() == "text/html" {
-		httplib.ServeContentByReadSeeker(ctx.Req, ctx.Resp, nil, reader, &httplib.ServeHeaderOptions{
+		ctx.ServeContent(reader, context_module.ServeHeaderOptions{
 			Filename:    path,
 			ContentType: "text/html",
 		})
 		return
 	}
-	common.ServeContentByReadSeeker(ctx.Base, path, nil, reader)
+	ctx.ServeContent(reader, context_module.ServeHeaderOptions{
+		Filename: path,
+	})
 }
 
 func ArtifactsPreviewView(ctx *context_module.Context) {
-	runIndex := getRunIndex(ctx)
 	artifactName := ctx.PathParam("artifact_name")
 
-	run, artifacts, ok := getRunAndUploadedArtifacts(ctx, runIndex, artifactName)
+	run, artifacts, ok := getCurrentRunAndUploadedArtifacts(ctx, artifactName)
 	if !ok {
 		return
 	}
@@ -914,7 +922,7 @@ func ArtifactsPreviewView(ctx *context_module.Context) {
 		ctx.ServerError("listPreviewPaths", err)
 		return
 	}
-	selectedPath := choosePreviewPath(paths, normalizeArtifactPreviewPath(ctx.Req.URL.Query().Get("path")))
+	selectedPath := choosePreviewPath(paths, getRequestedPreviewPath(ctx))
 
 	previewFiles := make([]ArtifactPreviewFile, 0, len(paths))
 	for _, path := range paths {
@@ -942,10 +950,9 @@ func ArtifactsPreviewView(ctx *context_module.Context) {
 }
 
 func ArtifactsPreviewRawView(ctx *context_module.Context) {
-	runIndex := getRunIndex(ctx)
 	artifactName := ctx.PathParam("artifact_name")
 
-	_, artifacts, ok := getRunAndUploadedArtifacts(ctx, runIndex, artifactName)
+	_, artifacts, ok := getCurrentRunAndUploadedArtifacts(ctx, artifactName)
 	if !ok {
 		return
 	}
@@ -955,7 +962,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 		ctx.ServerError("listPreviewPaths", err)
 		return
 	}
-	selectedPath := choosePreviewPath(paths, normalizeArtifactPreviewPath(ctx.Req.URL.Query().Get("path")))
+	selectedPath := choosePreviewPath(paths, getRequestedPreviewPath(ctx))
 	if selectedPath == "" {
 		ctx.HTTPError(http.StatusNotFound, "artifact file not found")
 		return
@@ -964,7 +971,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 	if len(artifacts) == 1 && actions.IsArtifactV4(artifacts[0]) {
 		artifact := artifacts[0]
 
-		buf, reader, err := openArtifactV4ZipReader(artifact)
+		obj, reader, err := openArtifactV4ZipReader(artifact)
 		if err != nil {
 			if !errors.Is(err, zip.ErrFormat) {
 				ctx.ServerError("openArtifactV4ZipReader", err)
@@ -987,7 +994,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 			previewArtifactByReadSeeker(ctx, selectedPath, f)
 			return
 		}
-		defer buf.Close()
+		defer obj.Close()
 
 		_, files := listArtifactV4ZipFiles(reader)
 		zf, ok := files[selectedPath]
@@ -1029,7 +1036,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 	}
 	defer f.Close()
 
-	if artifact.ContentEncoding == "gzip" {
+	if artifact.ContentEncodingOrType == actions_model.ContentEncodingV3Gzip {
 		r, err := gzip.NewReader(f)
 		if err != nil {
 			ctx.ServerError("gzip.NewReader", err)
@@ -1058,9 +1065,8 @@ func ArtifactsDeleteView(ctx *context_module.Context) {
 }
 
 func ArtifactsDownloadView(ctx *context_module.Context) {
-	runIndex := getRunIndex(ctx)
 	artifactName := ctx.PathParam("artifact_name")
-	_, artifacts, ok := getRunAndUploadedArtifacts(ctx, runIndex, artifactName)
+	_, artifacts, ok := getCurrentRunAndUploadedArtifacts(ctx, artifactName)
 	if !ok {
 		return
 	}

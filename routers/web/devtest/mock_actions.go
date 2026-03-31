@@ -18,11 +18,9 @@ import (
 	"time"
 
 	actions_model "code.gitea.io/gitea/models/actions"
-	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/modules/web"
-	"code.gitea.io/gitea/routers/common"
 	"code.gitea.io/gitea/routers/web/repo/actions"
 	"code.gitea.io/gitea/services/context"
 )
@@ -96,7 +94,7 @@ var mockArtifactPreviewTemplate = template.Must(template.New("mock-artifact-prev
     </div>
     <div>
       {{if .SelectedPath}}
-        <iframe src="{{.PreviewRaw}}?path={{.SelectedPath | urlquery}}" referrerpolicy="same-origin"></iframe>
+        <iframe src="{{.PreviewRaw}}/{{.SelectedPath | urlquery}}" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
       {{else}}
         <p>No files</p>
       {{end}}
@@ -372,7 +370,11 @@ func MockActionsArtifactPreview(ctx *context.Context) {
 		return
 	}
 
-	selectedPath := chooseMockArtifactPath(files, normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path")))
+	selectedPath := normalizeMockArtifactPath(strings.TrimPrefix(ctx.PathParam("*"), "/"))
+	if selectedPath == "" {
+		selectedPath = normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path"))
+	}
+	selectedPath = chooseMockArtifactPath(files, selectedPath)
 	templateFiles := make([]mockArtifactPreviewTemplateFile, 0, len(files))
 	for _, file := range files {
 		templateFiles = append(templateFiles, mockArtifactPreviewTemplateFile{
@@ -428,11 +430,17 @@ func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 
 	if path.Ext(selectedFile.Path) == ".html" {
 		ctx.Resp.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
-		httplib.ServeContentByReader(ctx.Req, ctx.Resp, int64(len(selectedFile.Content)), strings.NewReader(selectedFile.Content), &httplib.ServeHeaderOptions{
-			Filename:    selectedFile.Path,
-			ContentType: "text/html",
+		size := int64(len(selectedFile.Content))
+		ctx.ServeContent(strings.NewReader(selectedFile.Content), context.ServeHeaderOptions{
+			Filename:      selectedFile.Path,
+			ContentLength: &size,
+			ContentType:   "text/html",
 		})
 		return
 	}
-	common.ServeContentByReader(ctx.Base, selectedFile.Path, int64(len(selectedFile.Content)), strings.NewReader(selectedFile.Content))
+	size := int64(len(selectedFile.Content))
+	ctx.ServeContent(strings.NewReader(selectedFile.Content), context.ServeHeaderOptions{
+		Filename:      selectedFile.Path,
+		ContentLength: &size,
+	})
 }
