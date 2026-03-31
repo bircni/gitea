@@ -38,10 +38,6 @@ function artifactPreviewURL(name: string): string {
   return `${artifactBaseURL(name)}/preview`;
 }
 
-function artifactDownloadURL(name: string): string {
-  return artifactBaseURL(name);
-}
-
 async function deleteArtifact(name: string) {
   if (!window.confirm(locale.confirmDeleteArtifact.replace('%s', name))) return;
   await DELETE(artifactBaseURL(name));
@@ -138,7 +134,7 @@ async function deleteArtifact(name: string) {
                     <span class="gt-ellipsis">{{ artifact.name }}</span>
                   </a>
                   <span class="job-artifact-actions">
-                    <a download :href="artifactDownloadURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
+                    <a download :href="artifactBaseURL(artifact.name)" :data-tooltip-content="locale.downloadFile">
                       <SvgIcon name="octicon-download" class="tw-text-text"/>
                     </a>
                     <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">

@@ -861,7 +861,7 @@ func setArtifactPreviewCSP(ctx *context_module.Context, st typesniffer.SniffedTy
 func previewArtifactByReader(ctx *context_module.Context, path string, _ int64, reader io.Reader) {
 	buf := filebuffer.New(int(setting.UI.MaxDisplayFileSize), "")
 	defer buf.Close()
-	if _, err := io.Copy(buf, reader); err != nil {
+	if _, err := io.Copy(buf, io.LimitReader(reader, setting.UI.MaxDisplayFileSize)); err != nil {
 		ctx.ServerError("io.Copy", err)
 		return
 	}
@@ -879,16 +879,12 @@ func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reade
 		ctx.ServerError("ReadAtMost", err)
 		return
 	}
-	if n < 0 {
-		n = 0
-	}
 	buf = buf[:n]
 
 	if _, err := reader.Seek(0, io.SeekStart); err != nil {
 		ctx.ServerError("Seek", err)
 		return
 	}
-	buf = buf[:n]
 
 	st := typesniffer.DetectContentType(buf)
 	if !isPreviewableArtifactType(st) {

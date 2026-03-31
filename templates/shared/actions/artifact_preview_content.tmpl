@@ -1,3 +1,24 @@
+<style>
+.artifact-preview-page {
+	margin-top: 1rem;
+}
+
+.artifact-preview-title {
+	min-width: 0;
+}
+
+.artifact-preview-subtitle {
+	color: var(--color-text-light-3);
+}
+
+.artifact-preview-frame {
+	width: 100%;
+	min-height: 70vh;
+	border: 1px solid var(--color-secondary);
+	border-radius: var(--border-radius);
+}
+</style>
+
 <div class="ui top attached header tw-flex tw-items-center tw-justify-between">
 	<div class="artifact-preview-title">
 		<span class="tw-text-base tw-font-semibold">{{ctx.Locale.Tr "preview"}}: <span class="gt-ellipsis">{{.ArtifactName}}</span></span>

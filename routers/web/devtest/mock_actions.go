@@ -29,21 +29,6 @@ type mockArtifactFile struct {
 	Content string
 }
 
-type mockArtifactPreviewTemplateData struct {
-	ArtifactName  string
-	PreviewFiles  []mockArtifactPreviewTemplateFile
-	RunURL        string
-	PreviewURL    string
-	PreviewRawURL string
-	DownloadURL   string
-	SelectedPath  string
-}
-
-type mockArtifactPreviewTemplateFile struct {
-	Path     string
-	Selected bool
-}
-
 var mockActionsArtifactFiles = map[string][]mockArtifactFile{
 	"artifact-b": {
 		{
@@ -75,11 +60,6 @@ func normalizeMockArtifactPath(path string) string {
 		return ""
 	}
 	return path
-}
-
-func getMockArtifactFiles(name string) ([]mockArtifactFile, bool) {
-	files, ok := mockActionsArtifactFiles[name]
-	return files, ok
 }
 
 func chooseMockArtifactPath(files []mockArtifactFile, requestedPath string) string {
@@ -305,7 +285,7 @@ func fillViewRunResponseCurrentJob(ctx *context.Context, resp *actions.ViewRespo
 
 func MockActionsArtifactDownload(ctx *context.Context) {
 	artifactName := ctx.PathParam("artifact_name")
-	files, ok := getMockArtifactFiles(artifactName)
+	files, ok := mockActionsArtifactFiles[artifactName]
 	if !ok {
 		ctx.NotFound(nil)
 		return
@@ -330,7 +310,7 @@ func MockActionsArtifactDownload(ctx *context.Context) {
 func MockActionsArtifactPreview(ctx *context.Context) {
 	runID := ctx.PathParamInt64("run")
 	artifactName := ctx.PathParam("artifact_name")
-	files, ok := getMockArtifactFiles(artifactName)
+	files, ok := mockActionsArtifactFiles[artifactName]
 	if !ok {
 		ctx.NotFound(nil)
 		return
@@ -341,40 +321,30 @@ func MockActionsArtifactPreview(ctx *context.Context) {
 		selectedPath = normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path"))
 	}
 	selectedPath = chooseMockArtifactPath(files, selectedPath)
-	templateFiles := make([]mockArtifactPreviewTemplateFile, 0, len(files))
+	previewFiles := make([]actions.ArtifactPreviewFile, 0, len(files))
 	for _, file := range files {
-		templateFiles = append(templateFiles, mockArtifactPreviewTemplateFile{
+		previewFiles = append(previewFiles, actions.ArtifactPreviewFile{
 			Path:     file.Path,
 			Selected: file.Path == selectedPath,
 		})
 	}
 
-	previewURL := fmt.Sprintf("%s/devtest/repo-action-view/runs/%d/artifacts/%s/preview", setting.AppSubURL, runID, url.PathEscape(artifactName))
-	previewRawURL := previewURL + "/raw"
-	downloadURL := fmt.Sprintf("%s/devtest/repo-action-view/runs/%d/artifacts/%s", setting.AppSubURL, runID, url.PathEscape(artifactName))
-	data := mockArtifactPreviewTemplateData{
-		ArtifactName:  artifactName,
-		PreviewFiles:  templateFiles,
-		RunURL:        previewURL,
-		PreviewURL:    previewURL,
-		PreviewRawURL: previewRawURL,
-		DownloadURL:   downloadURL,
-		SelectedPath:  selectedPath,
-	}
+	runURL := fmt.Sprintf("%s/devtest/repo-action-view/runs/%d", setting.AppSubURL, runID)
+	previewURL := runURL + "/artifacts/" + url.PathEscape(artifactName) + "/preview"
 
-	ctx.Data["ArtifactName"] = data.ArtifactName
-	ctx.Data["PreviewFiles"] = data.PreviewFiles
-	ctx.Data["RunURL"] = data.RunURL
-	ctx.Data["PreviewURL"] = data.PreviewURL
-	ctx.Data["PreviewRawURL"] = data.PreviewRawURL
-	ctx.Data["DownloadURL"] = data.DownloadURL
-	ctx.Data["SelectedPath"] = data.SelectedPath
+	ctx.Data["ArtifactName"] = artifactName
+	ctx.Data["PreviewFiles"] = previewFiles
+	ctx.Data["RunURL"] = runURL
+	ctx.Data["PreviewURL"] = previewURL
+	ctx.Data["PreviewRawURL"] = previewURL + "/raw"
+	ctx.Data["DownloadURL"] = runURL + "/artifacts/" + url.PathEscape(artifactName)
+	ctx.Data["SelectedPath"] = selectedPath
 	ctx.HTML(http.StatusOK, "devtest/repo-action-artifact-preview")
 }
 
 func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 	artifactName := ctx.PathParam("artifact_name")
-	files, ok := getMockArtifactFiles(artifactName)
+	files, ok := mockActionsArtifactFiles[artifactName]
 	if !ok {
 		ctx.NotFound(nil)
 		return
