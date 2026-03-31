@@ -403,7 +403,7 @@ func convertToViewModel(ctx context.Context, locale translation.Locale, cursors 
 	}
 
 	for _, cursor := range cursors {
-		if !cursor.Expanded {
+		if !cursor.Expanded || cursor.Step < 0 || cursor.Step >= len(steps) {
 			continue
 		}
 
@@ -543,6 +543,10 @@ func Logs(ctx *context_module.Context) {
 	}
 	jobID := ctx.PathParamInt64("job")
 	attempt := ctx.FormInt64("attempt")
+	if attempt < 0 {
+		ctx.HTTPError(http.StatusBadRequest, "attempt")
+		return
+	}
 
 	if err := common.DownloadActionsRunJobLogsWithID(ctx.Base, ctx.Repo.Repository, run.ID, jobID, attempt); err != nil {
 		ctx.NotFoundOrServerError("DownloadActionsRunJobLogsWithID", func(err error) bool {

@@ -5,6 +5,7 @@ package repo
 
 import (
 	"errors"
+	"net/http"
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/modules/util"
@@ -49,6 +50,10 @@ func DownloadActionsRunJobLogs(ctx *context.APIContext) {
 
 	jobID := ctx.PathParamInt64("job_id")
 	attempt := ctx.FormInt64("attempt")
+	if attempt < 0 {
+		ctx.APIError(http.StatusBadRequest, util.NewInvalidArgumentErrorf("attempt must be >= 0"))
+		return
+	}
 	curJob, err := actions_model.GetRunJobByRepoAndID(ctx, ctx.Repo.Repository.ID, jobID)
 	if err != nil {
 		if errors.Is(err, util.ErrNotExist) {
