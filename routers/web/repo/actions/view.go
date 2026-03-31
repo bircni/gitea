@@ -709,8 +709,21 @@ func getCurrentRunJobsByPathParam(ctx *context_module.Context) (*actions_model.A
 }
 
 func getCurrentRunAndUploadedArtifacts(ctx *context_module.Context, artifactName string) (*actions_model.ActionRun, []*actions_model.ActionArtifact, bool) {
-	run := getCurrentRunByPathParam(ctx)
-	if ctx.Written() {
+	var (
+		run *actions_model.ActionRun
+		err error
+	)
+	if ctx.PathParam("run") == "latest" {
+		run, err = actions_model.GetLatestRun(ctx, ctx.Repo.Repository.ID)
+	} else {
+		run, err = actions_model.GetRunByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("run"))
+	}
+	if err != nil {
+		if errors.Is(err, util.ErrNotExist) {
+			ctx.HTTPError(http.StatusNotFound, err.Error())
+			return nil, nil, false
+		}
+		ctx.ServerError("GetRunByIndex", err)
 		return nil, nil, false
 	}
 

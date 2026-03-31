@@ -35,7 +35,7 @@ func TestActionsArtifactPreviewSingleFile(t *testing.T) {
 	req := NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/artifact-download/preview", repo.FullName())
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Body.String(), "abc.txt")
-	assert.Contains(t, resp.Body.String(), "/preview/raw?path=abc.txt")
+	assert.Contains(t, resp.Body.String(), "/preview/raw/abc.txt")
 
 	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/artifact-download/preview/raw", repo.FullName())
 	resp = session.MakeRequest(t, req, http.StatusOK)
