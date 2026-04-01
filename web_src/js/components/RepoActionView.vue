@@ -108,7 +108,7 @@ async function deleteArtifact(name: string) {
               <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
               <span class="tw-flex-1 gt-ellipsis">{{ job.name }}</span>
               <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="tw-cursor-pointer link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
-              <span class="step-summary-duration">{{ job.duration }}</span>
+              <span>{{ job.duration }}</span>
             </a>
           </li>
         </ul>
@@ -118,24 +118,22 @@ async function deleteArtifact(name: string) {
           <div class="ui divider"/>
           <div class="left-list-header">{{ locale.artifactsTitle }} ({{ artifacts.length }})</div>
           <ul class="ui relaxed list flex-items-block">
-            <template v-for="artifact in artifacts" :key="artifact.name">
-              <li class="item">
-                <template v-if="artifact.status !== 'expired'">
-                  <a class="tw-flex-1 flex-text-block" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
-                    <SvgIcon name="octicon-file" class="tw-text-text"/>
-                    <span class="tw-flex-1 gt-ellipsis">{{ artifact.name }}</span>
-                  </a>
-                  <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">
-                    <SvgIcon name="octicon-trash" class="tw-text-text"/>
-                  </a>
-                </template>
-                <span v-else class="flex-text-block tw-flex-1 tw-text-grey-light">
-                  <SvgIcon name="octicon-file"/>
+            <li class="item" v-for="artifact in artifacts" :key="artifact.name">
+              <template v-if="artifact.status !== 'expired'">
+                <a class="tw-flex-1 flex-text-block" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
+                  <SvgIcon name="octicon-file" class="tw-text-text"/>
                   <span class="tw-flex-1 gt-ellipsis">{{ artifact.name }}</span>
-                  <span class="ui label tw-text-grey-light tw-flex-shrink-0">{{ locale.artifactExpired }}</span>
-                </span>
-              </li>
-            </template>
+                </a>
+                <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">
+                  <SvgIcon name="octicon-trash" class="tw-text-text"/>
+                </a>
+              </template>
+              <span v-else class="flex-text-block tw-flex-1 tw-text-grey-light">
+                <SvgIcon name="octicon-file"/>
+                <span class="tw-flex-1 gt-ellipsis">{{ artifact.name }}</span>
+                <span class="ui label tw-text-grey-light tw-flex-shrink-0">{{ locale.artifactExpired }}</span>
+              </span>
+            </li>
           </ul>
         </template>
 
