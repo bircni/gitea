@@ -138,6 +138,18 @@ async function deleteArtifact(name: string) {
             </template>
           </ul>
         </div>
+        <div class="job-run-details">
+          <div class="ui divider"/>
+          <div class="left-list-header">{{ locale.runDetails }}</div>
+          <ul class="job-run-details-list">
+            <li class="job-run-details-item">
+              <a class="flex-text-inline" target="_blank" :href="`${run.link}/workflow`">
+                <SvgIcon name="octicon-file-code" class="tw-text-text"/>
+                <span class="gt-ellipsis">{{ locale.workflowFile }}</span>
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <div class="action-view-right">
@@ -255,6 +267,19 @@ async function deleteArtifact(name: string) {
 .job-artifacts-list {
   padding-left: 4px;
   list-style: none;
+}
+
+.job-run-details-list {
+  padding-left: 4px;
+  list-style: none;
+}
+
+.job-run-details-item {
+  margin: 5px 0;
+  padding: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .job-brief-list {
