@@ -94,10 +94,8 @@ async function deleteArtifact(name: string) {
       <div class="action-view-left">
         <!-- summary -->
         <a class="job-brief-item" :href="run.link" :class="!props.jobId ? 'selected' : ''">
-          <div class="job-brief-item-left">
-            <SvgIcon name="octicon-list-unordered"/>
-            <span class="job-brief-name gt-ellipsis">{{ locale.summary }}</span>
-          </div>
+          <SvgIcon name="octicon-list-unordered"/>
+          <span class="gt-ellipsis">{{ locale.summary }}</span>
         </a>
         <div class="ui divider"/>
 
@@ -108,14 +106,10 @@ async function deleteArtifact(name: string) {
           <ul class="ui relaxed list flex-items-block tw-p-0">
             <li class="item job-brief-item" v-for="job in run.jobs" :key="job.id">
               <a class="tw-contents silenced" :href="run.link+'/jobs/'+job.id" :class="props.jobId === job.id ? 'selected' : ''">
-                <div class="job-brief-item-left">
-                  <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
-                  <span class="job-brief-name gt-ellipsis">{{ job.name }}</span>
-                </div>
-                <span class="job-brief-item-right">
-                  <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
-                  <span class="step-summary-duration">{{ job.duration }}</span>
-                </span>
+                <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
+                <span class="tw-flex-1 gt-ellipsis">{{ job.name }}</span>
+                <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
+                <span class="step-summary-duration">{{ job.duration }}</span>
               </a>
             </li>
           </ul>
@@ -274,8 +268,8 @@ async function deleteArtifact(name: string) {
   border-radius: var(--border-radius);
   display: flex;
   flex-wrap: nowrap;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--gap-block);
   color: var(--color-text);
 }
 
@@ -294,28 +288,6 @@ async function deleteArtifact(name: string) {
 
 .job-brief-item .job-brief-rerun {
   cursor: pointer;
-}
-
-.job-brief-item .job-brief-item-left {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-block);
-  width: 100%;
-  min-width: 0;
-}
-
-.job-brief-item .job-brief-item-left span {
-  display: flex;
-  align-items: center;
-}
-
-.job-brief-item .job-brief-item-left .job-brief-name {
-  display: block;
-}
-
-.job-brief-item .job-brief-item-right {
-  display: flex;
-  align-items: center;
 }
 
 /* ================ */
