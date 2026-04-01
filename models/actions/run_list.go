@@ -144,6 +144,55 @@ func GetStatusInfoList(ctx context.Context, lang translation.Locale) []StatusInf
 	return statusInfoList
 }
 
+type BranchInfo struct {
+	FullRef   string
+	ShortName string
+}
+
+// GetBranches returns distinct refs used in action runs for the given repo.
+func GetBranches(ctx context.Context, repoID int64) ([]string, error) {
+	type refResult struct {
+		Ref string
+	}
+	var results []refResult
+	if err := db.GetEngine(ctx).Table("action_run").
+		Select("ref").
+		Where(builder.Eq{"repo_id": repoID}).
+		And(builder.Neq{"ref": ""}).
+		GroupBy("ref").
+		OrderBy("ref").
+		Find(&results); err != nil {
+		return nil, err
+	}
+	refs := make([]string, 0, len(results))
+	for _, r := range results {
+		refs = append(refs, r.Ref)
+	}
+	return refs, nil
+}
+
+// GetEvents returns distinct trigger events used in action runs for the given repo.
+func GetEvents(ctx context.Context, repoID int64) ([]string, error) {
+	type eventResult struct {
+		TriggerEvent string
+	}
+	var results []eventResult
+	if err := db.GetEngine(ctx).Table("action_run").
+		Select("trigger_event").
+		Where(builder.Eq{"repo_id": repoID}).
+		And(builder.Neq{"trigger_event": ""}).
+		GroupBy("trigger_event").
+		OrderBy("trigger_event").
+		Find(&results); err != nil {
+		return nil, err
+	}
+	events := make([]string, 0, len(results))
+	for _, r := range results {
+		events = append(events, r.TriggerEvent)
+	}
+	return events, nil
+}
+
 // GetActors returns a slice of Actors
 func GetActors(ctx context.Context, repoID int64) ([]*user_model.User, error) {
 	actors := make([]*user_model.User, 0, 10)
