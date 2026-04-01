@@ -277,7 +277,6 @@ async function deleteArtifact(name: string) {
   background-color: var(--color-active);
 }
 
-
 /* ================ */
 /* action view right */
 
