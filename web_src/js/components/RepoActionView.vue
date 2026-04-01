@@ -143,7 +143,7 @@ async function deleteArtifact(name: string) {
           <div class="left-list-header">{{ locale.runDetails }}</div>
           <ul class="job-run-details-list">
             <li class="job-run-details-item">
-              <a class="flex-text-inline" target="_blank" :href="`${run.link}/workflow`">
+              <a class="flex-text-inline" :href="`${run.link}/workflow`">
                 <SvgIcon name="octicon-file-code" class="tw-text-text"/>
                 <span class="gt-ellipsis">{{ locale.workflowFile }}</span>
               </a>
