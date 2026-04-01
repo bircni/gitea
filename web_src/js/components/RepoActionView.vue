@@ -95,8 +95,8 @@ async function deleteArtifact(name: string) {
         <!-- summary -->
         <a class="job-brief-item" :href="run.link" :class="!props.jobId ? 'selected' : ''">
           <div class="job-brief-item-left">
-            <SvgIcon name="octicon-list-unordered" class="tw-mr-2"/>
-            <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ locale.summary }}</span>
+            <SvgIcon name="octicon-list-unordered"/>
+            <span class="job-brief-name gt-ellipsis">{{ locale.summary }}</span>
           </div>
         </a>
         <div class="ui divider"/>
@@ -110,10 +110,10 @@ async function deleteArtifact(name: string) {
               <a class="tw-contents silenced" :href="run.link+'/jobs/'+job.id" :class="props.jobId === job.id ? 'selected' : ''">
                 <div class="job-brief-item-left">
                   <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
-                  <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ job.name }}</span>
+                  <span class="job-brief-name gt-ellipsis">{{ job.name }}</span>
                 </div>
                 <span class="job-brief-item-right">
-                  <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
+                  <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
                   <span class="step-summary-duration">{{ job.duration }}</span>
                 </span>
               </a>
@@ -129,17 +129,17 @@ async function deleteArtifact(name: string) {
             <template v-for="artifact in artifacts" :key="artifact.name">
               <li class="item">
                 <template v-if="artifact.status !== 'expired'">
-                  <a class="flex-text-inline" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
+                  <a class="tw-flex-1 flex-text-block" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
                     <SvgIcon name="octicon-file" class="tw-text-text"/>
-                    <span class="gt-ellipsis">{{ artifact.name }}</span>
+                    <span class="tw-flex-1 gt-ellipsis">{{ artifact.name }}</span>
                   </a>
                   <a v-if="run.canDeleteArtifact" @click="deleteArtifact(artifact.name)">
                     <SvgIcon name="octicon-trash" class="tw-text-text"/>
                   </a>
                 </template>
-                <span v-else class="flex-text-inline tw-text-grey-light">
+                <span v-else class="flex-text-block tw-flex-1 tw-text-grey-light">
                   <SvgIcon name="octicon-file"/>
-                  <span class="gt-ellipsis">{{ artifact.name }}</span>
+                  <span class="tw-flex-1 gt-ellipsis">{{ artifact.name }}</span>
                   <span class="ui label tw-text-grey-light tw-flex-shrink-0">{{ locale.artifactExpired }}</span>
                 </span>
               </li>
@@ -277,7 +277,6 @@ async function deleteArtifact(name: string) {
   justify-content: space-between;
   align-items: center;
   color: var(--color-text);
-  width: 100%;
 }
 
 .job-brief-item:hover {
@@ -299,6 +298,8 @@ async function deleteArtifact(name: string) {
 
 .job-brief-item .job-brief-item-left {
   display: flex;
+  align-items: center;
+  gap: var(--gap-block);
   width: 100%;
   min-width: 0;
 }
