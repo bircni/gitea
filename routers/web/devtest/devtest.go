@@ -181,19 +181,6 @@ func prepareMockDataRelativeTime(ctx *context.Context) {
 	ctx.Data["TimeFuture1y"] = now.Add(366 * 24 * time.Hour)
 }
 
-func prepareMockDataAvatar(ctx *context.Context) {
-	mockUsers, _ := db.Find[user_model.User](ctx, user_model.SearchUserOptions{ListOptions: db.ListOptions{PageSize: 1}})
-	ctx.Data["MockUser"] = mockUsers[0]
-	ctx.Data["AvatarSizes"] = []int{16, 20, 24, 28, 32, 40, 48, 64, 100, 128}
-	ctx.Data["SampleEmails"] = []string{
-		"alice@example.com",
-		"bob@example.org",
-		"charlie@test.io",
-		"devtest@gitea.io",
-		"noreply@example.com",
-	}
-}
-
 func prepareMockDataIconGallery(ctx *context.Context) {
 	allNames := svg.DiscoveredIconNames()
 	grouped := map[string][]string{}
@@ -219,8 +206,6 @@ func prepareMockData(ctx *context.Context) {
 		prepareMockDataBadgeActionsSvg(ctx)
 	case "/devtest/relative-time":
 		prepareMockDataRelativeTime(ctx)
-	case "/devtest/avatar":
-		prepareMockDataAvatar(ctx)
 	case "/devtest/icon-gallery":
 		prepareMockDataIconGallery(ctx)
 	}
