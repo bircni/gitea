@@ -103,8 +103,8 @@ async function deleteArtifact(name: string) {
         <div class="left-list-header">{{ locale.allJobs }}</div>
         <!-- unlike other lists, the items have paddings already -->
         <ul class="ui relaxed list flex-items-block tw-p-0">
-          <li class="item job-brief-item" v-for="job in run.jobs" :key="job.id">
-            <a class="tw-contents silenced" :href="run.link+'/jobs/'+job.id" :class="props.jobId === job.id ? 'selected' : ''">
+          <li class="item job-brief-item" v-for="job in run.jobs" :key="job.id" :class="props.jobId === job.id ? 'selected' : ''">
+            <a class="tw-contents silenced" :href="run.link+'/jobs/'+job.id">
               <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
               <span class="tw-flex-1 gt-ellipsis">{{ job.name }}</span>
               <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="tw-cursor-pointer link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
