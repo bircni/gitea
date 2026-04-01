@@ -92,34 +92,42 @@ async function deleteArtifact(name: string) {
     </div>
     <div class="action-view-body">
       <div class="action-view-left">
-        <div class="job-group-section">
-          <a class="job-brief-item" :href="run.link" :class="!props.jobId ? 'selected' : ''">
-            <div class="job-brief-item-left">
-              <SvgIcon name="octicon-list-unordered" class="tw-mr-2"/>
-              <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ locale.summary }}</span>
-            </div>
-          </a>
-          <div class="ui divider"/>
-          <div class="job-brief-list">
-            <div class="left-list-header">{{ locale.allJobs }}</div>
-            <a class="job-brief-item" :href="run.link+'/jobs/'+job.id" :class="props.jobId === job.id ? 'selected' : ''" v-for="job in run.jobs" :key="job.id">
-              <div class="job-brief-item-left">
-                <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
-                <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ job.name }}</span>
-              </div>
-              <span class="job-brief-item-right">
-                <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
-                <span class="step-summary-duration">{{ job.duration }}</span>
-              </span>
-            </a>
+        <!-- summary -->
+        <a class="job-brief-item" :href="run.link" :class="!props.jobId ? 'selected' : ''">
+          <div class="job-brief-item-left">
+            <SvgIcon name="octicon-list-unordered" class="tw-mr-2"/>
+            <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ locale.summary }}</span>
           </div>
+        </a>
+        <div class="ui divider"/>
+
+        <!-- jobs list -->
+        <div class="job-group-section">
+          <div class="left-list-header">{{ locale.allJobs }}</div>
+          <!-- unlike other lists, the items have paddings already -->
+          <ul class="ui relaxed list flex-items-block tw-p-0">
+            <li class="item job-brief-item" v-for="job in run.jobs" :key="job.id">
+              <a class="tw-contents silenced" :href="run.link+'/jobs/'+job.id" :class="props.jobId === job.id ? 'selected' : ''">
+                <div class="job-brief-item-left">
+                  <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
+                  <span class="job-brief-name tw-mx-2 gt-ellipsis">{{ job.name }}</span>
+                </div>
+                <span class="job-brief-item-right">
+                  <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="job-brief-rerun tw-mx-2 link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
+                  <span class="step-summary-duration">{{ job.duration }}</span>
+                </span>
+              </a>
+            </li>
+          </ul>
         </div>
-        <div class="job-artifacts" v-if="artifacts.length > 0">
+
+        <!-- artifacts list -->
+        <template v-if="artifacts.length > 0">
           <div class="ui divider"/>
           <div class="left-list-header">{{ locale.artifactsTitle }} ({{ artifacts.length }})</div>
-          <ul class="job-artifacts-list">
+          <ul class="ui relaxed list flex-items-block">
             <template v-for="artifact in artifacts" :key="artifact.name">
-              <li class="job-artifacts-item">
+              <li class="item">
                 <template v-if="artifact.status !== 'expired'">
                   <a class="flex-text-inline" target="_blank" :href="run.link+'/artifacts/'+artifact.name">
                     <SvgIcon name="octicon-file" class="tw-text-text"/>
@@ -137,19 +145,19 @@ async function deleteArtifact(name: string) {
               </li>
             </template>
           </ul>
-        </div>
-        <div class="job-run-details">
-          <div class="ui divider"/>
-          <div class="left-list-header">{{ locale.runDetails }}</div>
-          <ul class="job-run-details-list">
-            <li class="job-run-details-item">
-              <a class="flex-text-inline" :href="`${run.link}/workflow`">
-                <SvgIcon name="octicon-file-code" class="tw-text-text"/>
-                <span class="gt-ellipsis">{{ locale.workflowFile }}</span>
-              </a>
-            </li>
-          </ul>
-        </div>
+        </template>
+
+        <!-- run details -->
+        <div class="ui divider"/>
+        <div class="left-list-header">{{ locale.runDetails }}</div>
+        <ul class="ui relaxed list">
+          <li class="item">
+            <a class="flex-text-block" :href="`${run.link}/workflow`">
+              <SvgIcon name="octicon-file-code" class="tw-text-text"/>
+              <span class="gt-ellipsis">{{ locale.workflowFile }}</span>
+            </a>
+          </li>
+        </ul>
       </div>
 
       <div class="action-view-right">
@@ -256,47 +264,20 @@ async function deleteArtifact(name: string) {
   color: var(--color-text-light-2);
 }
 
-.job-artifacts-item {
-  margin: 5px 0;
-  padding: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.job-artifacts-list {
-  padding-left: 4px;
-  list-style: none;
-}
-
-.job-run-details-list {
-  padding-left: 4px;
-  list-style: none;
-}
-
-.job-run-details-item {
-  margin: 5px 0;
-  padding: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.job-brief-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.action-view-left .ui.relaxed.list {
+  margin: var(--gap-block) 0;
+  padding-left: 10px;
 }
 
 .job-brief-item {
   padding: 6px 10px;
   border-radius: var(--border-radius);
-  text-decoration: none;
   display: flex;
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
   color: var(--color-text);
+  width: 100%;
 }
 
 .job-brief-item:hover {
