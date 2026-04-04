@@ -377,17 +377,16 @@ func (ns *notificationService) UpdateRelease(ctx context.Context, doer *user_mod
 		return
 	}
 
-	repo, err := repo_model.GetRepositoryByID(ctx, rel.RepoID)
-	if err != nil {
-		log.Error("GetRepositoryByID: %v", err)
+	if err := rel.LoadRepo(ctx); err != nil {
+		log.Error("LoadRepo: %v", err)
 		return
 	}
-	if err := repo.LoadOwner(ctx); err != nil {
+	if err := rel.Repo.LoadOwner(ctx); err != nil {
 		log.Error("LoadOwner: %v", err)
 		return
 	}
-	if !repo.Owner.IsOrganization() && !slices.Contains(repoWatcherIDs, repo.Owner.ID) && repo.Owner.ID != doer.ID {
-		repoWatcherIDs = append(repoWatcherIDs, repo.Owner.ID)
+	if !rel.Repo.Owner.IsOrganization() && !slices.Contains(repoWatcherIDs, rel.Repo.Owner.ID) && rel.Repo.Owner.ID != doer.ID {
+		repoWatcherIDs = append(repoWatcherIDs, rel.Repo.Owner.ID)
 	}
 
 	for _, watcherID := range repoWatcherIDs {

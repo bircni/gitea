@@ -27,7 +27,7 @@ type notificationStatusV331 uint8
 
 const (
 	notificationStatusUnreadV331 notificationStatusV331 = iota + 1
-	notificationStatusReadV331
+	_                                                    // read (unused in merge logic)
 	notificationStatusPinnedV331
 )
 

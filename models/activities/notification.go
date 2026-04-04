@@ -19,6 +19,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/svg"
 	"code.gitea.io/gitea/modules/timeutil"
+	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
 	"xorm.io/xorm/schemas"
@@ -107,24 +108,16 @@ func init() {
 	db.RegisterModel(new(Notification))
 }
 
-func uniqueKeyForIssueNotification(issueID int64, isPull bool) *string {
-	var key string
-	if isPull {
-		key = fmt.Sprintf("pull-%d", issueID)
-	} else {
-		key = fmt.Sprintf("issue-%d", issueID)
-	}
-	return &key
+func uniqueKeyForIssueNotification(issueID int64, isPull bool) string {
+	return fmt.Sprintf("%s-%d", util.Iif(isPull, "pull", "issue"), issueID)
 }
 
-func uniqueKeyForCommitNotification(repoID int64, commitID string) *string {
-	key := fmt.Sprintf("commit-%d-%s", repoID, commitID)
-	return &key
+func uniqueKeyForCommitNotification(repoID int64, commitID string) string {
+	return fmt.Sprintf("commit-%d-%s", repoID, commitID)
 }
 
-func uniqueKeyForReleaseNotification(releaseID int64) *string {
-	key := fmt.Sprintf("release-%d", releaseID)
-	return &key
+func uniqueKeyForReleaseNotification(releaseID int64) string {
+	return fmt.Sprintf("release-%d", releaseID)
 }
 
 // CreateRepoTransferNotification creates a notification for the user a repository was transferred to
@@ -144,7 +137,7 @@ func CreateCommitNotifications(ctx context.Context, doerID, repoID int64, commit
 	notification := new(Notification)
 	if _, err := db.GetEngine(ctx).
 		Where("user_id = ?", receiverID).
-		And("unique_key = ?", *uniqueKey).
+		And("unique_key = ?", uniqueKey).
 		Get(notification); err != nil {
 		return err
 	}
@@ -160,7 +153,7 @@ func CreateCommitNotifications(ctx context.Context, doerID, repoID int64, commit
 		UserID:    receiverID,
 		RepoID:    repoID,
 		CommitID:  commitID,
-		UniqueKey: uniqueKey,
+		UniqueKey: &uniqueKey,
 		Status:    NotificationStatusUnread,
 		UpdatedBy: doerID,
 	}
@@ -172,7 +165,7 @@ func CreateOrUpdateReleaseNotifications(ctx context.Context, doerID, repoID, rel
 	notification := new(Notification)
 	if _, err := db.GetEngine(ctx).
 		Where("user_id = ?", receiverID).
-		And("unique_key = ?", *uniqueKey).
+		And("unique_key = ?", uniqueKey).
 		Get(notification); err != nil {
 		return err
 	}
@@ -189,7 +182,7 @@ func CreateOrUpdateReleaseNotifications(ctx context.Context, doerID, repoID, rel
 		UserID:    receiverID,
 		Status:    NotificationStatusUnread,
 		ReleaseID: releaseID,
-		UniqueKey: uniqueKey,
+		UniqueKey: &uniqueKey,
 		UpdatedBy: doerID,
 	}
 	return db.Insert(ctx, notification)
@@ -203,7 +196,7 @@ func createIssueNotification(ctx context.Context, userID int64, issue *issues_mo
 		Status:    NotificationStatusUnread,
 		IssueID:   issue.ID,
 		CommentID: commentID,
-		UniqueKey: uniqueKey,
+		UniqueKey: &uniqueKey,
 		UpdatedBy: updatedByID,
 	}
 
@@ -245,7 +238,7 @@ func GetIssueNotification(ctx context.Context, userID, issueID int64) (*Notifica
 	notification := new(Notification)
 	_, err := db.GetEngine(ctx).
 		Where("user_id = ?", userID).
-		And(builder.In("unique_key", []string{*issueKey, *pullKey})).
+		And(builder.In("unique_key", []string{issueKey, pullKey})).
 		Get(notification)
 	return notification, err
 }
@@ -493,22 +486,20 @@ func SetRepoReadBy(ctx context.Context, userID, repoID int64) error {
 
 // SetReleaseReadBy sets issue to be read by given user.
 func SetReleaseReadBy(ctx context.Context, releaseID, userID int64) error {
-	uniqueKey := uniqueKeyForReleaseNotification(releaseID)
 	_, err := db.GetEngine(ctx).Where(builder.Eq{
 		"user_id":    userID,
 		"status":     NotificationStatusUnread,
-		"unique_key": *uniqueKey,
+		"unique_key": uniqueKeyForReleaseNotification(releaseID),
 	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
 	return err
 }
 
 // SetCommitReadBy sets commit notification to be read by given user.
 func SetCommitReadBy(ctx context.Context, repoID, userID int64, commitID string) error {
-	uniqueKey := uniqueKeyForCommitNotification(repoID, commitID)
 	_, err := db.GetEngine(ctx).Where(builder.Eq{
 		"user_id":    userID,
 		"status":     NotificationStatusUnread,
-		"unique_key": *uniqueKey,
+		"unique_key": uniqueKeyForCommitNotification(repoID, commitID),
 	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
 	return err
 }
