@@ -448,9 +448,9 @@ func (issue *Issue) PatchURL() string {
 func (issue *Issue) IconHTML(ctx context.Context) template.HTML {
 	if !issue.IsPull {
 		if issue.IsClosed {
-			return svg.RenderHTML("octicon-issue-closed", 16, "text red")
+			return svg.RenderHTML("octicon-issue-closed", 16, "tw-text-red")
 		}
-		return svg.RenderHTML("octicon-issue-opened", 16, "text green")
+		return svg.RenderHTML("octicon-issue-opened", 16, "tw-text-green")
 	}
 
 	switch {
@@ -458,13 +458,13 @@ func (issue *Issue) IconHTML(ctx context.Context) template.HTML {
 		return template.HTML("No PullRequest")
 	case issue.IsClosed:
 		if issue.PullRequest.HasMerged {
-			return svg.RenderHTML("octicon-git-merge", 16, "text purple")
+			return svg.RenderHTML("octicon-git-merge", 16, "tw-text-purple")
 		}
-		return svg.RenderHTML("octicon-git-pull-request-closed", 16, "text red")
+		return svg.RenderHTML("octicon-git-pull-request-closed", 16, "tw-text-red")
 	case issue.PullRequest.IsWorkInProgress(ctx):
-		return svg.RenderHTML("octicon-git-pull-request-draft", 16, "text grey")
+		return svg.RenderHTML("octicon-git-pull-request-draft", 16, "tw-text-grey")
 	default:
-		return svg.RenderHTML("octicon-git-pull-request", 16, "text green")
+		return svg.RenderHTML("octicon-git-pull-request", 16, "tw-text-green")
 	}
 }
 
