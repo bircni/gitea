@@ -6,7 +6,6 @@ package v1_26
 import (
 	"fmt"
 
-	"code.gitea.io/gitea/models/migrations/base"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"xorm.io/xorm"
@@ -57,10 +56,14 @@ func (n *NotificationV331) TableName() string {
 
 // TableIndices implements xorm's TableIndices interface
 func (n *NotificationV331) TableIndices() []*schemas.Index {
-	indices := make([]*schemas.Index, 0, 4)
+	indices := make([]*schemas.Index, 0, 5)
 	usuuIndex := schemas.NewIndex("u_s_uu", schemas.IndexType)
 	usuuIndex.AddColumn("user_id", "status", "updated_unix")
 	indices = append(indices, usuuIndex)
+
+	userIDIndex := schemas.NewIndex("idx_notification_user_id", schemas.IndexType)
+	userIDIndex.AddColumn("user_id")
+	indices = append(indices, userIDIndex)
 
 	repoIDIndex := schemas.NewIndex("idx_notification_repo_id", schemas.IndexType)
 	repoIDIndex.AddColumn("repo_id")
@@ -245,5 +248,5 @@ func AddReleaseNotification(x *xorm.Engine) error {
 	if err := dedupeNotificationRowsV331(x); err != nil {
 		return err
 	}
-	return base.RecreateTables(new(NotificationV331))(x)
+	return x.Sync(new(NotificationV331))
 }

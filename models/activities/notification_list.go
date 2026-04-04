@@ -26,8 +26,7 @@ type FindNotificationOptions struct {
 	db.ListOptions
 	UserID            int64
 	RepoID            int64
-	IssueID           int64
-	ReleaseID         int64
+	UniqueKey         string
 	Status            []NotificationStatus
 	Source            []NotificationSource
 	UpdatedAfterUnix  int64
@@ -43,11 +42,8 @@ func (opts FindNotificationOptions) ToConds() builder.Cond {
 	if opts.RepoID != 0 {
 		cond = cond.And(builder.Eq{"notification.repo_id": opts.RepoID})
 	}
-	if opts.IssueID != 0 {
-		cond = cond.And(builder.Eq{"notification.issue_id": opts.IssueID})
-	}
-	if opts.ReleaseID != 0 {
-		cond = cond.And(builder.Eq{"notification.release_id": opts.ReleaseID})
+	if opts.UniqueKey != "" {
+		cond = cond.And(builder.Eq{"notification.unique_key": opts.UniqueKey})
 	}
 	if len(opts.Status) > 0 {
 		if len(opts.Status) == 1 {
@@ -84,13 +80,6 @@ func CreateOrUpdateIssueNotifications(ctx context.Context, issueID, commentID, n
 func createOrUpdateIssueNotifications(ctx context.Context, issueID, commentID, notificationAuthorID, receiverID int64) error {
 	// init
 	var toNotify container.Set[int64]
-	notifications, err := db.Find[Notification](ctx, FindNotificationOptions{
-		IssueID: issueID,
-	})
-	if err != nil {
-		return err
-	}
-
 	issue, err := issues_model.GetIssueByID(ctx, issueID)
 	if err != nil {
 		return err
@@ -154,7 +143,11 @@ func createOrUpdateIssueNotifications(ctx context.Context, issueID, commentID, n
 			continue
 		}
 
-		if notificationExists(notifications, issue.ID, userID) {
+		existing, err := GetIssueNotification(ctx, userID, issue.ID)
+		if err != nil {
+			return err
+		}
+		if existing.ID > 0 {
 			if err = updateIssueNotification(ctx, userID, issue.ID, commentID, notificationAuthorID); err != nil {
 				return err
 			}

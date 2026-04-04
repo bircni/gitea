@@ -187,7 +187,7 @@ func TestCreateOrUpdateReleaseNotificationsDeduplicatesByRelease(t *testing.T) {
 
 	notfs, err := db.Find[activities_model.Notification](t.Context(), activities_model.FindNotificationOptions{
 		UserID:    receiverID,
-		ReleaseID: releaseID,
+		UniqueKey: activities_model.UniqueKeyForReleaseNotification(releaseID),
 		Source:    []activities_model.NotificationSource{activities_model.NotificationSourceRelease},
 	})
 	assert.NoError(t, err)

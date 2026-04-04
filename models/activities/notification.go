@@ -84,10 +84,14 @@ type Notification struct {
 
 // TableIndices implements xorm's TableIndices interface
 func (n *Notification) TableIndices() []*schemas.Index {
-	indices := make([]*schemas.Index, 0, 4)
+	indices := make([]*schemas.Index, 0, 5)
 	usuuIndex := schemas.NewIndex("u_s_uu", schemas.IndexType)
 	usuuIndex.AddColumn("user_id", "status", "updated_unix")
 	indices = append(indices, usuuIndex)
+
+	userIDIndex := schemas.NewIndex("idx_notification_user_id", schemas.IndexType)
+	userIDIndex.AddColumn("user_id")
+	indices = append(indices, userIDIndex)
 
 	repoIDIndex := schemas.NewIndex("idx_notification_repo_id", schemas.IndexType)
 	repoIDIndex.AddColumn("repo_id")
@@ -116,7 +120,8 @@ func uniqueKeyForCommitNotification(repoID int64, commitID string) string {
 	return fmt.Sprintf("commit-%d-%s", repoID, commitID)
 }
 
-func uniqueKeyForReleaseNotification(releaseID int64) string {
+// UniqueKeyForReleaseNotification returns the unique_key value for a release notification.
+func UniqueKeyForReleaseNotification(releaseID int64) string {
 	return fmt.Sprintf("release-%d", releaseID)
 }
 
@@ -161,7 +166,7 @@ func CreateCommitNotifications(ctx context.Context, doerID, repoID int64, commit
 }
 
 func CreateOrUpdateReleaseNotifications(ctx context.Context, doerID, repoID, releaseID, receiverID int64) error {
-	uniqueKey := uniqueKeyForReleaseNotification(releaseID)
+	uniqueKey := UniqueKeyForReleaseNotification(releaseID)
 	notification := new(Notification)
 	if _, err := db.GetEngine(ctx).
 		Where("user_id = ?", receiverID).
@@ -421,16 +426,6 @@ func (n *Notification) APIURL() string {
 	return setting.AppURL + "api/v1/notifications/threads/" + strconv.FormatInt(n.ID, 10)
 }
 
-func notificationExists(notifications []*Notification, issueID, userID int64) bool {
-	for _, notification := range notifications {
-		if notification.IssueID == issueID && notification.UserID == userID {
-			return true
-		}
-	}
-
-	return false
-}
-
 // UserIDCount is a simple coalition of UserID and Count
 type UserIDCount struct {
 	UserID int64
@@ -489,7 +484,7 @@ func SetReleaseReadBy(ctx context.Context, releaseID, userID int64) error {
 	_, err := db.GetEngine(ctx).Where(builder.Eq{
 		"user_id":    userID,
 		"status":     NotificationStatusUnread,
-		"unique_key": uniqueKeyForReleaseNotification(releaseID),
+		"unique_key": UniqueKeyForReleaseNotification(releaseID),
 	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
 	return err
 }
