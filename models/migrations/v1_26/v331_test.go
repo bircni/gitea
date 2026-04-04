@@ -106,7 +106,7 @@ func TestAddReleaseNotificationDeduplicatesLegacyNotificationRows(t *testing.T) 
 
 	require.NotNil(t, notifications[0].UniqueKey)
 	assert.Equal(t, "commit-2-abc123", *notifications[0].UniqueKey)
-	assert.EqualValues(t, 3, notifications[0].Status)
+	assert.Equal(t, notificationStatusPinnedV331, notifications[0].Status)
 	assert.Equal(t, expectedKeeper.UpdatedBy, notifications[0].UpdatedBy)
 	assert.Equal(t, expectedKeeper.UpdatedUnix, notifications[0].UpdatedUnix)
 }

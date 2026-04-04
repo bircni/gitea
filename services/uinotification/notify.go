@@ -248,7 +248,7 @@ func (ns *notificationService) PullReviewDismiss(ctx context.Context, doer *user
 func (ns *notificationService) IssueChangeAssignee(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, assignee *user_model.User, removed bool, comment *issues_model.Comment) {
 	if !removed && doer.ID != assignee.ID {
 		opts := notificationOpts{
-			Source:               activities_model.NotificationSourceIssue,
+			Source:               util.Iif(issue.IsPull, activities_model.NotificationSourcePullRequest, activities_model.NotificationSourceIssue),
 			IssueID:              issue.ID,
 			NotificationAuthorID: doer.ID,
 			ReceiverID:           assignee.ID,
@@ -360,6 +360,10 @@ func (ns *notificationService) NewRelease(ctx context.Context, rel *repo_model.R
 }
 
 func (ns *notificationService) UpdateRelease(ctx context.Context, doer *user_model.User, rel *repo_model.Release) {
+	if rel.IsDraft {
+		return
+	}
+
 	opts := notificationOpts{
 		Source:               activities_model.NotificationSourceRelease,
 		RepoID:               rel.RepoID,

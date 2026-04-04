@@ -107,24 +107,24 @@ func init() {
 	db.RegisterModel(new(Notification))
 }
 
-func notificationKeyValue(uniqueKey string) *string {
-	key := uniqueKey
+func uniqueKeyForIssueNotification(issueID int64, isPull bool) *string {
+	var key string
+	if isPull {
+		key = fmt.Sprintf("pull-%d", issueID)
+	} else {
+		key = fmt.Sprintf("issue-%d", issueID)
+	}
 	return &key
 }
 
-func uniqueKeyForIssueNotification(issueID int64, isPull bool) *string {
-	if isPull {
-		return notificationKeyValue(fmt.Sprintf("pull-%d", issueID))
-	}
-	return notificationKeyValue(fmt.Sprintf("issue-%d", issueID))
-}
-
 func uniqueKeyForCommitNotification(repoID int64, commitID string) *string {
-	return notificationKeyValue(fmt.Sprintf("commit-%d-%s", repoID, commitID))
+	key := fmt.Sprintf("commit-%d-%s", repoID, commitID)
+	return &key
 }
 
 func uniqueKeyForReleaseNotification(releaseID int64) *string {
-	return notificationKeyValue(fmt.Sprintf("release-%d", releaseID))
+	key := fmt.Sprintf("release-%d", releaseID)
+	return &key
 }
 
 // CreateRepoTransferNotification creates a notification for the user a repository was transferred to
@@ -378,6 +378,9 @@ func (n *Notification) HTMLURL(ctx context.Context) string {
 	case NotificationSourceRepository:
 		return n.Repository.HTMLURL(ctx)
 	case NotificationSourceRelease:
+		if n.Release == nil {
+			return ""
+		}
 		return n.Release.HTMLURL()
 	}
 	return ""
@@ -396,6 +399,9 @@ func (n *Notification) Link(ctx context.Context) string {
 	case NotificationSourceRepository:
 		return n.Repository.Link()
 	case NotificationSourceRelease:
+		if n.Release == nil {
+			return ""
+		}
 		return n.Release.Link()
 	}
 	return ""

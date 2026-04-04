@@ -89,13 +89,14 @@ func GetUsersByUsernames(ctx context.Context, userNames []string) (UserList, err
 	if len(userNames) == 0 {
 		return ous, nil
 	}
+	lowerNames := make([]string, len(userNames))
 	for i, name := range userNames {
-		userNames[i] = strings.ToLower(name)
+		lowerNames[i] = strings.ToLower(name)
 	}
 
 	err := db.GetEngine(ctx).
 		Where("`type` = ?", UserTypeIndividual).
-		In("lower_name", userNames).
+		In("lower_name", lowerNames).
 		Find(&ous)
 	return ous, err
 }

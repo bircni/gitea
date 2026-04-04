@@ -23,12 +23,20 @@ const (
 	notificationSourceReleaseV331
 )
 
+type notificationStatusV331 uint8
+
+const (
+	notificationStatusUnreadV331 notificationStatusV331 = iota + 1
+	notificationStatusReadV331
+	notificationStatusPinnedV331
+)
+
 type NotificationV331 struct { //revive:disable-line:exported
 	ID     int64 `xorm:"pk autoincr"`
 	UserID int64 `xorm:"NOT NULL"`
 	RepoID int64 `xorm:"NOT NULL"`
 
-	Status uint8                  `xorm:"SMALLINT NOT NULL"`
+	Status notificationStatusV331 `xorm:"SMALLINT NOT NULL"`
 	Source NotificationSourceV331 `xorm:"SMALLINT NOT NULL"`
 
 	IssueID   int64 `xorm:"NOT NULL"`
@@ -74,7 +82,7 @@ type NotificationV331Backfill struct { //revive:disable-line:exported
 	UserID int64 `xorm:"NOT NULL"`
 	RepoID int64 `xorm:"NOT NULL"`
 
-	Status uint8                  `xorm:"SMALLINT NOT NULL"`
+	Status notificationStatusV331 `xorm:"SMALLINT NOT NULL"`
 	Source NotificationSourceV331 `xorm:"SMALLINT NOT NULL"`
 
 	IssueID   int64 `xorm:"NOT NULL"`
@@ -172,14 +180,14 @@ func backfillNotificationUniqueKeyV331(x *xorm.Engine) error {
 	}
 }
 
-func mergeNotificationStatusV331(notifications []*NotificationV331Backfill) uint8 {
+func mergeNotificationStatusV331(notifications []*NotificationV331Backfill) notificationStatusV331 {
 	mergedStatus := notifications[0].Status
 	for _, notification := range notifications[1:] {
 		switch {
-		case notification.Status == 3:
-			return 3
-		case notification.Status == 1 && mergedStatus != 3:
-			mergedStatus = 1
+		case notification.Status == notificationStatusPinnedV331:
+			return notificationStatusPinnedV331
+		case notification.Status == notificationStatusUnreadV331 && mergedStatus != notificationStatusPinnedV331:
+			mergedStatus = notificationStatusUnreadV331
 		}
 	}
 	return mergedStatus
