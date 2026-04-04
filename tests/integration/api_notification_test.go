@@ -293,7 +293,7 @@ func TestAPIRepoTransferNotification(t *testing.T) {
 		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
 		session := loginUser(t, user2.Name)
-		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
 
 		// create a repo to transfer
 		repoName := "moveME"
