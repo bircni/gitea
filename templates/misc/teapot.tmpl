@@ -1,0 +1,116 @@
+{{template "base/head" .}}
+<style>
+.page-teapot .teapot-hero {
+	background: radial-gradient(ellipse 90% 75% at 50% 72%, color-mix(in srgb, var(--color-logo) 16%, transparent) 0%, transparent 58%),
+		var(--color-secondary-light-4);
+	border-radius: 1rem;
+	border: 1px solid var(--color-secondary-alpha-40);
+}
+.page-teapot .teapot-svg-wrap {
+	max-width: 280px;
+	margin: 0 auto;
+}
+.page-teapot .teapot-svg {
+	--teapot-stop-top: color-mix(in srgb, var(--color-logo) 45%, white);
+	--teapot-stop-mid: var(--color-logo);
+	--teapot-stop-bottom: color-mix(in srgb, var(--color-logo) 58%, black);
+	--teapot-stop-spout-hi: color-mix(in srgb, var(--color-logo) 35%, white);
+	--teapot-stop-spout-lo: color-mix(in srgb, var(--color-logo) 52%, black);
+	--teapot-lid-top: color-mix(in srgb, var(--color-logo) 38%, white);
+	--teapot-lid-bot: color-mix(in srgb, var(--color-logo) 45%, black);
+	--teapot-knob: color-mix(in srgb, var(--color-logo) 62%, black);
+	overflow: visible;
+}
+.page-teapot .teapot-brand {
+	color: var(--color-logo);
+}
+.page-teapot .teapot-rfc-label {
+	color: var(--color-logo);
+}
+.page-teapot .steam-wisp {
+	fill: none;
+	stroke: color-mix(in srgb, var(--color-logo) 28%, var(--color-secondary-dark-5));
+	stroke-width: 2.25;
+	stroke-linecap: round;
+	opacity: 0.5;
+	animation: teapot-steam 3.2s ease-in-out infinite;
+}
+.page-teapot .steam-wisp:nth-child(2) { animation-delay: 0.4s; }
+.page-teapot .steam-wisp:nth-child(3) { animation-delay: 0.8s; }
+@keyframes teapot-steam {
+	0%, 100% { opacity: 0.28; }
+	50% { opacity: 0.62; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.page-teapot .steam-wisp { animation: none; opacity: 0.45; }
+}
+</style>
+<div role="main" aria-label="{{.Title}}" class="page-content page-teapot">
+	<div class="ui container">
+		<div class="tw-max-w-xl tw-mx-auto tw-my-10 tw-text-center">
+			<p class="teapot-brand tw-mb-2 tw-text-12 tw-font-semibold tw-tracking-widest tw-uppercase">HTCPCP · 418</p>
+			<h1 class="teapot-brand tw-text-4xl tw-font-bold tw-mb-3 tw-tracking-tight">I'm a teapot</h1>
+			<p class="tw-text-text tw-mb-8 tw-mx-auto tw-leading-relaxed tw-text-16">
+				This response follows <strong>RFC 2324</strong> — we won't brew coffee here.
+				Your repositories are still fair game to steep.
+			</p>
+
+			<div class="teapot-hero tw-py-10 tw-px-6 tw-mb-8">
+				<div class="teapot-svg-wrap">
+					<svg viewBox="0 0 280 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="teapot-svg tw-w-full tw-h-auto">
+						<defs>
+							<linearGradient id="teapot-body" x1="0%" y1="0%" x2="0%" y2="100%">
+								<stop offset="0%" stop-color="var(--teapot-stop-top)"/>
+								<stop offset="45%" stop-color="var(--teapot-stop-mid)"/>
+								<stop offset="100%" stop-color="var(--teapot-stop-bottom)"/>
+							</linearGradient>
+							<linearGradient id="teapot-lid" x1="0%" y1="0%" x2="0%" y2="100%">
+								<stop offset="0%" stop-color="var(--teapot-lid-top)"/>
+								<stop offset="100%" stop-color="var(--teapot-lid-bot)"/>
+							</linearGradient>
+							<linearGradient id="teapot-spout" x1="0%" y1="0%" x2="100%" y2="50%">
+								<stop offset="0%" stop-color="var(--teapot-stop-spout-hi)"/>
+								<stop offset="100%" stop-color="var(--teapot-stop-spout-lo)"/>
+							</linearGradient>
+							<filter id="teapot-soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+								<feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity="0.14"/>
+							</filter>
+						</defs>
+						<g transform="translate(0, 8)">
+							<path class="steam-wisp" d="M118 42 Q 122 28 118 14"/>
+							<path class="steam-wisp" d="M140 44 Q 136 26 140 10"/>
+							<path class="steam-wisp" d="M162 42 Q 166 28 162 14"/>
+						</g>
+						<ellipse cx="140" cy="188" rx="88" ry="14" fill="var(--color-secondary-light-2)" stroke="var(--color-secondary-alpha-60)" stroke-width="1"/>
+						<ellipse cx="140" cy="184" rx="72" ry="10" fill="var(--color-secondary-light-4)"/>
+						<ellipse cx="142" cy="168" rx="56" ry="18" fill="rgba(0,0,0,0.07)"/>
+						<g filter="url(#teapot-soft-shadow)">
+							<path fill="url(#teapot-body)" d="M72 158 C 72 158 68 120 76 98 C 84 72 108 58 140 58 C 172 58 196 72 204 98 C 212 120 208 158 208 158 C 208 172 178 182 140 182 C 102 182 72 172 72 158 Z"/>
+							<ellipse cx="118" cy="118" rx="22" ry="38" fill="#ffffff" opacity="0.16"/>
+							<path fill="url(#teapot-spout)" d="M198 96 C 228 88 248 96 256 112 C 262 124 258 136 246 140 C 236 143 218 132 210 118 C 204 108 200 100 198 96 Z"/>
+							<path fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.22" d="M214 108 Q 232 102 248 114"/>
+							<path fill="none" stroke="var(--teapot-stop-bottom)" stroke-width="12" stroke-linecap="round"
+								d="M78 104 C 44 96 32 118 38 142 C 42 158 58 168 76 168"/>
+							<path fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.18" stroke-linecap="round"
+								d="M78 104 C 44 96 32 118 38 142 C 42 158 58 168 76 168"/>
+							<ellipse cx="140" cy="78" rx="48" ry="16" fill="url(#teapot-lid)"/>
+							<ellipse cx="140" cy="74" rx="44" ry="12" fill="#ffffff" opacity="0.1"/>
+							<rect x="132" y="58" width="16" height="14" rx="4" fill="var(--teapot-lid-top)"/>
+							<circle cx="140" cy="58" r="6" fill="var(--teapot-knob)"/>
+							<circle cx="138" cy="56" r="2" fill="#ffffff" opacity="0.35"/>
+						</g>
+					</svg>
+				</div>
+			</div>
+
+			<div class="ui secondary segment tw-text-left tw-mb-8 tw-rounded-lg">
+				<pre class="tw-m-0 tw-whitespace-pre-wrap tw-text-12 tw-leading-relaxed tw-text-text" style="font-family: var(--fonts-monospace);"><span class="teapot-rfc-label tw-font-semibold">RFC 2324, section 2.3.2</span> — "The entity body MAY be short and stout."
+
+<span class="teapot-rfc-label tw-font-semibold">{{AppName}}</span> — Git with a proper infusion protocol.</pre>
+			</div>
+
+			<p class="muted tw-m-0 tw-text-sm tw-text-center"><code class="teapot-brand tw-font-semibold">418</code> I'm a teapot</p>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}
