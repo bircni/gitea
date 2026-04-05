@@ -59,14 +59,18 @@
 				<div class="teapot-svg-wrap">
 					<svg viewBox="0 0 280 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="teapot-svg tw-w-full tw-h-auto">
 						<defs>
-							<linearGradient id="teapot-body" x1="0%" y1="0%" x2="0%" y2="100%">
+							<radialGradient id="teapot-body" gradientUnits="userSpaceOnUse" cx="104" cy="86" r="128">
 								<stop offset="0%" stop-color="var(--teapot-stop-top)"/>
-								<stop offset="45%" stop-color="var(--teapot-stop-mid)"/>
+								<stop offset="55%" stop-color="var(--teapot-stop-mid)"/>
 								<stop offset="100%" stop-color="var(--teapot-stop-bottom)"/>
-							</linearGradient>
+							</radialGradient>
 							<linearGradient id="teapot-lid" x1="0%" y1="0%" x2="0%" y2="100%">
 								<stop offset="0%" stop-color="var(--teapot-lid-top)"/>
 								<stop offset="100%" stop-color="var(--teapot-lid-bot)"/>
+							</linearGradient>
+							<linearGradient id="teapot-handle" x1="0%" y1="0%" x2="100%" y2="100%">
+								<stop offset="0%" stop-color="var(--teapot-stop-spout-hi)"/>
+								<stop offset="100%" stop-color="var(--teapot-stop-bottom)"/>
 							</linearGradient>
 							<linearGradient id="teapot-spout" x1="0%" y1="0%" x2="100%" y2="50%">
 								<stop offset="0%" stop-color="var(--teapot-stop-spout-hi)"/>
@@ -77,27 +81,38 @@
 							</filter>
 						</defs>
 						<g transform="translate(0, 8)">
-							<path class="steam-wisp" d="M118 42 Q 122 28 118 14"/>
-							<path class="steam-wisp" d="M140 44 Q 136 26 140 10"/>
-							<path class="steam-wisp" d="M162 42 Q 166 28 162 14"/>
+							<path class="steam-wisp" d="M118 38 Q122 24 118 10"/>
+							<path class="steam-wisp" d="M140 40 Q136 22 140 6"/>
+							<path class="steam-wisp" d="M162 38 Q166 24 162 10"/>
 						</g>
 						<ellipse cx="140" cy="188" rx="88" ry="14" fill="var(--color-secondary-light-2)" stroke="var(--color-secondary-alpha-60)" stroke-width="1"/>
 						<ellipse cx="140" cy="184" rx="72" ry="10" fill="var(--color-secondary-light-4)"/>
 						<ellipse cx="142" cy="168" rx="56" ry="18" fill="rgba(0,0,0,0.07)"/>
 						<g filter="url(#teapot-soft-shadow)">
-							<path fill="url(#teapot-body)" d="M72 158 C 72 158 68 120 76 98 C 84 72 108 58 140 58 C 172 58 196 72 204 98 C 212 120 208 158 208 158 C 208 172 178 182 140 182 C 102 182 72 172 72 158 Z"/>
-							<ellipse cx="118" cy="118" rx="22" ry="38" fill="#ffffff" opacity="0.16"/>
-							<path fill="url(#teapot-spout)" d="M198 96 C 228 88 248 96 256 112 C 262 124 258 136 246 140 C 236 143 218 132 210 118 C 204 108 200 100 198 96 Z"/>
-							<path fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.22" d="M214 108 Q 232 102 248 114"/>
-							<path fill="none" stroke="var(--teapot-stop-bottom)" stroke-width="12" stroke-linecap="round"
-								d="M78 104 C 44 96 32 118 38 142 C 42 158 58 168 76 168"/>
-							<path fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.18" stroke-linecap="round"
-								d="M78 104 C 44 96 32 118 38 142 C 42 158 58 168 76 168"/>
-							<ellipse cx="140" cy="78" rx="48" ry="16" fill="url(#teapot-lid)"/>
-							<ellipse cx="140" cy="74" rx="44" ry="12" fill="#ffffff" opacity="0.1"/>
-							<rect x="132" y="58" width="16" height="14" rx="4" fill="var(--teapot-lid-top)"/>
-							<circle cx="140" cy="58" r="6" fill="var(--teapot-knob)"/>
-							<circle cx="138" cy="56" r="2" fill="#ffffff" opacity="0.35"/>
+							<path fill="none" stroke="url(#teapot-handle)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"
+								d="M 90 108 C 68 108 56 124 56 142 C 56 156 66 164 90 154"/>
+							<ellipse cx="138" cy="122" rx="54" ry="50" fill="url(#teapot-body)"/>
+							<path fill="#ffffff" opacity="0.13" d="
+								M 108 84
+								C 96 94 92 118 96 136
+								C 100 152 112 154 120 142
+								C 128 128 128 102 120 88
+								C 116 82 112 80 108 84
+								Z"/>
+							<path fill="url(#teapot-spout)" d="
+								M 176 112
+								C 188 100 200 96 212 96
+								C 222 96 228 100 228 106
+								C 228 114 222 118 212 120
+								C 200 122 188 120 178 116
+								C 174 114 172 114 176 112
+								Z"/>
+							<path fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.16" stroke-linecap="round"
+								d="M 190 104 C 200 100 212 101 220 106"/>
+							<ellipse cx="138" cy="80" rx="44" ry="13" fill="url(#teapot-lid)"/>
+							<ellipse cx="138" cy="76" rx="36" ry="7" fill="#ffffff" opacity="0.1"/>
+							<circle cx="138" cy="63" r="6.5" fill="var(--teapot-knob)"/>
+							<circle cx="135" cy="60" r="2" fill="#ffffff" opacity="0.35"/>
 						</g>
 					</svg>
 				</div>
