@@ -226,6 +226,7 @@
 						{{end}}
 						<div class="divider"></div>
 						<script type="module">
+						(() => {
 							const defaultMergeTitle = {{.DefaultMergeMessage}};
 							const defaultSquashMergeTitle = {{.DefaultSquashMergeMessage}};
 							const defaultMergeMessage = {{.DefaultMergeBody}};
@@ -304,6 +305,7 @@
 								}
 							];
 							window.config.pageData.pullRequestMergeForm = mergeForm;
+						})();
 						</script>
 
 						{{$showGeneralMergeForm = true}}

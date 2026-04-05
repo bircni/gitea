@@ -209,6 +209,7 @@ type ProtectBranchPriorityForm struct {
 
 // WebhookForm form for changing web hook
 type WebhookForm struct {
+	Name                     string `binding:"MaxSize(255)"`
 	Events                   string
 	Create                   bool
 	Delete                   bool

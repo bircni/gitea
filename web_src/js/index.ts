@@ -9,7 +9,7 @@ import {initRepoGraphGit} from './features/repo-graph.ts';
 import {initHeatmap} from './features/heatmap.ts';
 import {initImageDiff} from './features/imagediff.ts';
 import {initRepoMigration} from './features/repo-migration.ts';
-import {initRepoProject} from './features/repo-projects.ts';
+import {initRepoProjectsView} from './features/repo-projects.ts';
 import {initTableSort} from './features/tablesort.ts';
 import {initAdminUserListSearchForm} from './features/admin/users.ts';
 import {initAdminConfigs} from './features/admin/config.ts';
@@ -20,7 +20,7 @@ import {initStopwatch} from './features/stopwatch.ts';
 import {initRepoFileSearch} from './features/repo-findfile.ts';
 import {initMarkupContent} from './markup/content.ts';
 import {initRepoFileView} from './features/file-view.ts';
-import {initUserAuthOauth2, initUserCheckAppUrl} from './features/user-auth.ts';
+import {initUserExternalLogins, initUserCheckAppUrl} from './features/user-auth.ts';
 import {initRepoPullRequestReview, initRepoIssueFilterItemLabel} from './features/repo-issue.ts';
 import {initRepoEllipsisButton, initCommitStatuses} from './features/repo-commit.ts';
 import {initRepoTopicBar} from './features/repo-home.ts';
@@ -132,7 +132,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoIssueFilterItemLabel,
   initRepoMigration,
   initRepoMigrationStatusChecker,
-  initRepoProject,
+  initRepoProjectsView,
   initRepoPullRequestReview,
   initRepoReleaseNew,
   initRepoTopicBar,
@@ -149,7 +149,7 @@ const initPerformanceTracer = callInitFunctions([
   initCaptcha,
 
   initUserCheckAppUrl,
-  initUserAuthOauth2,
+  initUserExternalLogins,
   initUserAuthWebAuthn,
   initUserAuthWebAuthnRegister,
   initUserSettings,
