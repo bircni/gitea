@@ -404,7 +404,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(327, "Add disabled state to action runners", v1_26.AddDisabledToActionRunner),
 		newMigration(328, "Add TokenPermissions column to ActionRunJob", v1_26.AddTokenPermissionsToActionRunJob),
 		newMigration(329, "Add unique constraint for user badge", v1_26.AddUniqueIndexForUserBadge),
-		newMigration(330, "Add bypass allowlist to branch protection", v1_26.AddBranchProtectionBypassAllowlist),
+		newMigration(331, "Add bypass allowlist to branch protection", v1_26.AddBranchProtectionBypassAllowlist),
 	}
 	return preparedMigrations
 }
