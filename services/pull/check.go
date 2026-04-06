@@ -194,7 +194,7 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 					return fmt.Errorf("GetFirstMatchProtectedBranchRule failed, repo: %v, base branch: %v, err: %w", pr.BaseRepoID, pr.BaseBranch, errForceMerge)
 				}
 
-				if (protectedBranchRule == nil && isRepoAdmin) || git_model.CanBypassBranchProtection(ctx, protectedBranchRule, doer, isRepoAdmin) {
+				if git_model.CanBypassBranchProtection(ctx, protectedBranchRule, doer, isRepoAdmin) {
 					err = nil
 				}
 			}

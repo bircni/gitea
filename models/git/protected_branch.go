@@ -212,8 +212,11 @@ func IsUserMergeWhitelisted(ctx context.Context, protectBranch *ProtectedBranch,
 // CanBypassBranchProtection reports whether the user can bypass branch protection checks (status checks, approvals, protected files)
 // Either a repo admin (when not blocked) or a user/team on the bypass allowlist can bypass.
 func CanBypassBranchProtection(ctx context.Context, protectBranch *ProtectedBranch, user *user_model.User, isRepoAdmin bool) bool {
-	if protectBranch == nil || user == nil {
+	if user == nil {
 		return false
+	}
+	if protectBranch == nil {
+		return isRepoAdmin
 	}
 
 	if isRepoAdmin && !protectBranch.BlockAdminMergeOverride {
