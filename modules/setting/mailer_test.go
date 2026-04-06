@@ -6,6 +6,8 @@ package setting
 import (
 	"testing"
 
+	"code.gitea.io/gitea/modules/test"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,4 +40,35 @@ func Test_loadMailerFrom(t *testing.T) {
 			assert.Equal(t, kase.SMTPPort, MailService.SMTPPort)
 		})
 	}
+}
+
+// TestLoadSettingsForInstallMailServiceFlags matches the mail-related steps in LoadSettingsForInstall:
+// register and notify mail flags must be applied after loadMailerFrom so the install form reflects app.ini.
+func TestLoadSettingsForInstallMailServiceFlags(t *testing.T) {
+	defer test.MockVariableValue(&Service)()
+	defer test.MockVariableValue(&MailService)()
+
+	cfg, err := NewConfigProviderFromData(`
+[database]
+DB_TYPE = postgres
+
+[mailer]
+ENABLED = true
+SMTP_ADDR = 127.0.0.1
+SMTP_PORT = 465
+FROM = noreply@example.com
+
+[service]
+REGISTER_EMAIL_CONFIRM = true
+ENABLE_NOTIFY_MAIL = true
+`)
+	assert.NoError(t, err)
+	loadDBSetting(cfg)
+	loadServiceFrom(cfg)
+	loadMailerFrom(cfg)
+	loadRegisterMailFrom(cfg)
+	loadNotifyMailFrom(cfg)
+
+	assert.True(t, Service.RegisterEmailConfirm)
+	assert.True(t, Service.EnableNotifyMail)
 }
