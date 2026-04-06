@@ -371,7 +371,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 			return
 		}
 
-		canBypass := git_model.CanBypassBranchProtection(ctx, protectBranch, ctx.user, ctx.userPerm.IsAdmin())
+		_, canBypass := git_model.CanBypassBranchProtection(ctx, protectBranch, ctx.user, ctx.userPerm.IsAdmin())
 
 		// If we can bypass branch protection we can ignore status checks, reviews and protected files
 		if canBypass {

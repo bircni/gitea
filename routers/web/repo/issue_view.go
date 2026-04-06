@@ -963,11 +963,9 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 		ctx.Data["ChangedProtectedFilesNum"] = len(pull.ChangedProtectedFiles)
 		ctx.Data["RequireApprovalsWhitelist"] = pb.EnableApprovalsWhitelist
 
-		isRepoAdmin := ctx.Repo.Permission.IsAdmin()
-		canAdminBypass := isRepoAdmin && !pb.BlockAdminMergeOverride
-		canBypass := git_model.CanBypassBranchProtection(ctx, pb, ctx.Doer, isRepoAdmin)
-		ctx.Data["CanBypassBranchProtection"] = canBypass
+		canAdminBypass, canBypass := git_model.CanBypassBranchProtection(ctx, pb, ctx.Doer, ctx.Repo.Permission.IsAdmin())
 		ctx.Data["CanAdminBypassBranchProtection"] = canAdminBypass
+		ctx.Data["CanBypassBranchProtection"] = canBypass
 	}
 
 	preparePullViewSigning(ctx, issue)
