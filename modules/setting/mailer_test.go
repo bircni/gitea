@@ -42,8 +42,6 @@ func Test_loadMailerFrom(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsForInstallMailServiceFlags matches the mail-related steps in LoadSettingsForInstall:
-// register and notify mail flags must be applied after loadMailerFrom so the install form reflects app.ini.
 func TestLoadSettingsForInstallMailServiceFlags(t *testing.T) {
 	defer test.MockVariableValue(&Service)()
 	defer test.MockVariableValue(&MailService)()

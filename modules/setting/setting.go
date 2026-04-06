@@ -233,7 +233,6 @@ func LoadSettingsForInstall() {
 	loadDBSetting(CfgProvider)
 	loadServiceFrom(CfgProvider)
 	loadMailerFrom(CfgProvider)
-	// Align with loadMailsFrom: apply service mail flags from app.ini now that MailService may exist.
 	loadRegisterMailFrom(CfgProvider)
 	loadNotifyMailFrom(CfgProvider)
 }
