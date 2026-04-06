@@ -361,7 +361,11 @@ func testAPIRenameBranch(t *testing.T, doerName, ownerName, repoName, from, to s
 
 func TestAPIBranchProtection(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	t.Run("Basic", testAPIBranchProtectionBasic)
+	t.Run("BypassAllowlistValidation", testAPIBranchProtectionBypassAllowlistValidation)
+}
 
+func testAPIBranchProtectionBasic(t *testing.T) {
 	// Can create branch protection on branch that not exist
 	testAPICreateBranchProtection(t, "non-existing/branch", 1, http.StatusCreated)
 	testAPIGetBranchProtection(t, "non-existing/branch", http.StatusOK)
@@ -411,9 +415,7 @@ func TestAPIBranchProtection(t *testing.T) {
 	testAPIDeleteBranch(t, "no-such-branch", http.StatusNotFound) // non-existing branch, not exist in git or DB
 }
 
-func TestAPIBranchProtectionBypassAllowlistValidationWhenDisabled(t *testing.T) {
-	defer tests.PrepareTestEnv(t)()
-
+func testAPIBranchProtectionBypassAllowlistValidation(t *testing.T) {
 	token := getUserToken(t, "user2", auth_model.AccessTokenScopeWriteRepository)
 
 	t.Run("IgnoreInvalidBypassUsernamesWhenDisabled", func(t *testing.T) {
