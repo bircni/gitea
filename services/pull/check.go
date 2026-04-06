@@ -196,7 +196,8 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 
 				canForceMerge := protectedBranchRule == nil && isRepoAdmin
 				if !canForceMerge {
-					_, canForceMerge = git_model.CanBypassBranchProtection(ctx, protectedBranchRule, doer, isRepoAdmin)
+					_, canBypass := git_model.CanBypassBranchProtection(ctx, protectedBranchRule, doer, isRepoAdmin)
+					canForceMerge = canBypass
 				}
 				if canForceMerge {
 					errProtection = nil
