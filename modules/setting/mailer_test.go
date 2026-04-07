@@ -63,9 +63,7 @@ ENABLE_NOTIFY_MAIL = true
 	assert.NoError(t, err)
 	loadDBSetting(cfg)
 	loadServiceFrom(cfg)
-	loadMailerFrom(cfg)
-	loadRegisterMailFrom(cfg)
-	loadNotifyMailFrom(cfg)
+	loadMailsFrom(cfg)
 
 	assert.True(t, Service.RegisterEmailConfirm)
 	assert.True(t, Service.EnableNotifyMail)

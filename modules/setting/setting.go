@@ -232,9 +232,7 @@ func LoadSettings() {
 func LoadSettingsForInstall() {
 	loadDBSetting(CfgProvider)
 	loadServiceFrom(CfgProvider)
-	loadMailerFrom(CfgProvider)
-	loadRegisterMailFrom(CfgProvider)
-	loadNotifyMailFrom(CfgProvider)
+	loadMailsFrom(CfgProvider)
 }
 
 var configuredPaths = make(map[string]string)
