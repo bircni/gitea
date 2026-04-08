@@ -199,12 +199,15 @@ func prepareHomeSidebarContributors(ctx *context.Context) {
 		return
 	}
 
-	var sorted []*repo_service.ContributorData
+	sorted := make([]*repo_service.ContributorData, 0, len(stats)-1)
 	for key, c := range stats {
 		if key == repo_service.ContributorTotalKey {
 			continue
 		}
 		sorted = append(sorted, c)
+	}
+	if len(sorted) <= 1 {
+		return
 	}
 	slices.SortFunc(sorted, func(a, b *repo_service.ContributorData) int {
 		return cmp.Compare(b.TotalCommits, a.TotalCommits)
@@ -212,9 +215,6 @@ func prepareHomeSidebarContributors(ctx *context.Context) {
 
 	const maxDisplay = 14
 	total := len(sorted)
-	if total <= 1 {
-		return
-	}
 	if len(sorted) > maxDisplay {
 		sorted = sorted[:maxDisplay]
 	}

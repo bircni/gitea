@@ -80,7 +80,7 @@
 
 .repo-sidebar-contributors {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, 32px);
   gap: 4px;
   margin-top: 4px;
 }
