@@ -56,7 +56,7 @@ func (n *NotificationV331) TableName() string {
 
 // TableIndices implements xorm's TableIndices interface
 func (n *NotificationV331) TableIndices() []*schemas.Index {
-	indices := make([]*schemas.Index, 0, 5)
+	indices := make([]*schemas.Index, 0, 6)
 	usuuIndex := schemas.NewIndex("u_s_uu", schemas.IndexType)
 	usuuIndex.AddColumn("user_id", "status", "updated_unix")
 	indices = append(indices, usuuIndex)
@@ -68,6 +68,10 @@ func (n *NotificationV331) TableIndices() []*schemas.Index {
 	repoIDIndex := schemas.NewIndex("idx_notification_repo_id", schemas.IndexType)
 	repoIDIndex.AddColumn("repo_id")
 	indices = append(indices, repoIDIndex)
+
+	statusIndex := schemas.NewIndex("idx_notification_status", schemas.IndexType)
+	statusIndex.AddColumn("status")
+	indices = append(indices, statusIndex)
 
 	updatedByIndex := schemas.NewIndex("idx_notification_updated_by", schemas.IndexType)
 	updatedByIndex.AddColumn("updated_by")

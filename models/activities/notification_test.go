@@ -139,6 +139,18 @@ func TestSetIssueReadBy(t *testing.T) {
 	assert.Equal(t, activities_model.NotificationStatusRead, nt.Status)
 }
 
+func TestGetIssueNotificationUsesUniqueKeyForPullRequests(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 2, IsPull: true})
+	assert.NoError(t, activities_model.CreateOrUpdateIssueNotifications(t.Context(), issue.ID, 0, 1, 4))
+
+	nt, err := activities_model.GetIssueNotification(t.Context(), 4, issue.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, issue.ID, nt.IssueID)
+	assert.Equal(t, activities_model.NotificationSourcePullRequest, nt.Source)
+}
+
 func TestCreateCommitNotificationsDeduplicatesByRepoAndCommit(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 

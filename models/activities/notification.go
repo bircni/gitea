@@ -84,7 +84,7 @@ type Notification struct {
 
 // TableIndices implements xorm's TableIndices interface
 func (n *Notification) TableIndices() []*schemas.Index {
-	indices := make([]*schemas.Index, 0, 5)
+	indices := make([]*schemas.Index, 0, 6)
 	usuuIndex := schemas.NewIndex("u_s_uu", schemas.IndexType)
 	usuuIndex.AddColumn("user_id", "status", "updated_unix")
 	indices = append(indices, usuuIndex)
@@ -96,6 +96,10 @@ func (n *Notification) TableIndices() []*schemas.Index {
 	repoIDIndex := schemas.NewIndex("idx_notification_repo_id", schemas.IndexType)
 	repoIDIndex.AddColumn("repo_id")
 	indices = append(indices, repoIDIndex)
+
+	statusIndex := schemas.NewIndex("idx_notification_status", schemas.IndexType)
+	statusIndex.AddColumn("status")
+	indices = append(indices, statusIndex)
 
 	updatedByIndex := schemas.NewIndex("idx_notification_updated_by", schemas.IndexType)
 	updatedByIndex.AddColumn("updated_by")
@@ -238,12 +242,16 @@ func updateIssueNotification(ctx context.Context, userID, issueID, commentID, up
 
 // GetIssueNotification return the notification about an issue
 func GetIssueNotification(ctx context.Context, userID, issueID int64) (*Notification, error) {
-	issueKey := uniqueKeyForIssueNotification(issueID, false)
-	pullKey := uniqueKeyForIssueNotification(issueID, true)
+	issue, err := issues_model.GetIssueByID(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+
+	uniqueKey := uniqueKeyForIssueNotification(issueID, issue.IsPull)
 	notification := new(Notification)
-	_, err := db.GetEngine(ctx).
+	_, err = db.GetEngine(ctx).
 		Where("user_id = ?", userID).
-		And(builder.In("unique_key", []string{issueKey, pullKey})).
+		And("unique_key = ?", uniqueKey).
 		Get(notification)
 	return notification, err
 }
