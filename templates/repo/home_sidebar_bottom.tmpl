@@ -1,5 +1,35 @@
 <div class="repo-home-sidebar-bottom">
 	<div class="flex-list">
+		{{if .SidebarContributors}}
+		<div class="flex-item">
+			<div class="flex-item-main">
+				<div class="flex-item-title">
+					<a class="item muted" href="{{.RepoLink}}/activity/contributors">
+						{{ctx.Locale.Tr "repo.contributors"}}
+					</a>
+				</div>
+				<div class="flex-item-body">
+					<div class="repo-sidebar-contributors">
+						{{range .SidebarContributors}}
+						{{if .HomeLink}}
+						<a href="{{.HomeLink}}" data-tooltip-content="{{.Name}}">
+							<img class="ui avatar" src="{{.AvatarLink}}" alt="{{.Name}}" width="32" height="32">
+						</a>
+						{{else}}
+						<span data-tooltip-content="{{.Name}}">
+							<img class="ui avatar" src="{{.AvatarLink}}" alt="{{.Name}}" width="32" height="32">
+						</span>
+						{{end}}
+						{{end}}
+					</div>
+					{{if gt .SidebarContributorsExtra 0}}
+					<a class="tw-mt-2 tw-inline-block" href="{{.RepoLink}}/activity/contributors">+ {{.SidebarContributorsExtra}} {{ctx.Locale.Tr "repo.contributors"}}</a>
+					{{end}}
+				</div>
+			</div>
+		</div>
+		{{end}}
+
 		{{if .LatestRelease}}
 		<div class="flex-item">
 			<div class="flex-item-main">

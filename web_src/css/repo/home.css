@@ -78,6 +78,19 @@
   min-width: 0;
 }
 
+.repo-sidebar-contributors {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.repo-sidebar-contributors .ui.avatar {
+  border-radius: 50%;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
 .language-stats {
   display: flex;
   gap: 2px;

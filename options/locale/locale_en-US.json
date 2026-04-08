@@ -1197,6 +1197,7 @@
   "repo.commit": "Commit",
   "repo.release": "Release",
   "repo.releases": "Releases",
+  "repo.contributors": "Contributors",
   "repo.tag": "Tag",
   "repo.git_tag": "Git Tag",
   "repo.released_this": "released this",

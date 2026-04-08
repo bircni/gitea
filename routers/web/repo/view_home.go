@@ -4,9 +4,11 @@
 package repo
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -182,6 +184,42 @@ func prepareHomeSidebarLatestRelease(ctx *context.Context) {
 		}
 		ctx.Data["LatestRelease"] = release
 	}
+}
+
+func prepareHomeSidebarContributors(ctx *context.Context) {
+	if ctx.Repo.Repository.IsEmpty {
+		return
+	}
+	stats, err := repo_service.GetContributorStats(ctx, ctx.Cache, ctx.Repo.Repository, ctx.Repo.Repository.DefaultBranch)
+	if err != nil {
+		if errors.Is(err, repo_service.ErrAwaitGeneration) {
+			return
+		}
+		log.Error("GetContributorStats: %v", err)
+		return
+	}
+
+	var sorted []*repo_service.ContributorData
+	for key, c := range stats {
+		if key == repo_service.ContributorTotalKey {
+			continue
+		}
+		sorted = append(sorted, c)
+	}
+	slices.SortFunc(sorted, func(a, b *repo_service.ContributorData) int {
+		return cmp.Compare(b.TotalCommits, a.TotalCommits)
+	})
+
+	const maxDisplay = 14
+	total := len(sorted)
+	if total <= 1 {
+		return
+	}
+	if len(sorted) > maxDisplay {
+		sorted = sorted[:maxDisplay]
+	}
+	ctx.Data["SidebarContributors"] = sorted
+	ctx.Data["SidebarContributorsExtra"] = total - len(sorted)
 }
 
 func prepareUpstreamDivergingInfo(ctx *context.Context) {
@@ -445,6 +483,7 @@ func Home(ctx *context.Context) {
 			prepareHomeSidebarCitationFile(entry),
 			prepareHomeSidebarLanguageStats,
 			prepareHomeSidebarLatestRelease,
+			prepareHomeSidebarContributors,
 		)
 	}
 

@@ -28,6 +28,8 @@ import (
 const (
 	contributorStatsCacheKey           = "GetContributorStats/%s/%s"
 	contributorStatsCacheTimeout int64 = 60 * 10
+	// ContributorTotalKey is the map key for the aggregate totals entry in the stats map returned by GetContributorStats.
+	ContributorTotalKey = "total"
 )
 
 var (
@@ -215,11 +217,11 @@ func generateContributorStats(genDone chan struct{}, cache cache.StringCache, ca
 
 	unknownUserAvatarLink := user_model.NewGhostUser().AvatarLinkWithSize(ctx, 0)
 	contributorsCommitStats := make(map[string]*ContributorData)
-	contributorsCommitStats["total"] = &ContributorData{
+	contributorsCommitStats[ContributorTotalKey] = &ContributorData{
 		Name:  "Total",
 		Weeks: make(map[int64]*WeekData),
 	}
-	total := contributorsCommitStats["total"]
+	total := contributorsCommitStats[ContributorTotalKey]
 
 	for _, v := range extendedCommitStats {
 		userEmail := v.Author.Email
