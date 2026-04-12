@@ -33,17 +33,6 @@ import (
 	issue_service "code.gitea.io/gitea/services/issue"
 )
 
-func apiIssueProjectError(ctx *context.APIContext, err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, util.ErrPermissionDenied) || errors.Is(err, util.ErrNotExist) {
-		ctx.APIError(http.StatusUnprocessableEntity, err)
-		return true
-	}
-	return false
-}
-
 // buildSearchIssuesRepoIDs builds the list of repository IDs for issue search based on query parameters.
 // It returns repoIDs, allPublic flag, and any error that occurred.
 func buildSearchIssuesRepoIDs(ctx *context.APIContext) (repoIDs []int64, allPublic bool, err error) {
@@ -708,8 +697,8 @@ func CreateIssue(ctx *context.APIContext) {
 			ctx.APIError(http.StatusBadRequest, err)
 		} else if errors.Is(err, user_model.ErrBlockedUser) {
 			ctx.APIError(http.StatusForbidden, err)
-		} else if apiIssueProjectError(ctx, err) {
-			return
+		} else if errors.Is(err, util.ErrPermissionDenied) || errors.Is(err, util.ErrNotExist) {
+			ctx.APIError(http.StatusUnprocessableEntity, err)
 		} else {
 			ctx.APIErrorInternal(err)
 		}
@@ -916,7 +905,8 @@ func EditIssue(ctx *context.APIContext) {
 		}
 		if currentProjectID != *form.Project {
 			if err := issues_model.IssueAssignOrRemoveProject(ctx, issue, ctx.Doer, *form.Project, 0); err != nil {
-				if apiIssueProjectError(ctx, err) {
+				if errors.Is(err, util.ErrPermissionDenied) || errors.Is(err, util.ErrNotExist) {
+					ctx.APIError(http.StatusUnprocessableEntity, err)
 					return
 				}
 				ctx.APIErrorInternal(err)
