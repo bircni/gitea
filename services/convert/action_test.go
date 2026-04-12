@@ -4,8 +4,7 @@
 package convert
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -26,47 +25,31 @@ func buildWorkflowTestRepo(t *testing.T) string {
 	ctx := t.Context()
 	tmpDir := t.TempDir()
 
-	run := func(args ...string) {
-		t.Helper()
-		_, _, err := gitcmd.NewCommand(gitcmd.ToTrustedCmdArgs(args)...).WithDir(tmpDir).RunStdString(ctx)
-		require.NoError(t, err)
-	}
-
-	run("init")
-	run("symbolic-ref", "HEAD", "refs/heads/main")
-	run("config", "user.email", "test@gitea.com")
-	run("config", "user.name", "Test")
-
-	err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("readme"), 0o644)
+	_, _, err := gitcmd.NewCommand("init").WithDir(tmpDir).RunStdString(ctx)
 	require.NoError(t, err)
-	run("add", ".")
-	run("commit", "-m", "initial commit")
 
-	run("checkout", "-b", "feature")
-	wfDir := filepath.Join(tmpDir, ".gitea", "workflows")
-	err = os.MkdirAll(wfDir, 0o755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(wfDir, "my-workflow.yml"), []byte("on: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"), 0o644)
-	require.NoError(t, err)
-	run("add", ".")
-	run("commit", "-m", "add workflow")
+	readme := "readme"
+	featureWF := "on: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"
+	releaseWF := "on: [push]\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo release\n"
 
-	featureCommit, _, err := gitcmd.NewCommand("rev-parse", "HEAD").WithDir(tmpDir).RunStdString(ctx)
-	require.NoError(t, err)
-	run("update-ref", "refs/pull/42/merge", strings.TrimSpace(featureCommit))
+	// Build a git fast-import stream:
+	//   :4 = initial commit on main (README.md only)
+	//   :5 = feature branch commit (adds feature workflow)
+	//   :6 = release commit from :4 (adds release workflow, tagged release-v1, not on main)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "blob\nmark :1\ndata %d\n%s\n", len(readme), readme)
+	fmt.Fprintf(&sb, "blob\nmark :2\ndata %d\n%s\n", len(featureWF), featureWF)
+	fmt.Fprintf(&sb, "blob\nmark :3\ndata %d\n%s\n", len(releaseWF), releaseWF)
+	fmt.Fprintf(&sb, "commit refs/heads/main\nmark :4\nauthor Test <test@gitea.com> 1000000000 +0000\ncommitter Test <test@gitea.com> 1000000000 +0000\ndata 14\ninitial commit\nM 100644 :1 README.md\n\n")
+	fmt.Fprintf(&sb, "commit refs/heads/feature\nmark :5\nauthor Test <test@gitea.com> 1000000001 +0000\ncommitter Test <test@gitea.com> 1000000001 +0000\ndata 12\nadd workflow\nfrom :4\nM 100644 :2 .gitea/workflows/my-workflow.yml\n\n")
+	fmt.Fprintf(&sb, "reset refs/pull/42/merge\nfrom :5\n\n")
+	fmt.Fprintf(&sb, "commit refs/heads/main\nmark :6\nauthor Test <test@gitea.com> 1000000002 +0000\ncommitter Test <test@gitea.com> 1000000002 +0000\ndata 16\nrelease workflow\nfrom :4\nM 100644 :3 .gitea/workflows/my-workflow.yml\n\n")
+	fmt.Fprintf(&sb, "reset refs/tags/release-v1\nfrom :6\n\n")
+	fmt.Fprintf(&sb, "reset refs/heads/main\nfrom :4\n\n")
+	fmt.Fprintf(&sb, "done\n")
 
-	run("checkout", "main")
-	wfPath := filepath.Join(tmpDir, ".gitea", "workflows", "my-workflow.yml")
-	err = os.MkdirAll(filepath.Dir(wfPath), 0o755)
+	_, _, err = gitcmd.NewCommand("fast-import").WithDir(tmpDir).WithStdinBytes([]byte(sb.String())).RunStdString(ctx)
 	require.NoError(t, err)
-	err = os.WriteFile(wfPath, []byte("on: [push]\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo release\n"), 0o644)
-	require.NoError(t, err)
-	run("add", ".")
-	run("commit", "-m", "release workflow")
-	run("tag", "release-v1")
-
-	run("checkout", "main")
-	run("reset", "--hard", "HEAD~1")
 
 	return tmpDir
 }
