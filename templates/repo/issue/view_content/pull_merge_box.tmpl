@@ -334,27 +334,28 @@
 				{{end}} {{/* end if user is allowed to merge or not */}}
 			{{else}}
 				{{/* Merge conflict without specific file. Suggest manual merge, only if all reviews and status checks OK. */}}
-				{{if .IsBlockedByApprovals}}
+				{{$notAllOverridableChecksOk := or .IsBlockedByApprovals .IsBlockedByRejection .IsBlockedByOfficialReviewRequests .IsBlockedByOutdatedBranch .IsBlockedByChangedProtectedFiles (and .EnableStatusCheck (not $requiredStatusCheckState.IsSuccess))}}
+				{{if and .IsBlockedByApprovals (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_approvals" .GrantedApprovals .ProtectedBranch.RequiredApprovals}}
 					</div>
-				{{else if .IsBlockedByRejection}}
+				{{else if and .IsBlockedByRejection (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_rejection"}}
 					</div>
-				{{else if .IsBlockedByOfficialReviewRequests}}
+				{{else if and .IsBlockedByOfficialReviewRequests (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_official_review_requests"}}
 					</div>
-				{{else if .IsBlockedByOutdatedBranch}}
+				{{else if and .IsBlockedByOutdatedBranch (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_outdated_branch"}}
 					</div>
-				{{else if .IsBlockedByChangedProtectedFiles}}
+				{{else if and .IsBlockedByChangedProtectedFiles (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.TrN $.ChangedProtectedFilesNum "repo.pulls.blocked_by_changed_protected_files_1" "repo.pulls.blocked_by_changed_protected_files_n"}}
@@ -364,10 +365,19 @@
 						<li>{{.}}</li>
 						{{end}}
 					</ul>
-				{{else if and .EnableStatusCheck (not $requiredStatusCheckState.IsSuccess)}}
+				{{else if and .EnableStatusCheck (not $requiredStatusCheckState.IsSuccess) (not $canBypass)}}
 					<div class="item tw-text-red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.required_status_check_failed"}}
+					</div>
+				{{else if and $canBypass $notAllOverridableChecksOk}}
+					<div class="item">
+						{{svg "octicon-dot-fill"}}
+						{{if $.CanAdminBypassBranchProtection}}
+							{{ctx.Locale.Tr "repo.pulls.required_status_check_administrator"}}
+						{{else}}
+							{{ctx.Locale.Tr "repo.pulls.required_status_check_bypass_allowlist"}}
+						{{end}}
 					</div>
 				{{else if and .RequireSigned (not .WillSign)}}
 					<div class="item tw-text-red">
