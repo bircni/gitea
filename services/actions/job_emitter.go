@@ -300,14 +300,6 @@ func (r *jobStatusResolver) resolveCheckNeeds(id int64) (allDone, allSucceed boo
 	return allDone, allSucceed
 }
 
-func (r *jobStatusResolver) resolveJobHasIfCondition(actionRunJob *actions_model.ActionRunJob) (hasIf bool) {
-	// FIXME evaluate this on the server side
-	if job, err := actionRunJob.ParseJob(); err == nil {
-		return len(job.If.Value) > 0
-	}
-	return hasIf
-}
-
 func (r *jobStatusResolver) resolve(ctx context.Context) map[int64]actions_model.Status {
 	ret := map[int64]actions_model.Status{}
 	for id, status := range r.statuses {
@@ -336,7 +328,7 @@ func (r *jobStatusResolver) resolve(ctx context.Context) map[int64]actions_model
 			// Not all dependent jobs completed successfully:
 			// * if the job has "if" condition, it can be started, then the act_runner will evaluate the "if" condition.
 			// * otherwise, the job should be skipped.
-			shouldStartJob = r.resolveJobHasIfCondition(actionRunJob)
+			shouldStartJob = actionRunJob.HasIfCondition()
 		}
 
 		newStatus := util.Iif(shouldStartJob, actions_model.StatusWaiting, actions_model.StatusSkipped)

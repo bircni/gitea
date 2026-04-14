@@ -6,6 +6,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/models/db"
@@ -19,6 +20,15 @@ import (
 	"go.yaml.in/yaml/v4"
 	"xorm.io/builder"
 )
+
+func validateWorkflowRerunConfig(ctx context.Context, repo *repo_model.Repository, run *actions_model.ActionRun) error {
+	cfgUnit := repo.MustGetUnit(ctx, unit.TypeActions)
+	cfg := cfgUnit.ActionsConfig()
+	if cfg.IsWorkflowDisabled(run.WorkflowID) {
+		return util.NewInvalidArgumentErrorf("workflow %s is disabled", run.WorkflowID)
+	}
+	return nil
+}
 
 // GetFailedRerunJobs returns all failed jobs and their downstream dependent jobs that need to be rerun
 func GetFailedRerunJobs(allJobs []*actions_model.ActionRunJob) []*actions_model.ActionRunJob {
@@ -69,6 +79,46 @@ func GetAllRerunJobs(job *actions_model.ActionRunJob, allJobs []*actions_model.A
 	return rerunJobs
 }
 
+// ValidateJobRerunEligible checks whether a target job can be rerun in the current run state.
+func ValidateJobRerunEligible(run *actions_model.ActionRun, targetJob *actions_model.ActionRunJob, allJobs []*actions_model.ActionRunJob) error {
+	if !targetJob.Status.IsDone() {
+		return util.NewInvalidArgumentErrorf("job %s is not done", targetJob.JobID)
+	}
+	if !run.Status.IsDone() && targetJob.Status != actions_model.StatusFailure && targetJob.Status != actions_model.StatusCancelled {
+		return util.NewInvalidArgumentErrorf("job %s can only be rerun while run is active when job status is failure or cancelled", targetJob.JobID)
+	}
+
+	targetHasIfCondition := false
+	for _, needJobID := range targetJob.Needs {
+		needIdx := slices.IndexFunc(allJobs, func(job *actions_model.ActionRunJob) bool {
+			return job.JobID == needJobID
+		})
+		if needIdx == -1 {
+			return util.NewInvalidArgumentErrorf("required job %s for %s was not found", needJobID, targetJob.JobID)
+		}
+		needStatus := allJobs[needIdx].Status
+		if !needStatus.IsDone() {
+			return util.NewInvalidArgumentErrorf("job %s requires %s to finish before rerun", targetJob.JobID, needJobID)
+		}
+		if needStatus != actions_model.StatusSuccess {
+			if !targetHasIfCondition {
+				targetHasIfCondition = targetJob.HasIfCondition()
+			}
+			if targetHasIfCondition {
+				continue
+			}
+			return util.NewInvalidArgumentErrorf("job %s requires %s to succeed before rerun", targetJob.JobID, needJobID)
+		}
+	}
+
+	return nil
+}
+
+// CanRerunJob reports whether a specific job is rerunnable for UI/API hinting.
+func CanRerunJob(run *actions_model.ActionRun, targetJob *actions_model.ActionRunJob, allJobs []*actions_model.ActionRunJob) bool {
+	return ValidateJobRerunEligible(run, targetJob, allJobs) == nil
+}
+
 // prepareRunRerun validates the run, resets its state, handles concurrency, persists the
 // updated run, and fires a status-update notification.
 // It returns isRunBlocked (true when the run itself is held by a concurrency group).
@@ -76,13 +126,8 @@ func prepareRunRerun(ctx context.Context, repo *repo_model.Repository, run *acti
 	if !run.Status.IsDone() {
 		return false, util.NewInvalidArgumentErrorf("this workflow run is not done")
 	}
-
-	cfgUnit := repo.MustGetUnit(ctx, unit.TypeActions)
-
-	// Rerun is not allowed when workflow is disabled.
-	cfg := cfgUnit.ActionsConfig()
-	if cfg.IsWorkflowDisabled(run.WorkflowID) {
-		return false, util.NewInvalidArgumentErrorf("workflow %s is disabled", run.WorkflowID)
+	if err := validateWorkflowRerunConfig(ctx, repo, run); err != nil {
+		return false, err
 	}
 
 	// Reset run's timestamps and status.
@@ -129,20 +174,7 @@ func prepareRunRerun(ctx context.Context, repo *repo_model.Repository, run *acti
 	return run.Status == actions_model.StatusBlocked, nil
 }
 
-// RerunWorkflowRunJobs reruns the given jobs of a workflow run.
-// jobsToRerun must include all jobs to be rerun (the target job and its transitively dependent jobs).
-// A job is blocked (waiting for dependencies) if the run itself is blocked or if any of its
-// needs are also being rerun.
-func RerunWorkflowRunJobs(ctx context.Context, repo *repo_model.Repository, run *actions_model.ActionRun, jobsToRerun []*actions_model.ActionRunJob) error {
-	if len(jobsToRerun) == 0 {
-		return nil
-	}
-
-	isRunBlocked, err := prepareRunRerun(ctx, repo, run, jobsToRerun)
-	if err != nil {
-		return err
-	}
-
+func rerunJobs(ctx context.Context, jobsToRerun []*actions_model.ActionRunJob, isRunBlocked bool) error {
 	rerunJobIDs := make(container.Set[string])
 	for _, j := range jobsToRerun {
 		rerunJobIDs.Add(j.JobID)
@@ -162,8 +194,41 @@ func RerunWorkflowRunJobs(ctx context.Context, repo *repo_model.Repository, run 
 			return err
 		}
 	}
-
 	return nil
+}
+
+// RerunWorkflowRunJobs reruns the given jobs of a workflow run.
+// jobsToRerun must include all jobs to be rerun (the target job and its transitively dependent jobs).
+// A job is blocked (waiting for dependencies) if the run itself is blocked or if any of its
+// needs are also being rerun.
+func RerunWorkflowRunJobs(ctx context.Context, repo *repo_model.Repository, run *actions_model.ActionRun, jobsToRerun []*actions_model.ActionRunJob) error {
+	if len(jobsToRerun) == 0 {
+		return nil
+	}
+
+	isRunBlocked, err := prepareRunRerun(ctx, repo, run, jobsToRerun)
+	if err != nil {
+		return err
+	}
+
+	return rerunJobs(ctx, jobsToRerun, isRunBlocked)
+}
+
+// RerunWorkflowJobAndDependents reruns a target job and all of its downstream jobs.
+func RerunWorkflowJobAndDependents(ctx context.Context, repo *repo_model.Repository, run *actions_model.ActionRun, targetJob *actions_model.ActionRunJob, allJobs []*actions_model.ActionRunJob) error {
+	if err := ValidateJobRerunEligible(run, targetJob, allJobs); err != nil {
+		return err
+	}
+
+	jobsToRerun := GetAllRerunJobs(targetJob, allJobs)
+	if run.Status.IsDone() {
+		return RerunWorkflowRunJobs(ctx, repo, run, jobsToRerun)
+	}
+
+	if err := validateWorkflowRerunConfig(ctx, repo, run); err != nil {
+		return err
+	}
+	return rerunJobs(ctx, jobsToRerun, run.Status == actions_model.StatusBlocked)
 }
 
 func rerunWorkflowJob(ctx context.Context, job *actions_model.ActionRunJob, shouldBlock bool) error {

@@ -122,6 +122,93 @@ func TestGetFailedRerunJobs(t *testing.T) {
 	})
 }
 
+func TestValidateJobRerunEligible(t *testing.T) {
+	makeJob := func(id int64, jobID string, status actions_model.Status, needs ...string) *actions_model.ActionRunJob {
+		return &actions_model.ActionRunJob{ID: id, JobID: jobID, Status: status, Needs: needs}
+	}
+	makeJobWithIf := func(id int64, jobID string, status actions_model.Status, needs ...string) *actions_model.ActionRunJob {
+		return &actions_model.ActionRunJob{
+			ID:     id,
+			JobID:  jobID,
+			Status: status,
+			Needs:  needs,
+			WorkflowPayload: []byte(`
+name: test
+on: push
+jobs:
+  ` + jobID + `:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - run: echo "test"
+`),
+		}
+	}
+
+	t.Run("active run allows failed target with successful needs", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusSuccess)
+		jobB := makeJob(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.NoError(t, err)
+	})
+
+	t.Run("active run rejects rerun when needed job is not successful", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusFailure)
+		jobB := makeJob(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
+
+	t.Run("active run allows rerun with failed need when target has if condition", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusFailure)
+		jobB := makeJobWithIf(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.NoError(t, err)
+	})
+
+	t.Run("active run still requires needs to be done even with if condition", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusRunning)
+		jobB := makeJobWithIf(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
+
+	t.Run("active run rejects rerun for successful target", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusSuccess)
+		jobs := []*actions_model.ActionRunJob{jobA}
+
+		err := ValidateJobRerunEligible(run, jobA, jobs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
+
+	t.Run("done run still enforces successful needs", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusFailure}
+		jobA := makeJob(1, "jobA", actions_model.StatusFailure)
+		jobB := makeJob(2, "jobB", actions_model.StatusSuccess, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
+}
+
 func TestRerunValidation(t *testing.T) {
 	runningRun := &actions_model.ActionRun{Status: actions_model.StatusRunning}
 

@@ -291,4 +291,63 @@ func TestAPIActionsRerunWorkflowJob(t *testing.T) {
 			AddTokenAuth(writeToken)
 		MakeRequest(t, req, http.StatusNotFound)
 	})
+
+	t.Run("NeedsMustSucceedBeforeRerun", func(t *testing.T) {
+		run := &actions_model.ActionRun{
+			ID:            9901,
+			Index:         9901,
+			RepoID:        repo.ID,
+			OwnerID:       user.ID,
+			WorkflowID:    "needs-rerun.yml",
+			TriggerUserID: user.ID,
+			Ref:           "refs/heads/main",
+			CommitSHA:     "c2d72f548424103f01ee1dc02889c1e2bff816b0",
+			Status:        actions_model.StatusFailure,
+		}
+		jobA := &actions_model.ActionRunJob{
+			ID:        99011,
+			RunID:     run.ID,
+			RepoID:    repo.ID,
+			OwnerID:   user.ID,
+			CommitSHA: run.CommitSHA,
+			Name:      "jobA",
+			JobID:     "jobA",
+			Status:    actions_model.StatusSuccess,
+		}
+		jobB := &actions_model.ActionRunJob{
+			ID:        99012,
+			RunID:     run.ID,
+			RepoID:    repo.ID,
+			OwnerID:   user.ID,
+			CommitSHA: run.CommitSHA,
+			Name:      "jobB",
+			JobID:     "jobB",
+			Needs:     []string{"jobA"},
+			Status:    actions_model.StatusFailure,
+		}
+		jobC := &actions_model.ActionRunJob{
+			ID:        99013,
+			RunID:     run.ID,
+			RepoID:    repo.ID,
+			OwnerID:   user.ID,
+			CommitSHA: run.CommitSHA,
+			Name:      "jobC",
+			JobID:     "jobC",
+			Needs:     []string{"jobB"},
+			Status:    actions_model.StatusFailure,
+		}
+		insertBeansWithExplicitIDs(t, "action_run", run)
+		insertBeansWithExplicitIDs(t, "action_run_job", jobA, jobB, jobC)
+
+		req := NewRequest(t, "POST", fmt.Sprintf("/api/v1/repos/%s/actions/runs/%d/jobs/%d/rerun", repo.FullName(), run.ID, jobC.ID)).
+			AddTokenAuth(writeToken)
+		MakeRequest(t, req, http.StatusBadRequest)
+
+		_, err := db.GetEngine(t.Context()).ID(jobB.ID).Cols("status").Update(&actions_model.ActionRunJob{Status: actions_model.StatusSuccess})
+		require.NoError(t, err)
+
+		req = NewRequest(t, "POST", fmt.Sprintf("/api/v1/repos/%s/actions/runs/%d/jobs/%d/rerun", repo.FullName(), run.ID, jobC.ID)).
+			AddTokenAuth(writeToken)
+		MakeRequest(t, req, http.StatusCreated)
+	})
 }

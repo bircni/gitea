@@ -128,6 +128,13 @@ func (job *ActionRunJob) ParseJob() (*jobparser.Job, error) {
 	return workflowJob, nil
 }
 
+// HasIfCondition reports whether the job's workflow payload declares an "if" expression.
+// FIXME: evaluate this on the server side instead of delegating to act_runner.
+func (job *ActionRunJob) HasIfCondition() bool {
+	parsed, err := job.ParseJob()
+	return err == nil && len(parsed.If.Value) > 0
+}
+
 func GetRunJobByRepoAndID(ctx context.Context, repoID, jobID int64) (*ActionRunJob, error) {
 	var job ActionRunJob
 	has, err := db.GetEngine(ctx).Where("id=? AND repo_id=?", jobID, repoID).Get(&job)

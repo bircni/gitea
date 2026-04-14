@@ -15,6 +15,7 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 
 	runnerv1 "code.gitea.io/actions-proto-go/runner/v1"
+	"github.com/stretchr/testify/require"
 )
 
 func TestActionsRerun(t *testing.T) {
@@ -104,6 +105,65 @@ jobs:
 		// fetch and exec job2
 		job2TaskR3 := runner.fetchTask(t)
 		runner.execTask(t, job2TaskR3, &mockTaskOutcome{
+			result: runnerv1.Result_RESULT_SUCCESS,
+		})
+		runner.fetchNoTask(t)
+	})
+}
+
+func TestActionsRerunJobWhileRunActive(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		session := loginUser(t, user2.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+
+		apiRepo := createActionsTestRepo(t, token, "actions-rerun-active", false)
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: apiRepo.ID})
+		httpContext := NewAPITestContext(t, user2.Name, repo.Name, auth_model.AccessTokenScopeWriteRepository)
+		defer doAPIDeleteRepository(httpContext)(t)
+
+		runner := newMockRunner()
+		runner.registerAsRepoRunner(t, repo.OwnerName, repo.Name, "mock-runner", []string{"ubuntu-latest"}, false)
+
+		wfTreePath := ".gitea/workflows/actions-rerun-active-workflow.yml"
+		wfFileContent := `name: actions-rerun-active-workflow
+on:
+  push:
+    paths:
+      - '.gitea/workflows/actions-rerun-active-workflow.yml'
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'first'
+  second:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'second'
+`
+
+		opts := getWorkflowCreateFileOptions(user2, repo.DefaultBranch, "create"+wfTreePath, wfFileContent)
+		createWorkflowFile(t, token, user2.Name, repo.Name, wfTreePath, opts)
+
+		firstTask := runner.fetchTask(t)
+		_, firstJob, run := getTaskAndJobAndRunByTaskID(t, firstTask.Id)
+		runner.execTask(t, firstTask, &mockTaskOutcome{
+			result: runnerv1.Result_RESULT_FAILURE,
+		})
+
+		secondTask := runner.fetchTask(t)
+
+		req := NewRequest(t, "POST", fmt.Sprintf("/%s/%s/actions/runs/%d/jobs/%d/rerun", user2.Name, repo.Name, run.ID, firstJob.ID))
+		session.MakeRequest(t, req, http.StatusOK)
+
+		runner.execTask(t, secondTask, &mockTaskOutcome{
+			result: runnerv1.Result_RESULT_SUCCESS,
+		})
+
+		rerunTask := runner.fetchTask(t)
+		_, rerunJob, _ := getTaskAndJobAndRunByTaskID(t, rerunTask.Id)
+		require.Equal(t, firstJob.ID, rerunJob.ID, "rerun job ID mismatch")
+		runner.execTask(t, rerunTask, &mockTaskOutcome{
 			result: runnerv1.Result_RESULT_SUCCESS,
 		})
 		runner.fetchNoTask(t)

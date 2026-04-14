@@ -1367,7 +1367,7 @@ func RerunWorkflowJob(ctx *context.APIContext) {
 	}
 
 	targetJob := jobs[jobIdx]
-	if err := actions_service.RerunWorkflowRunJobs(ctx, ctx.Repo.Repository, run, actions_service.GetAllRerunJobs(targetJob, jobs)); err != nil {
+	if err := actions_service.RerunWorkflowJobAndDependents(ctx, ctx.Repo.Repository, run, targetJob, jobs); err != nil {
 		handleWorkflowRerunError(ctx, err)
 		return
 	}

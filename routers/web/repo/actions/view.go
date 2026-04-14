@@ -411,7 +411,7 @@ func fillViewRunResponseSummary(ctx *context_module.Context, resp *ViewResponse,
 			JobID:    v.JobID,
 			Name:     v.Name,
 			Status:   v.Status.String(),
-			CanRerun: resp.State.Run.CanRerun,
+			CanRerun: ctx.Repo.CanWrite(unit.TypeActions) && actions_service.CanRerunJob(run, v, jobs),
 			Duration: v.Duration().String(),
 			Needs:    v.Needs,
 		})
@@ -571,6 +571,16 @@ func convertToViewModel(ctx context.Context, locale translation.Locale, cursors 
 	return viewJobs, logs, nil
 }
 
+func checkWorkflowEnabled(ctx *context_module.Context, run *actions_model.ActionRun) bool {
+	cfgUnit := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypeActions)
+	cfg := cfgUnit.ActionsConfig()
+	if cfg.IsWorkflowDisabled(run.WorkflowID) {
+		ctx.JSONError(ctx.Locale.Tr("actions.workflow.disabled"))
+		return false
+	}
+	return true
+}
+
 // checkRunRerunAllowed checks whether a rerun is permitted for the given run,
 // writing the appropriate JSON error to ctx and returning false when it is not.
 func checkRunRerunAllowed(ctx *context_module.Context, run *actions_model.ActionRun) bool {
@@ -578,10 +588,15 @@ func checkRunRerunAllowed(ctx *context_module.Context, run *actions_model.Action
 		ctx.JSONError(ctx.Locale.Tr("actions.runs.not_done"))
 		return false
 	}
-	cfgUnit := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypeActions)
-	cfg := cfgUnit.ActionsConfig()
-	if cfg.IsWorkflowDisabled(run.WorkflowID) {
-		ctx.JSONError(ctx.Locale.Tr("actions.workflow.disabled"))
+	return checkWorkflowEnabled(ctx, run)
+}
+
+func checkJobRerunAllowed(ctx *context_module.Context, run *actions_model.ActionRun, job *actions_model.ActionRunJob, jobs []*actions_model.ActionRunJob) bool {
+	if !checkWorkflowEnabled(ctx, run) {
+		return false
+	}
+	if err := actions_service.ValidateJobRerunEligible(run, job, jobs); err != nil {
+		ctx.JSONError(err.Error())
 		return false
 	}
 	return true
@@ -594,9 +609,6 @@ func Rerun(ctx *context_module.Context) {
 	if ctx.Written() {
 		return
 	}
-	if !checkRunRerunAllowed(ctx, run) {
-		return
-	}
 
 	currentJob, hasPathParam := findCurrentJobByPathParam(ctx, jobs)
 	if hasPathParam && currentJob == nil {
@@ -604,14 +616,22 @@ func Rerun(ctx *context_module.Context) {
 		return
 	}
 
-	var jobsToRerun []*actions_model.ActionRunJob
 	if currentJob != nil {
-		jobsToRerun = actions_service.GetAllRerunJobs(currentJob, jobs)
-	} else {
-		jobsToRerun = jobs
+		if !checkJobRerunAllowed(ctx, run, currentJob, jobs) {
+			return
+		}
+		if err := actions_service.RerunWorkflowJobAndDependents(ctx, ctx.Repo.Repository, run, currentJob, jobs); err != nil {
+			ctx.ServerError("RerunWorkflowJobAndDependents", err)
+			return
+		}
+		ctx.JSONOK()
+		return
+	}
+	if !checkRunRerunAllowed(ctx, run) {
+		return
 	}
 
-	if err := actions_service.RerunWorkflowRunJobs(ctx, ctx.Repo.Repository, run, jobsToRerun); err != nil {
+	if err := actions_service.RerunWorkflowRunJobs(ctx, ctx.Repo.Repository, run, jobs); err != nil {
 		ctx.ServerError("RerunWorkflowRunJobs", err)
 		return
 	}
