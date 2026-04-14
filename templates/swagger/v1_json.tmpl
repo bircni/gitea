@@ -3633,6 +3633,39 @@
             "$ref": "#/responses/notFound"
           }
         }
+      },
+      "delete": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "organization"
+        ],
+        "summary": "Delete all repositories in an organization",
+        "operationId": "orgDeleteRepos",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "name of the organization",
+            "name": "org",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/responses/empty"
+          },
+          "204": {
+            "$ref": "#/responses/empty"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
       }
     },
     "/orgs/{org}/teams": {
@@ -3835,6 +3868,7 @@
               "rpm",
               "rubygems",
               "swift",
+              "terraform",
               "vagrant"
             ],
             "type": "string",
@@ -26824,10 +26858,14 @@
       "description": "MergePullRequestForm form for merging Pull Request",
       "type": "object",
       "required": [
-        "Do"
+        "do"
       ],
       "properties": {
-        "Do": {
+        "delete_branch_after_merge": {
+          "type": "boolean",
+          "x-go-name": "DeleteBranchAfterMerge"
+        },
+        "do": {
           "type": "string",
           "enum": [
             "merge",
@@ -26836,20 +26874,8 @@
             "squash",
             "fast-forward-only",
             "manually-merged"
-          ]
-        },
-        "MergeCommitID": {
-          "type": "string"
-        },
-        "MergeMessageField": {
-          "type": "string"
-        },
-        "MergeTitleField": {
-          "type": "string"
-        },
-        "delete_branch_after_merge": {
-          "type": "boolean",
-          "x-go-name": "DeleteBranchAfterMerge"
+          ],
+          "x-go-name": "Do"
         },
         "force_merge": {
           "type": "boolean",
@@ -26858,6 +26884,18 @@
         "head_commit_id": {
           "type": "string",
           "x-go-name": "HeadCommitID"
+        },
+        "merge_commit_id": {
+          "type": "string",
+          "x-go-name": "MergeCommitID"
+        },
+        "merge_message_field": {
+          "type": "string",
+          "x-go-name": "MergeMessageField"
+        },
+        "merge_title_field": {
+          "type": "string",
+          "x-go-name": "MergeTitleField"
         },
         "merge_when_checks_succeed": {
           "type": "boolean",
