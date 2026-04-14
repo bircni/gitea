@@ -81,28 +81,28 @@ func TestGetActionWorkflow_FallbackRef(t *testing.T) {
 		assert.ErrorIs(t, err, util.ErrNotExist)
 	})
 
-	t.Run("returns workflow when found via fallback ref", func(t *testing.T) {
-		wf, err := GetActionWorkflow(ctx, gitRepo, repo, "my-workflow.yml", "refs/heads/feature")
+	t.Run("returns workflow when found via ref", func(t *testing.T) {
+		wf, err := GetActionWorkflowByRef(ctx, gitRepo, repo, "my-workflow.yml", "refs/heads/feature")
 		require.NoError(t, err)
 		assert.Equal(t, "my-workflow.yml", wf.ID)
 	})
 
-	t.Run("returns workflow when found via pull ref fallback", func(t *testing.T) {
-		wf, err := GetActionWorkflow(ctx, gitRepo, repo, "my-workflow.yml", "refs/pull/42/merge")
+	t.Run("returns workflow when found via pull ref", func(t *testing.T) {
+		wf, err := GetActionWorkflowByRef(ctx, gitRepo, repo, "my-workflow.yml", "refs/pull/42/merge")
 		require.NoError(t, err)
 		assert.Equal(t, "my-workflow.yml", wf.ID)
 		assert.Contains(t, wf.HTMLURL, "/src/commit/")
 	})
 
-	t.Run("returns workflow with tag link when found via tag fallback", func(t *testing.T) {
-		wf, err := GetActionWorkflow(ctx, gitRepo, repo, "my-workflow.yml", "refs/tags/release-v1")
+	t.Run("returns workflow with tag link when found via tag ref", func(t *testing.T) {
+		wf, err := GetActionWorkflowByRef(ctx, gitRepo, repo, "my-workflow.yml", "refs/tags/release-v1")
 		require.NoError(t, err)
 		assert.Equal(t, "my-workflow.yml", wf.ID)
 		assert.Contains(t, wf.HTMLURL, "/src/tag/release-v1/")
 	})
 
-	t.Run("returns error when workflow missing from both branches", func(t *testing.T) {
-		_, err := GetActionWorkflow(ctx, gitRepo, repo, "nonexistent.yml", "refs/heads/feature")
+	t.Run("returns error when workflow missing from ref", func(t *testing.T) {
+		_, err := GetActionWorkflowByRef(ctx, gitRepo, repo, "nonexistent.yml", "refs/heads/feature")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, util.ErrNotExist)
 	})

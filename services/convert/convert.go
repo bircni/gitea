@@ -466,49 +466,41 @@ func ListActionWorkflows(ctx context.Context, gitrepo *git.Repository, repo *rep
 	return workflows, nil
 }
 
-func GetActionWorkflow(ctx context.Context, gitrepo *git.Repository, repo *repo_model.Repository, workflowID string, fallbackRefs ...string) (*api.ActionWorkflow, error) {
+func GetActionWorkflow(ctx context.Context, gitrepo *git.Repository, repo *repo_model.Repository, workflowID string) (*api.ActionWorkflow, error) {
 	defaultBranchCommit, err := gitrepo.GetBranchCommit(repo.DefaultBranch)
 	if err != nil {
 		return nil, err
 	}
 
-	folder, entries, err := actions.ListWorkflows(defaultBranchCommit)
+	return getActionWorkflowFromCommit(ctx, repo, defaultBranchCommit, git.RefNameFromBranch(repo.DefaultBranch), workflowID)
+}
+
+func GetActionWorkflowByRef(ctx context.Context, gitrepo *git.Repository, repo *repo_model.Repository, workflowID, ref string) (*api.ActionWorkflow, error) {
+	if ref == "" {
+		return nil, util.NewNotExistErrorf("workflow %q not found", workflowID)
+	}
+
+	refCommitID, err := gitrepo.GetRefCommitID(ref)
+	if err != nil {
+		return nil, err
+	}
+	refCommit, err := gitrepo.GetCommit(refCommitID)
+	if err != nil {
+		return nil, err
+	}
+
+	return getActionWorkflowFromCommit(ctx, repo, refCommit, git.RefName(ref), workflowID)
+}
+
+func getActionWorkflowFromCommit(ctx context.Context, repo *repo_model.Repository, commit *git.Commit, refName git.RefName, workflowID string) (*api.ActionWorkflow, error) {
+	folder, entries, err := actions.ListWorkflows(commit)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, entry := range entries {
 		if entry.Name() == workflowID {
-			return getActionWorkflowEntry(ctx, repo, defaultBranchCommit, git.RefNameFromBranch(repo.DefaultBranch), folder, entry), nil
-		}
-	}
-
-	// Workflow not on the default branch; try each fallback ref (e.g. the run's own branch).
-	for _, ref := range fallbackRefs {
-		if ref == "" {
-			continue
-		}
-		refName := git.RefName(ref)
-		shortName := refName.ShortName()
-		if refName.IsBranch() && shortName == repo.DefaultBranch {
-			continue
-		}
-		refCommitID, err := gitrepo.GetRefCommitID(ref)
-		if err != nil {
-			continue
-		}
-		refCommit, err := gitrepo.GetCommit(refCommitID)
-		if err != nil {
-			continue
-		}
-		folder, entries, err := actions.ListWorkflows(refCommit)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.Name() == workflowID {
-				return getActionWorkflowEntry(ctx, repo, refCommit, refName, folder, entry), nil
-			}
+			return getActionWorkflowEntry(ctx, repo, commit, refName, folder, entry), nil
 		}
 	}
 
