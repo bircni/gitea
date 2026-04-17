@@ -475,12 +475,12 @@ func GetActionWorkflow(ctx context.Context, gitrepo *git.Repository, repo *repo_
 	return getActionWorkflowFromCommit(ctx, repo, defaultBranchCommit, git.RefNameFromBranch(repo.DefaultBranch), workflowID)
 }
 
-func GetActionWorkflowByRef(ctx context.Context, gitrepo *git.Repository, repo *repo_model.Repository, workflowID, ref string) (*api.ActionWorkflow, error) {
+func GetActionWorkflowByRef(ctx context.Context, gitrepo *git.Repository, repo *repo_model.Repository, workflowID string, ref git.RefName) (*api.ActionWorkflow, error) {
 	if ref == "" {
 		return nil, util.NewNotExistErrorf("workflow %q not found", workflowID)
 	}
 
-	refCommitID, err := gitrepo.GetRefCommitID(ref)
+	refCommitID, err := gitrepo.GetRefCommitID(ref.String())
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +489,7 @@ func GetActionWorkflowByRef(ctx context.Context, gitrepo *git.Repository, repo *
 		return nil, err
 	}
 
-	return getActionWorkflowFromCommit(ctx, repo, refCommit, git.RefName(ref), workflowID)
+	return getActionWorkflowFromCommit(ctx, repo, refCommit, ref, workflowID)
 }
 
 func getActionWorkflowFromCommit(ctx context.Context, repo *repo_model.Repository, commit *git.Commit, refName git.RefName, workflowID string) (*api.ActionWorkflow, error) {
