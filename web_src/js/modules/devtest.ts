@@ -8,6 +8,25 @@ import {html} from '../utils/html.ts';
 type LevelMap = Record<string, (message: string) => Toast | null>;
 
 function initDevtestPage() {
+  const iconSearch = document.querySelector<HTMLInputElement>('#icon-search');
+  const iconSizeToggle = document.querySelector<HTMLInputElement>('#icon-size-toggle');
+  if (iconSearch && iconSizeToggle) {
+    iconSearch.addEventListener('input', () => {
+      const query = iconSearch.value.toLowerCase();
+      for (const card of document.querySelectorAll<HTMLElement>('.icon-card')) {
+        card.style.display = card.getAttribute('data-name')!.includes(query) ? '' : 'none';
+      }
+    });
+
+    iconSizeToggle.addEventListener('change', () => {
+      const size = iconSizeToggle.checked ? '24' : '16';
+      for (const icon of document.querySelectorAll<SVGElement>('.icon-card svg')) {
+        icon.setAttribute('width', size);
+        icon.setAttribute('height', size);
+      }
+    });
+  }
+
   const toastButtons = document.querySelectorAll('.toast-test-button');
   if (toastButtons.length) {
     const levelMap: LevelMap = {info: showInfoToast, warning: showWarningToast, error: showErrorToast};

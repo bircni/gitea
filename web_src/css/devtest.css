@@ -18,3 +18,20 @@ h1, h2 {
 .fetch-action-demo-forms .form-fetch-action {
   border: 1px red dashed; /* show the border for demo purpose */
 }
+
+.icon-gallery-search {
+  width: 300px;
+}
+
+.icon-gallery-card {
+  width: 120px;
+}
+
+.icon-gallery-preview {
+  height: 32px;
+}
+
+.icon-gallery-name {
+  max-width: 108px;
+  font-size: 10px;
+}
