@@ -26,11 +26,12 @@ type FindNotificationOptions struct {
 	db.ListOptions
 	UserID            int64
 	RepoID            int64
-	UniqueKey         string
 	Status            []NotificationStatus
 	Source            []NotificationSource
 	UpdatedAfterUnix  int64
 	UpdatedBeforeUnix int64
+
+	uniqueKey string
 }
 
 // ToCond will convert each condition into a xorm-Cond
@@ -42,8 +43,8 @@ func (opts FindNotificationOptions) ToConds() builder.Cond {
 	if opts.RepoID != 0 {
 		cond = cond.And(builder.Eq{"notification.repo_id": opts.RepoID})
 	}
-	if opts.UniqueKey != "" {
-		cond = cond.And(builder.Eq{"notification.unique_key": opts.UniqueKey})
+	if opts.uniqueKey != "" {
+		cond = cond.And(builder.Eq{"notification.unique_key": opts.uniqueKey})
 	}
 	if len(opts.Status) > 0 {
 		if len(opts.Status) == 1 {
@@ -52,7 +53,7 @@ func (opts FindNotificationOptions) ToConds() builder.Cond {
 			cond = cond.And(builder.In("notification.status", opts.Status))
 		}
 	}
-	if len(opts.Source) > 0 {
+	if opts.uniqueKey == "" && len(opts.Source) > 0 {
 		cond = cond.And(builder.In("notification.source", opts.Source))
 	}
 	if opts.UpdatedAfterUnix != 0 {
@@ -66,6 +67,22 @@ func (opts FindNotificationOptions) ToConds() builder.Cond {
 
 func (opts FindNotificationOptions) ToOrders() string {
 	return "notification.updated_unix DESC"
+}
+
+func (opts *FindNotificationOptions) setUniqueKey(uniqueKey string) {
+	opts.uniqueKey = uniqueKey
+}
+
+func (opts *FindNotificationOptions) FilterByIssue(issueID int64, isPull bool) {
+	opts.setUniqueKey(uniqueKeyForIssueNotification(issueID, isPull))
+}
+
+func (opts *FindNotificationOptions) FilterByCommit(repoID int64, commitID string) {
+	opts.setUniqueKey(uniqueKeyForCommitNotification(repoID, commitID))
+}
+
+func (opts *FindNotificationOptions) FilterByRelease(releaseID int64) {
+	opts.setUniqueKey(UniqueKeyForReleaseNotification(releaseID))
 }
 
 // CreateOrUpdateIssueNotifications creates an issue notification
@@ -145,7 +162,9 @@ func createOrUpdateIssueNotifications(ctx context.Context, issueID, commentID, n
 
 		existing, err := GetIssueNotification(ctx, userID, issue.ID)
 		if err != nil {
-			return err
+			if !db.IsErrNotExist(err) {
+				return err
+			}
 		}
 		if existing.ID > 0 {
 			if err = updateIssueNotification(ctx, userID, issue.ID, commentID, notificationAuthorID); err != nil {

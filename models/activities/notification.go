@@ -249,11 +249,17 @@ func GetIssueNotification(ctx context.Context, userID, issueID int64) (*Notifica
 
 	uniqueKey := uniqueKeyForIssueNotification(issueID, issue.IsPull)
 	notification := new(Notification)
-	_, err = db.GetEngine(ctx).
+	ok, err := db.GetEngine(ctx).
 		Where("user_id = ?", userID).
 		And("unique_key = ?", uniqueKey).
 		Get(notification)
-	return notification, err
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, db.ErrNotExist{Resource: "notification", ID: issueID}
+	}
+	return notification, nil
 }
 
 // LoadAttributes load Repo Issue User and Comment if not loaded
@@ -461,9 +467,11 @@ func SetIssueReadBy(ctx context.Context, issueID, userID int64) error {
 
 func setIssueNotificationStatusReadIfUnread(ctx context.Context, userID, issueID int64) error {
 	notification, err := GetIssueNotification(ctx, userID, issueID)
-	// ignore if not exists
 	if err != nil {
-		return nil
+		if db.IsErrNotExist(err) {
+			return nil
+		}
+		return err
 	}
 
 	if notification.Status != NotificationStatusUnread {

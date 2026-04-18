@@ -151,6 +151,20 @@ func TestGetIssueNotificationUsesUniqueKeyForPullRequests(t *testing.T) {
 	assert.Equal(t, activities_model.NotificationSourcePullRequest, nt.Source)
 }
 
+func TestGetIssueNotificationReturnsErrNotExistWhenMissing(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
+	opts := activities_model.FindNotificationOptions{UserID: 1}
+	opts.FilterByIssue(issue.ID, issue.IsPull)
+	_, err := db.GetEngine(t.Context()).Where(opts.ToConds()).Delete(&activities_model.Notification{})
+	assert.NoError(t, err)
+
+	_, err = activities_model.GetIssueNotification(t.Context(), 1, issue.ID)
+	assert.Error(t, err)
+	assert.True(t, db.IsErrNotExist(err))
+}
+
 func TestCreateCommitNotificationsDeduplicatesByRepoAndCommit(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
@@ -197,11 +211,13 @@ func TestCreateOrUpdateReleaseNotificationsDeduplicatesByRelease(t *testing.T) {
 	assert.NoError(t, activities_model.CreateOrUpdateReleaseNotifications(t.Context(), 1, repoID, releaseID, receiverID))
 	assert.NoError(t, activities_model.CreateOrUpdateReleaseNotifications(t.Context(), 3, repoID, releaseID, receiverID))
 
-	notfs, err := db.Find[activities_model.Notification](t.Context(), activities_model.FindNotificationOptions{
-		UserID:    receiverID,
-		UniqueKey: activities_model.UniqueKeyForReleaseNotification(releaseID),
-		Source:    []activities_model.NotificationSource{activities_model.NotificationSourceRelease},
-	})
+	opts := activities_model.FindNotificationOptions{
+		UserID: receiverID,
+		Source: []activities_model.NotificationSource{activities_model.NotificationSourceRelease},
+	}
+	opts.FilterByRelease(releaseID)
+
+	notfs, err := db.Find[activities_model.Notification](t.Context(), opts)
 	assert.NoError(t, err)
 	if assert.Len(t, notfs, 1) {
 		assert.Equal(t, activities_model.NotificationStatusUnread, notfs[0].Status)
