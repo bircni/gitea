@@ -493,11 +493,16 @@ func SignOut(ctx *context.Context) {
 }
 
 func buildSignOutRedirectURL(ctx *context.Context) string {
-	// TODO: can also support REVERSE_PROXY_AUTHENTICATION logout URL in the future
 	if ctx.Doer != nil && ctx.Doer.LoginType == auth.OAuth2 {
 		if s := buildOIDCEndSessionURL(ctx, ctx.Doer); s != "" {
 			return s
 		}
+	}
+
+	// The assumption is: if reverse proxy auth is enabled, then the users should only sign-in via reverse proxy auth.
+	// TODO: in the future, if we need to distinguish different sign-in methods, we need to save the sign-in method in session and check here
+	if setting.Service.EnableReverseProxyAuth && setting.ReverseProxyLogoutRedirect != "" {
+		return setting.ReverseProxyLogoutRedirect
 	}
 	return setting.AppSubURL + "/"
 }
@@ -633,16 +638,15 @@ func createUserInContext(ctx *context.Context, tpl templates.TplName, form any, 
 			case setting.OAuth2AccountLinkingAuto:
 				var user *user_model.User
 				user = &user_model.User{Name: u.Name}
-				hasUser, err := user_model.GetUser(ctx, user)
+				hasUser, err := user_model.GetIndividualUser(ctx, user)
 				if !hasUser || err != nil {
 					user = &user_model.User{Email: u.Email}
-					hasUser, err = user_model.GetUser(ctx, user)
+					hasUser, err = user_model.GetIndividualUser(ctx, user)
 					if !hasUser || err != nil {
 						ctx.ServerError("UserLinkAccount", err)
 						return false
 					}
 				}
-
 				// TODO: probably we should respect 'remember' user's choice...
 				oauth2LinkAccount(ctx, user, possibleLinkAccountData, true)
 				return false // user is already created here, all redirects are handled
