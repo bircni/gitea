@@ -6,13 +6,13 @@ package actions
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/container"
+	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/util"
 	notify_service "code.gitea.io/gitea/services/notify"
 
@@ -80,6 +80,8 @@ func GetAllRerunJobs(job *actions_model.ActionRunJob, allJobs []*actions_model.A
 }
 
 // ValidateJobRerunEligible checks whether a target job can be rerun in the current run state.
+// A need in StatusSkipped counts as non-success (same as failure or cancellation) unless the
+// target job declares an "if" condition, in which case the runner may still schedule it.
 func ValidateJobRerunEligible(run *actions_model.ActionRun, targetJob *actions_model.ActionRunJob, allJobs []*actions_model.ActionRunJob) error {
 	if !targetJob.Status.IsDone() {
 		return util.NewInvalidArgumentErrorf("job %s is not done", targetJob.JobID)
@@ -88,15 +90,20 @@ func ValidateJobRerunEligible(run *actions_model.ActionRun, targetJob *actions_m
 		return util.NewInvalidArgumentErrorf("job %s can only be rerun while run is active when job status is failure or cancelled", targetJob.JobID)
 	}
 
+	jobsByWorkflowID := make(map[string]*actions_model.ActionRunJob, len(allJobs))
+	for _, j := range allJobs {
+		if _, ok := jobsByWorkflowID[j.JobID]; !ok {
+			jobsByWorkflowID[j.JobID] = j
+		}
+	}
+
 	targetHasIfCondition := false
 	for _, needJobID := range targetJob.Needs {
-		needIdx := slices.IndexFunc(allJobs, func(job *actions_model.ActionRunJob) bool {
-			return job.JobID == needJobID
-		})
-		if needIdx == -1 {
+		needJob, ok := jobsByWorkflowID[needJobID]
+		if !ok {
 			return util.NewInvalidArgumentErrorf("required job %s for %s was not found", needJobID, targetJob.JobID)
 		}
-		needStatus := allJobs[needIdx].Status
+		needStatus := needJob.Status
 		if !needStatus.IsDone() {
 			return util.NewInvalidArgumentErrorf("job %s requires %s to finish before rerun", targetJob.JobID, needJobID)
 		}
@@ -174,6 +181,9 @@ func prepareRunRerun(ctx context.Context, repo *repo_model.Repository, run *acti
 	return run.Status == actions_model.StatusBlocked, nil
 }
 
+// rerunJobs resets each finished job in jobsToRerun. Jobs that are not in a terminal status
+// (waiting, running, blocked, etc.) are left unchanged so an in-flight run can still rerun a
+// failed upstream job while dependents are pending; see GetAllRerunJobs.
 func rerunJobs(ctx context.Context, jobsToRerun []*actions_model.ActionRunJob, isRunBlocked bool) error {
 	rerunJobIDs := make(container.Set[string])
 	for _, j := range jobsToRerun {
@@ -181,6 +191,10 @@ func rerunJobs(ctx context.Context, jobsToRerun []*actions_model.ActionRunJob, i
 	}
 
 	for _, job := range jobsToRerun {
+		if !job.Status.IsDone() {
+			log.Debug("rerunJobs: skip reset for job %q (status=%s): not a terminal status", job.JobID, job.Status.String())
+			continue
+		}
 		shouldBlockJob := isRunBlocked
 		if !shouldBlockJob {
 			for _, need := range job.Needs {
@@ -234,7 +248,7 @@ func RerunWorkflowJobAndDependents(ctx context.Context, repo *repo_model.Reposit
 func rerunWorkflowJob(ctx context.Context, job *actions_model.ActionRunJob, shouldBlock bool) error {
 	status := job.Status
 	if !status.IsDone() {
-		return nil
+		return fmt.Errorf("rerunWorkflowJob: job %q has non-terminal status %s", job.JobID, status.String())
 	}
 
 	job.TaskID = 0

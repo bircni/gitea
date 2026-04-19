@@ -591,17 +591,6 @@ func checkRunRerunAllowed(ctx *context_module.Context, run *actions_model.Action
 	return checkWorkflowEnabled(ctx, run)
 }
 
-func checkJobRerunAllowed(ctx *context_module.Context, run *actions_model.ActionRun, job *actions_model.ActionRunJob, jobs []*actions_model.ActionRunJob) bool {
-	if !checkWorkflowEnabled(ctx, run) {
-		return false
-	}
-	if err := actions_service.ValidateJobRerunEligible(run, job, jobs); err != nil {
-		ctx.JSONError(err.Error())
-		return false
-	}
-	return true
-}
-
 // Rerun will rerun jobs in the given run
 // If jobIDStr is a blank string, it means rerun all jobs
 func Rerun(ctx *context_module.Context) {
@@ -617,10 +606,14 @@ func Rerun(ctx *context_module.Context) {
 	}
 
 	if currentJob != nil {
-		if !checkJobRerunAllowed(ctx, run, currentJob, jobs) {
+		if !checkWorkflowEnabled(ctx, run) {
 			return
 		}
 		if err := actions_service.RerunWorkflowJobAndDependents(ctx, ctx.Repo.Repository, run, currentJob, jobs); err != nil {
+			if errors.Is(err, util.ErrInvalidArgument) {
+				ctx.JSONError(err.Error())
+				return
+			}
 			ctx.ServerError("RerunWorkflowJobAndDependents", err)
 			return
 		}
@@ -632,6 +625,10 @@ func Rerun(ctx *context_module.Context) {
 	}
 
 	if err := actions_service.RerunWorkflowRunJobs(ctx, ctx.Repo.Repository, run, jobs); err != nil {
+		if errors.Is(err, util.ErrInvalidArgument) {
+			ctx.JSONError(err.Error())
+			return
+		}
 		ctx.ServerError("RerunWorkflowRunJobs", err)
 		return
 	}
@@ -650,6 +647,10 @@ func RerunFailed(ctx *context_module.Context) {
 	}
 
 	if err := actions_service.RerunWorkflowRunJobs(ctx, ctx.Repo.Repository, run, actions_service.GetFailedRerunJobs(jobs)); err != nil {
+		if errors.Is(err, util.ErrInvalidArgument) {
+			ctx.JSONError(err.Error())
+			return
+		}
 		ctx.ServerError("RerunWorkflowRunJobs", err)
 		return
 	}

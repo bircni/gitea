@@ -166,6 +166,27 @@ jobs:
 		assert.ErrorIs(t, err, util.ErrInvalidArgument)
 	})
 
+	t.Run("active run rejects rerun when needed job is skipped without if", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusSkipped)
+		jobB := makeJob(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
+
+	t.Run("active run allows rerun when needed job is skipped and target has if", func(t *testing.T) {
+		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
+		jobA := makeJob(1, "jobA", actions_model.StatusSkipped)
+		jobB := makeJobWithIf(2, "jobB", actions_model.StatusFailure, "jobA")
+		jobs := []*actions_model.ActionRunJob{jobA, jobB}
+
+		err := ValidateJobRerunEligible(run, jobB, jobs)
+		require.NoError(t, err)
+	})
+
 	t.Run("active run allows rerun with failed need when target has if condition", func(t *testing.T) {
 		run := &actions_model.ActionRun{Status: actions_model.StatusRunning}
 		jobA := makeJob(1, "jobA", actions_model.StatusFailure)
