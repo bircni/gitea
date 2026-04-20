@@ -32,6 +32,7 @@ import octiconFile from '../../public/assets/img/svg/octicon-file.svg';
 import octiconFileCode from '../../public/assets/img/svg/octicon-file-code.svg';
 import octiconFileDirectoryFill from '../../public/assets/img/svg/octicon-file-directory-fill.svg';
 import octiconFileDirectoryOpenFill from '../../public/assets/img/svg/octicon-file-directory-open-fill.svg';
+import octiconFileRemoved from '../../public/assets/img/svg/octicon-file-removed.svg';
 import octiconFileSubmodule from '../../public/assets/img/svg/octicon-file-submodule.svg';
 import octiconFileSymlinkFile from '../../public/assets/img/svg/octicon-file-symlink-file.svg';
 import octiconFilter from '../../public/assets/img/svg/octicon-filter.svg';
@@ -117,6 +118,7 @@ const svgs = {
   'octicon-file-code': octiconFileCode,
   'octicon-file-directory-fill': octiconFileDirectoryFill,
   'octicon-file-directory-open-fill': octiconFileDirectoryOpenFill,
+  'octicon-file-removed': octiconFileRemoved,
   'octicon-file-submodule': octiconFileSubmodule,
   'octicon-file-symlink-file': octiconFileSymlinkFile,
   'octicon-filter': octiconFilter,
