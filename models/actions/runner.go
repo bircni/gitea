@@ -317,6 +317,93 @@ func SetRunnerDisabled(ctx context.Context, runner *ActionRunner, isDisabled boo
 	})
 }
 
+func getRunnersByIDs(ctx context.Context, ids []int64) ([]*ActionRunner, error) {
+	if len(ids) == 0 {
+		return nil, errors.New("runner ids are empty")
+	}
+
+	runners, err := db.Find[ActionRunner](ctx, &FindRunnerOptions{IDs: ids})
+	if err != nil {
+		return nil, err
+	}
+	if len(runners) != len(ids) {
+		return nil, fmt.Errorf("one or more runners not found: %w", util.ErrNotExist)
+	}
+
+	return runners, nil
+}
+
+type runnerTasksVersionScope struct {
+	OwnerID int64
+	RepoID  int64
+}
+
+func increaseTaskVersionsForRunners(ctx context.Context, runners []*ActionRunner) error {
+	if len(runners) == 0 {
+		return nil
+	}
+
+	if err := increaseTasksVersionByScope(ctx, 0, 0); err != nil {
+		return err
+	}
+
+	scopes := make(map[runnerTasksVersionScope]struct{})
+	for _, runner := range runners {
+		if runner.OwnerID > 0 {
+			scopes[runnerTasksVersionScope{OwnerID: runner.OwnerID}] = struct{}{}
+		}
+		if runner.RepoID > 0 {
+			scopes[runnerTasksVersionScope{RepoID: runner.RepoID}] = struct{}{}
+		}
+	}
+
+	for scope := range scopes {
+		if err := increaseTasksVersionByScope(ctx, scope.OwnerID, scope.RepoID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func SetRunnersDisabled(ctx context.Context, ids []int64, isDisabled bool) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		runners, err := getRunnersByIDs(ctx, ids)
+		if err != nil {
+			return err
+		}
+
+		changedRunners := make([]*ActionRunner, 0, len(runners))
+		changedIDs := make([]int64, 0, len(runners))
+		for _, runner := range runners {
+			if runner.IsDisabled == isDisabled {
+				continue
+			}
+			changedRunners = append(changedRunners, runner)
+			changedIDs = append(changedIDs, runner.ID)
+		}
+		if len(changedIDs) == 0 {
+			return nil
+		}
+
+		if _, err := db.GetEngine(ctx).In("id", changedIDs).Cols("is_disabled").Update(&ActionRunner{IsDisabled: isDisabled}); err != nil {
+			return err
+		}
+
+		return increaseTaskVersionsForRunners(ctx, changedRunners)
+	})
+}
+
+func DeleteRunners(ctx context.Context, ids []int64) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		if _, err := getRunnersByIDs(ctx, ids); err != nil {
+			return err
+		}
+
+		return db.DeleteByIDs[ActionRunner](ctx, ids...)
+	})
+}
+
 // DeleteRunner deletes a runner by given ID.
 func DeleteRunner(ctx context.Context, id int64) error {
 	if _, err := GetRunnerByID(ctx, id); err != nil {

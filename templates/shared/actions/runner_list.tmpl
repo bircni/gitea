@@ -41,9 +41,10 @@
 		</form>
 	</div>
 	<div class="ui attached table segment">
-		<table class="ui very basic table unstackable">
+		<table{{if .PageIsAdmin}} id="admin-runners-table"{{end}} class="ui very basic table unstackable{{if .PageIsAdmin}} select selectable{{end}}">
 			<thead>
 				<tr>
+					{{if .PageIsAdmin}}<th></th>{{end}}
 					<th data-sortt-asc="online" data-sortt-desc="offline">
 						{{ctx.Locale.Tr "actions.runners.status"}}
 						{{SortArrow "online" "offline" .SortType false}}
@@ -66,6 +67,9 @@
 			<tbody>
 				{{range .Runners}}
 					<tr>
+						{{if $.PageIsAdmin}}
+							<td><div class="ui checkbox tw-flex" data-id="{{.ID}}"><input type="checkbox"></div></td>
+						{{end}}
 						<td>
 							<span class="ui label {{if .IsOnline}}green{{end}}">{{.StatusLocaleName ctx.Locale}}</span>
 							{{if .IsDisabled}}<span class="ui grey label">{{ctx.Locale.Tr "actions.runners.disabled"}}</span>{{end}}
@@ -86,13 +90,61 @@
 					</tr>
 				{{else}}
 					<tr>
-						<td class="tw-text-center" colspan="8">{{ctx.Locale.Tr "actions.runners.none"}}</td>
+						<td class="tw-text-center" colspan="{{if .PageIsAdmin}}9{{else}}8{{end}}">{{ctx.Locale.Tr "actions.runners.none"}}</td>
 					</tr>
 				{{end}}
 			</tbody>
+			{{if and .PageIsAdmin .Runners}}
+				<tfoot>
+					<tr>
+						<th></th>
+						<th colspan="8">
+							<div class="ui floating upward dropdown small button">
+								<span class="text">{{ctx.Locale.Tr "actions.runners.operations"}}</span>
+								<div class="menu">
+									<div class="item runner-select action" data-action="select-all">
+										{{ctx.Locale.Tr "actions.runners.select_all"}}
+									</div>
+									<div class="item runner-select action" data-action="deselect-all">
+										{{ctx.Locale.Tr "actions.runners.deselect_all"}}
+									</div>
+									<div class="item runner-select action" data-action="inverse">
+										{{ctx.Locale.Tr "actions.runners.inverse_selection"}}
+									</div>
+								</div>
+							</div>
+							<button type="button" class="ui small button runner-batch-action disabled" id="enable-selected-runners" data-link="{{$.Link}}/batch" disabled>
+								{{ctx.Locale.Tr "actions.runners.enable_selected"}}
+							</button>
+							<button type="button" class="ui small button runner-batch-action disabled" id="disable-selected-runners" data-link="{{$.Link}}/batch" disabled>
+								{{ctx.Locale.Tr "actions.runners.disable_selected"}}
+							</button>
+							<button type="button" class="ui small red button runner-batch-action disabled" id="delete-selected-runners" data-link="{{$.Link}}/batch" disabled>
+								{{ctx.Locale.Tr "actions.runners.delete_selected"}}
+							</button>
+						</th>
+					</tr>
+				</tfoot>
+			{{end}}
 		</table>
 	</div>
 
 	{{template "base/paginate" .}}
+
+	{{if .PageIsAdmin}}
+		<div class="ui g-modal-confirm delete modal" id="runner-batch-delete-modal">
+			<div class="header">
+				{{svg "octicon-trash"}}
+				{{ctx.Locale.Tr "actions.runners.delete_selected_header"}}
+			</div>
+			<div class="content">
+				<p>{{ctx.Locale.Tr "actions.runners.delete_selected_notice"}}</p>
+			</div>
+			<div class="actions">
+				<button type="button" class="ui cancel button">{{svg "octicon-x"}} {{ctx.Locale.Tr "modal.cancel"}}</button>
+				<button type="button" class="ui primary button" id="confirm-delete-selected-runners">{{svg "octicon-check"}} {{ctx.Locale.Tr "modal.confirm"}}</button>
+			</div>
+		</div>
+	{{end}}
 
 </div>

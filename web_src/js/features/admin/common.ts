@@ -23,6 +23,7 @@ export function initAdminCommon(): void {
   initAdminUser();
   initAdminAuthentication();
   initAdminNotice();
+  initAdminRunners();
 }
 
 function initAdminUser() {
@@ -288,4 +289,139 @@ function initAdminNotice() {
     await POST(this.getAttribute('data-link')!, {data});
     window.location.reload();
   });
+}
+
+function initAdminRunners() {
+  const pageContent = document.querySelector('.page-content.admin.actions');
+  if (!pageContent) return;
+
+  const runnerTable = pageContent.querySelector<HTMLTableElement>('#admin-runners-table');
+  if (!runnerTable) return;
+
+  const checkboxes = runnerTable.querySelectorAll<HTMLInputElement>('.ui.checkbox input');
+  if (!checkboxes.length) return;
+
+  const enableButton = pageContent.querySelector<HTMLButtonElement>('#enable-selected-runners');
+  const disableButton = pageContent.querySelector<HTMLButtonElement>('#disable-selected-runners');
+  const deleteButton = pageContent.querySelector<HTMLButtonElement>('#delete-selected-runners');
+  const deleteModal = pageContent.querySelector<HTMLDivElement>('#runner-batch-delete-modal');
+  const confirmDeleteButton = pageContent.querySelector<HTMLButtonElement>('#confirm-delete-selected-runners');
+  if (!enableButton || !disableButton || !deleteButton || !deleteModal || !confirmDeleteButton) return;
+
+  const batchActionButtons = pageContent.querySelectorAll<HTMLButtonElement>('.runner-batch-action');
+
+  const getSelectedRunnerIDs = () => {
+    const ids: string[] = [];
+    for (const checkbox of checkboxes) {
+      if (checkbox.checked) {
+        ids.push(checkbox.closest('.ui.checkbox')!.getAttribute('data-id')!);
+      }
+    }
+    return ids;
+  };
+
+  const updateBatchActionButtons = () => {
+    const disabled = getSelectedRunnerIDs().length === 0;
+    for (const button of batchActionButtons) {
+      button.disabled = disabled;
+      button.classList.toggle('disabled', disabled);
+    }
+  };
+
+  const postSelectedRunners = async (action: string, loadingTarget: HTMLElement, actionLink: string) => {
+    const runnerIDs = getSelectedRunnerIDs();
+    if (!runnerIDs.length) {
+      updateBatchActionButtons();
+      return;
+    }
+
+    loadingTarget.classList.add('is-loading');
+    const data = new FormData();
+    data.append('action', action);
+    for (const runnerID of runnerIDs) {
+      data.append('runner_ids[]', runnerID);
+    }
+
+    await POST(actionLink, {data});
+    window.location.reload();
+  };
+
+  queryElems(pageContent, '.runner-select.action', (el) => el.addEventListener('click', () => {
+    switch (el.getAttribute('data-action')) {
+      case 'select-all':
+        for (const checkbox of checkboxes) {
+          checkbox.checked = true;
+        }
+        break;
+      case 'deselect-all':
+        for (const checkbox of checkboxes) {
+          checkbox.checked = false;
+        }
+        break;
+      case 'inverse':
+        for (const checkbox of checkboxes) {
+          checkbox.checked = !checkbox.checked;
+        }
+        break;
+    }
+
+    updateBatchActionButtons();
+  }));
+
+  for (const checkbox of checkboxes) {
+    checkbox.addEventListener('change', updateBatchActionButtons);
+  }
+
+  enableButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    enableButton.classList.add('disabled');
+    enableButton.disabled = true;
+    try {
+      await postSelectedRunners('enable', enableButton, enableButton.getAttribute('data-link')!);
+    } finally {
+      enableButton.classList.remove('disabled');
+      updateBatchActionButtons();
+    }
+  });
+
+  disableButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    disableButton.classList.add('disabled');
+    disableButton.disabled = true;
+    try {
+      await postSelectedRunners('disable', disableButton, disableButton.getAttribute('data-link')!);
+    } finally {
+      disableButton.classList.remove('disabled');
+      updateBatchActionButtons();
+    }
+  });
+
+  fomanticQuery(deleteModal).modal({
+    closable: false,
+    onHidden: () => {
+      deleteModal.classList.remove('is-loading');
+      confirmDeleteButton.classList.remove('disabled');
+      updateBatchActionButtons();
+    },
+  });
+
+  deleteButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (deleteButton.disabled) return;
+    fomanticQuery(deleteModal).modal('show');
+  });
+
+  confirmDeleteButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    confirmDeleteButton.classList.add('disabled');
+    confirmDeleteButton.disabled = true;
+    try {
+      await postSelectedRunners('delete', deleteModal, deleteButton.getAttribute('data-link')!);
+    } finally {
+      confirmDeleteButton.classList.remove('disabled');
+      confirmDeleteButton.disabled = false;
+    }
+  });
+
+  updateBatchActionButtons();
 }

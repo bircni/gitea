@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	"code.gitea.io/gitea/models/db"
@@ -20,6 +21,8 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/forms"
 )
+
+var errInvalidRunnerSelection = errors.New("invalid runner selection")
 
 const (
 	// TODO: Separate secrets from runners when layout is ready
@@ -360,6 +363,98 @@ func RunnerUpdatePost(ctx *context.Context) {
 
 	ctx.Flash.Success(ctx.Tr(successKey))
 	ctx.JSONRedirect("")
+}
+
+func RunnerBatchPost(ctx *context.Context) {
+	rCtx, err := getRunnersCtx(ctx)
+	if err != nil {
+		ctx.ServerError("getRunnersCtx", err)
+		return
+	}
+	if !rCtx.IsAdmin {
+		ctx.NotFound(nil)
+		return
+	}
+
+	runnerIDs, err := parseRunnerIDsFromRequest(ctx)
+	if err != nil {
+		ctx.Flash.Error(ctx.Tr("actions.runners.batch_selection_empty"))
+		ctx.Status(http.StatusBadRequest)
+		return
+	}
+
+	action := ctx.FormString("action")
+	successKey := ""
+	failedKey := ""
+
+	switch action {
+	case "enable":
+		successKey = "actions.runners.enable_selected_success"
+		failedKey = "actions.runners.enable_selected_failed"
+		err = actions_model.SetRunnersDisabled(ctx, runnerIDs, false)
+	case "disable":
+		successKey = "actions.runners.disable_selected_success"
+		failedKey = "actions.runners.disable_selected_failed"
+		err = actions_model.SetRunnersDisabled(ctx, runnerIDs, true)
+	case "delete":
+		successKey = "actions.runners.delete_selected_success"
+		failedKey = "actions.runners.delete_selected_failed"
+		err = actions_model.DeleteRunners(ctx, runnerIDs)
+	default:
+		ctx.Flash.Error(ctx.Tr("actions.runners.batch_operation_invalid"))
+		ctx.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		if errors.Is(err, util.ErrNotExist) {
+			ctx.Flash.Error(ctx.Tr("actions.runners.selected_runners_not_found"))
+			ctx.Status(http.StatusNotFound)
+			return
+		}
+
+		log.Warn("RunnerBatchPost %s failed: %v, url: %s", action, err, ctx.Req.URL)
+		ctx.Flash.Error(ctx.Tr(failedKey))
+		ctx.Status(http.StatusInternalServerError)
+		return
+	}
+
+	ctx.Flash.Success(ctx.Tr(successKey))
+	ctx.Status(http.StatusOK)
+}
+
+func parseRunnerIDsFromRequest(ctx *context.Context) ([]int64, error) {
+	if ctx.Req.Form == nil {
+		if err := ctx.Req.ParseMultipartForm(32 << 20); err != nil {
+			if err := ctx.Req.ParseForm(); err != nil {
+				return nil, errInvalidRunnerSelection
+			}
+		}
+	}
+
+	values := ctx.Req.Form["runner_ids[]"]
+	if len(values) == 0 {
+		return nil, errInvalidRunnerSelection
+	}
+
+	seen := make(map[int64]struct{}, len(values))
+	runnerIDs := make([]int64, 0, len(values))
+	for _, value := range values {
+		runnerID, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || runnerID <= 0 {
+			return nil, errInvalidRunnerSelection
+		}
+		if _, ok := seen[runnerID]; ok {
+			continue
+		}
+		seen[runnerID] = struct{}{}
+		runnerIDs = append(runnerIDs, runnerID)
+	}
+	if len(runnerIDs) == 0 {
+		return nil, errInvalidRunnerSelection
+	}
+
+	return runnerIDs, nil
 }
 
 func findActionsRunner(ctx *context.Context, rCtx *runnersCtx) *actions_model.ActionRunner {
