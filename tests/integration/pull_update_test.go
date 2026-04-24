@@ -69,6 +69,14 @@ func enableRepoAllowUpdateWithRebase(t *testing.T, repoID int64, allow bool) {
 	assert.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
 }
 
+func updateRepoPullRequestConfig(t *testing.T, repoID int64, update func(*repo_model.PullRequestsConfig)) {
+	t.Helper()
+
+	repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
+	update(repoUnit.PullRequestsConfig())
+	assert.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
+}
+
 func TestAPIPullUpdateByRebase(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
 		// Create PR to test
@@ -117,6 +125,58 @@ func TestAPIPullUpdateByRebase(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, diffCount.Behind)
 		assert.Equal(t, 1, diffCount.Ahead)
+	})
+}
+
+func TestAPIPullUpdateUsesDefaultUpdateStyle(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		org26 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 26})
+		pr := createOutdatedPR(t, user, org26)
+		require.NoError(t, pr.LoadBaseRepo(t.Context()))
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
+		require.NoError(t, pr.LoadIssue(t.Context()))
+
+		updateRepoPullRequestConfig(t, pr.BaseRepo.ID, func(config *repo_model.PullRequestsConfig) {
+			config.DefaultUpdateStyle = repo_model.UpdateStyleRebase
+		})
+
+		user40 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 40})
+		require.NoError(t, repo_service.AddOrUpdateCollaborator(t.Context(), pr.BaseRepo, user40, perm.AccessModeWrite))
+		require.NoError(t, repo_service.AddOrUpdateCollaborator(t.Context(), pr.HeadRepo, user40, perm.AccessModeWrite))
+
+		session := loginUser(t, "user40")
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		req := NewRequestf(t, "POST", "/api/v1/repos/%s/%s/pulls/%d/update", pr.BaseRepo.OwnerName, pr.BaseRepo.Name, pr.Issue.Index).
+			AddTokenAuth(token)
+		session.MakeRequest(t, req, http.StatusOK)
+
+		diffCount, err := gitrepo.GetDivergingCommits(t.Context(), pr.BaseRepo, pr.BaseBranch, pr.GetGitHeadRefName())
+		require.NoError(t, err)
+		assert.Equal(t, 0, diffCount.Behind)
+		assert.Equal(t, 1, diffCount.Ahead)
+	})
+}
+
+func TestAPIPullUpdateDisabledStyleForbidden(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		org26 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 26})
+		pr := createOutdatedPR(t, user, org26)
+		require.NoError(t, pr.LoadBaseRepo(t.Context()))
+		require.NoError(t, pr.LoadIssue(t.Context()))
+
+		updateRepoPullRequestConfig(t, pr.BaseRepo.ID, func(config *repo_model.PullRequestsConfig) {
+			config.AllowMergeUpdate = false
+			config.AllowRebaseUpdate = true
+			config.DefaultUpdateStyle = repo_model.UpdateStyleRebase
+		})
+
+		session := loginUser(t, "user2")
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		req := NewRequestf(t, "POST", "/api/v1/repos/%s/%s/pulls/%d/update?style=merge", pr.BaseRepo.OwnerName, pr.BaseRepo.Name, pr.Issue.Index).
+			AddTokenAuth(token)
+		session.MakeRequest(t, req, http.StatusForbidden)
 	})
 }
 

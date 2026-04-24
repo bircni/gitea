@@ -29,6 +29,16 @@ const (
 	MergeStyleRebaseUpdate MergeStyle = "rebase-update-only"
 )
 
+// UpdateStyle is a pull request branch update style
+type UpdateStyle string
+
+const (
+	// UpdateStyleMerge updates the pull request branch by merging the base branch
+	UpdateStyleMerge UpdateStyle = "merge"
+	// UpdateStyleRebase updates the pull request branch by rebasing onto the base branch
+	UpdateStyleRebase UpdateStyle = "rebase"
+)
+
 // UpdateDefaultBranch updates the default branch
 func UpdateDefaultBranch(ctx context.Context, repo *Repository) error {
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols("default_branch").Update(repo)

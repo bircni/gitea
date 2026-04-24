@@ -611,6 +611,26 @@ func handleSettingsPostAdvanced(ctx *context.Context) {
 	}
 
 	if form.EnablePulls && !unit_model.TypePullRequests.UnitGlobalDisabled() {
+		defaultUpdateStyle := repo_model.UpdateStyle(form.PullsDefaultUpdateStyle)
+		if defaultUpdateStyle == "" {
+			defaultUpdateStyle = repo_model.UpdateStyleMerge
+		}
+		if defaultUpdateStyle != repo_model.UpdateStyleMerge && defaultUpdateStyle != repo_model.UpdateStyleRebase {
+			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.invalid_update_style"))
+			ctx.Redirect(repo.Link() + "/settings")
+			return
+		}
+		if !form.PullsAllowMergeUpdate && !form.PullsAllowRebaseUpdate {
+			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.update_style_required"))
+			ctx.Redirect(repo.Link() + "/settings")
+			return
+		}
+		if (defaultUpdateStyle == repo_model.UpdateStyleMerge && !form.PullsAllowMergeUpdate) ||
+			(defaultUpdateStyle == repo_model.UpdateStyleRebase && !form.PullsAllowRebaseUpdate) {
+			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.default_update_style_not_allowed"))
+			ctx.Redirect(repo.Link() + "/settings")
+			return
+		}
 		units = append(units, newRepoUnit(repo, unit_model.TypePullRequests, &repo_model.PullRequestsConfig{
 			IgnoreWhitespaceConflicts:     form.PullsIgnoreWhitespace,
 			AllowMerge:                    form.PullsAllowMerge,
@@ -620,7 +640,9 @@ func handleSettingsPostAdvanced(ctx *context.Context) {
 			AllowFastForwardOnly:          form.PullsAllowFastForwardOnly,
 			AllowManualMerge:              form.PullsAllowManualMerge,
 			AutodetectManualMerge:         form.EnableAutodetectManualMerge,
+			AllowMergeUpdate:              form.PullsAllowMergeUpdate,
 			AllowRebaseUpdate:             form.PullsAllowRebaseUpdate,
+			DefaultUpdateStyle:            defaultUpdateStyle,
 			DefaultDeleteBranchAfterMerge: form.DefaultDeleteBranchAfterMerge,
 			DefaultMergeStyle:             repo_model.MergeStyle(form.PullsDefaultMergeStyle),
 			DefaultAllowMaintainerEdit:    form.DefaultAllowMaintainerEdit,

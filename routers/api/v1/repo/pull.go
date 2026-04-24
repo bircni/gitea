@@ -1253,7 +1253,14 @@ func UpdatePullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	rebase := ctx.FormString("style") == "rebase"
+	updateStyle := repo_model.UpdateStyle(ctx.FormString("style"))
+	if updateStyle == "" {
+		updateStyle = repo_model.UpdateStyleMerge
+		if prUnit, err := pr.BaseRepo.GetUnit(ctx, unit.TypePullRequests); err == nil {
+			updateStyle = prUnit.PullRequestsConfig().DefaultUpdateStyle
+		}
+	}
+	rebase := updateStyle == repo_model.UpdateStyleRebase
 
 	allowedUpdateByMerge, allowedUpdateByRebase, err := pull_service.IsUserAllowedToUpdate(ctx, pr, ctx.Doer)
 	if err != nil {
@@ -1261,7 +1268,8 @@ func UpdatePullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	if (!allowedUpdateByMerge && !rebase) || (rebase && !allowedUpdateByRebase) {
+	if (updateStyle != repo_model.UpdateStyleMerge && updateStyle != repo_model.UpdateStyleRebase) ||
+		(!allowedUpdateByMerge && !rebase) || (rebase && !allowedUpdateByRebase) {
 		ctx.Status(http.StatusForbidden)
 		return
 	}

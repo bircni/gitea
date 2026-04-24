@@ -125,7 +125,9 @@ type PullRequestsConfig struct {
 	AllowFastForwardOnly          bool
 	AllowManualMerge              bool
 	AutodetectManualMerge         bool
+	AllowMergeUpdate              bool
 	AllowRebaseUpdate             bool
+	DefaultUpdateStyle            UpdateStyle
 	DefaultDeleteBranchAfterMerge bool
 	DefaultMergeStyle             MergeStyle
 	DefaultAllowMaintainerEdit    bool
@@ -139,7 +141,9 @@ func DefaultPullRequestsConfig() *PullRequestsConfig {
 		AllowRebaseMerge:           true,
 		AllowSquash:                true,
 		AllowFastForwardOnly:       true,
+		AllowMergeUpdate:           true,
 		AllowRebaseUpdate:          true,
+		DefaultUpdateStyle:         UpdateStyleMerge,
 		DefaultAllowMaintainerEdit: true,
 	}
 	cfg.DefaultDeleteBranchAfterMerge = setting.Repository.PullRequest.DefaultDeleteBranchAfterMerge
@@ -168,6 +172,12 @@ func (cfg *PullRequestsConfig) IsMergeStyleAllowed(mergeStyle MergeStyle) bool {
 		mergeStyle == MergeStyleSquash && cfg.AllowSquash ||
 		mergeStyle == MergeStyleFastForwardOnly && cfg.AllowFastForwardOnly ||
 		mergeStyle == MergeStyleManuallyMerged && cfg.AllowManualMerge
+}
+
+// IsUpdateStyleAllowed returns if a pull request branch update style is allowed
+func (cfg *PullRequestsConfig) IsUpdateStyleAllowed(updateStyle UpdateStyle) bool {
+	return updateStyle == UpdateStyleMerge && cfg.AllowMergeUpdate ||
+		updateStyle == UpdateStyleRebase && cfg.AllowRebaseUpdate
 }
 
 func DefaultPullRequestsUnit(repoID int64) RepoUnit {

@@ -196,9 +196,10 @@ func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, 
 		}
 	}
 
-	// 5. check base repository's AllowRebaseUpdate configuration
+	// 5. check base repository's update configuration
 	// it is a config in base repo but controls the head (fork) repo's "Update" behavior
-	return pushAllowed, rebaseAllowed && prBaseUnit.PullRequestsConfig().AllowRebaseUpdate, nil
+	prConfig := prBaseUnit.PullRequestsConfig()
+	return pushAllowed && prConfig.AllowMergeUpdate, rebaseAllowed && prConfig.AllowRebaseUpdate, nil
 }
 
 func syncCommitDivergence(ctx context.Context, pr *issues_model.PullRequest) error {

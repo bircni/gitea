@@ -891,10 +891,27 @@ func updateRepoUnits(ctx *context.APIContext, opts api.EditRepoOption) error {
 			optional.AssignPtrValue(changed, &config.AllowFastForwardOnly, opts.AllowFastForwardOnly)
 			optional.AssignPtrValue(changed, &config.AllowManualMerge, opts.AllowManualMerge)
 			optional.AssignPtrValue(changed, &config.AutodetectManualMerge, opts.AutodetectManualMerge)
+			optional.AssignPtrValue(changed, &config.AllowMergeUpdate, opts.AllowMergeUpdate)
 			optional.AssignPtrValue(changed, &config.AllowRebaseUpdate, opts.AllowRebaseUpdate)
 			optional.AssignPtrValue(changed, &config.DefaultDeleteBranchAfterMerge, opts.DefaultDeleteBranchAfterMerge)
 			optional.AssignPtrValue(changed, &config.DefaultAllowMaintainerEdit, opts.DefaultAllowMaintainerEdit)
 			optional.AssignPtrString(changed, &config.DefaultMergeStyle, opts.DefaultMergeStyle)
+			optional.AssignPtrString(changed, &config.DefaultUpdateStyle, opts.DefaultUpdateStyle)
+			if config.DefaultUpdateStyle != repo_model.UpdateStyleMerge && config.DefaultUpdateStyle != repo_model.UpdateStyleRebase {
+				err := errors.New("default_update_style must be merge or rebase")
+				ctx.APIError(http.StatusUnprocessableEntity, err)
+				return err
+			}
+			if !config.AllowMergeUpdate && !config.AllowRebaseUpdate {
+				err := errors.New("at least one pull request branch update style must be enabled")
+				ctx.APIError(http.StatusUnprocessableEntity, err)
+				return err
+			}
+			if !config.IsUpdateStyleAllowed(config.DefaultUpdateStyle) {
+				err := errors.New("default_update_style must be enabled")
+				ctx.APIError(http.StatusUnprocessableEntity, err)
+				return err
+			}
 			if *changed || mustInsertPullRequestUnit {
 				units = append(units, repo_model.RepoUnit{
 					RepoID: repo.ID,

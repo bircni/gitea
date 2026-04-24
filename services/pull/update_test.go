@@ -28,6 +28,11 @@ func TestIsUserAllowedToUpdate(t *testing.T) {
 		repoUnit.PullRequestsConfig().AllowRebaseUpdate = allow
 		require.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
 	}
+	setRepoAllowMergeUpdate := func(t *testing.T, repoID int64, allow bool) {
+		repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
+		repoUnit.PullRequestsConfig().AllowMergeUpdate = allow
+		require.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
+	}
 
 	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
@@ -56,6 +61,17 @@ func TestIsUserAllowedToUpdate(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, pushAllowed)
 		assert.False(t, rebaseAllowed)
+	})
+
+	t.Run("DisallowMergeWhenConfigDisabled", func(t *testing.T) {
+		pr2 := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+		setRepoAllowRebaseUpdate(t, pr2.BaseRepoID, true)
+		setRepoAllowMergeUpdate(t, pr2.BaseRepoID, false)
+		pushAllowed, rebaseAllowed, err := IsUserAllowedToUpdate(t.Context(), pr2, user2)
+		assert.NoError(t, err)
+		assert.False(t, pushAllowed)
+		assert.True(t, rebaseAllowed)
+		setRepoAllowMergeUpdate(t, pr2.BaseRepoID, true)
 	})
 
 	t.Run("ReadOnlyAccessDenied", func(t *testing.T) {

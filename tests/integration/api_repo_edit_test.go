@@ -66,6 +66,9 @@ func getRepoEditOptionFromRepo(repo *repo_model.Repository) *api.EditRepoOption 
 	allowRebaseMerge := false
 	allowSquash := false
 	allowFastForwardOnly := false
+	allowMergeUpdate := false
+	allowRebaseUpdate := false
+	defaultUpdateStyle := string(repo_model.UpdateStyleMerge)
 	if unit, err := repo.GetUnit(ctx, unit_model.TypePullRequests); err == nil {
 		config := unit.PullRequestsConfig()
 		hasPullRequests = true
@@ -75,6 +78,9 @@ func getRepoEditOptionFromRepo(repo *repo_model.Repository) *api.EditRepoOption 
 		allowRebaseMerge = config.AllowRebaseMerge
 		allowSquash = config.AllowSquash
 		allowFastForwardOnly = config.AllowFastForwardOnly
+		allowMergeUpdate = config.AllowMergeUpdate
+		allowRebaseUpdate = config.AllowRebaseUpdate
+		defaultUpdateStyle = string(config.DefaultUpdateStyle)
 	}
 	archived := repo.IsArchived
 	hasProjects := false
@@ -119,6 +125,9 @@ func getRepoEditOptionFromRepo(repo *repo_model.Repository) *api.EditRepoOption 
 		AllowRebaseMerge:          &allowRebaseMerge,
 		AllowSquash:               &allowSquash,
 		AllowFastForwardOnly:      &allowFastForwardOnly,
+		AllowMergeUpdate:          &allowMergeUpdate,
+		AllowRebaseUpdate:         &allowRebaseUpdate,
+		DefaultUpdateStyle:        &defaultUpdateStyle,
 		Archived:                  &archived,
 	}
 }
@@ -145,6 +154,9 @@ func getNewRepoEditOption(opts *api.EditRepoOption) *api.EditRepoOption {
 	allowRebase := !*opts.AllowRebase
 	allowRebaseMerge := !*opts.AllowRebaseMerge
 	allowSquash := !*opts.AllowSquash
+	allowMergeUpdate := false
+	allowRebaseUpdate := true
+	defaultUpdateStyle := string(repo_model.UpdateStyleRebase)
 	archived := !*opts.Archived
 
 	return &api.EditRepoOption{
@@ -166,6 +178,9 @@ func getNewRepoEditOption(opts *api.EditRepoOption) *api.EditRepoOption {
 		AllowRebase:               &allowRebase,
 		AllowRebaseMerge:          &allowRebaseMerge,
 		AllowSquash:               &allowSquash,
+		AllowMergeUpdate:          &allowMergeUpdate,
+		AllowRebaseUpdate:         &allowRebaseUpdate,
+		DefaultUpdateStyle:        &defaultUpdateStyle,
 		Archived:                  &archived,
 	}
 }
@@ -433,5 +448,33 @@ func TestAPIRepoEdit(t *testing.T) {
 			DefaultDeleteBranchAfterMerge: &bFalse,
 		}).AddTokenAuth(token2)
 		_ = MakeRequest(t, req, http.StatusOK)
+	})
+}
+
+func TestAPIRepoEditPullUpdateSettingsValidation(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		session := loginUser(t, user2.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		url := fmt.Sprintf("/api/v1/repos/%s/%s", user2.Name, repo1.Name)
+
+		allowMergeUpdate := false
+		allowRebaseUpdate := false
+		req := NewRequestWithJSON(t, "PATCH", url, &api.EditRepoOption{
+			AllowMergeUpdate:  &allowMergeUpdate,
+			AllowRebaseUpdate: &allowRebaseUpdate,
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusUnprocessableEntity)
+
+		allowRebaseUpdate = true
+		defaultUpdateStyle := string(repo_model.UpdateStyleMerge)
+		req = NewRequestWithJSON(t, "PATCH", url, &api.EditRepoOption{
+			AllowMergeUpdate:   &allowMergeUpdate,
+			AllowRebaseUpdate:  &allowRebaseUpdate,
+			DefaultUpdateStyle: &defaultUpdateStyle,
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusUnprocessableEntity)
 	})
 }

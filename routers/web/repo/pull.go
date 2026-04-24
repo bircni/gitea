@@ -517,6 +517,10 @@ func prepareViewOpenPullInfo(ctx *context.Context, issue *issues_model.Issue) {
 			ctx.ServerError("IsUserAllowedToUpdate", err)
 			return
 		}
+		ctx.Data["DefaultUpdateStyle"] = string(repo_model.UpdateStyleMerge)
+		if prUnit, err := pull.BaseRepo.GetUnit(ctx, unit.TypePullRequests); err == nil {
+			ctx.Data["DefaultUpdateStyle"] = string(prUnit.PullRequestsConfig().DefaultUpdateStyle)
+		}
 		ctx.Data["GetCommitMessages"] = pull_service.GetSquashMergeCommitMessages(ctx, pull)
 	} else {
 		ctx.Data["GetCommitMessages"] = ""
@@ -932,8 +936,6 @@ func UpdatePullRequest(ctx *context.Context) {
 		return
 	}
 
-	rebase := ctx.FormString("style") == "rebase"
-
 	if err := issue.PullRequest.LoadBaseRepo(ctx); err != nil {
 		ctx.ServerError("LoadBaseRepo", err)
 		return
@@ -943,6 +945,15 @@ func UpdatePullRequest(ctx *context.Context) {
 		return
 	}
 
+	updateStyle := repo_model.UpdateStyle(ctx.FormString("style"))
+	if updateStyle == "" {
+		updateStyle = repo_model.UpdateStyleMerge
+		if prUnit, err := issue.PullRequest.BaseRepo.GetUnit(ctx, unit.TypePullRequests); err == nil {
+			updateStyle = prUnit.PullRequestsConfig().DefaultUpdateStyle
+		}
+	}
+	rebase := updateStyle == repo_model.UpdateStyleRebase
+
 	allowedUpdateByMerge, allowedUpdateByRebase, err := pull_service.IsUserAllowedToUpdate(ctx, issue.PullRequest, ctx.Doer)
 	if err != nil {
 		ctx.ServerError("IsUserAllowedToMerge", err)
@@ -950,7 +961,8 @@ func UpdatePullRequest(ctx *context.Context) {
 	}
 
 	// ToDo: add check if maintainers are allowed to change branch ... (need migration & co)
-	if (!allowedUpdateByMerge && !rebase) || (rebase && !allowedUpdateByRebase) {
+	if (updateStyle != repo_model.UpdateStyleMerge && updateStyle != repo_model.UpdateStyleRebase) ||
+		(!allowedUpdateByMerge && !rebase) || (rebase && !allowedUpdateByRebase) {
 		ctx.Flash.Error(ctx.Tr("repo.pulls.update_not_allowed"))
 		ctx.Redirect(issue.Link())
 		return
