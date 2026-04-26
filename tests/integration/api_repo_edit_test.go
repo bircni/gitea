@@ -80,7 +80,7 @@ func getRepoEditOptionFromRepo(repo *repo_model.Repository) *api.EditRepoOption 
 		allowFastForwardOnly = config.AllowFastForwardOnly
 		allowMergeUpdate = config.AllowMergeUpdate
 		allowRebaseUpdate = config.AllowRebaseUpdate
-		defaultUpdateStyle = string(config.GetDefaultUpdateStyle())
+		defaultUpdateStyle = string(config.DefaultUpdateStyle)
 	}
 	archived := repo.IsArchived
 	hasProjects := false

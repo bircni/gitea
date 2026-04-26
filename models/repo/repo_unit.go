@@ -156,7 +156,11 @@ func DefaultPullRequestsConfig() *PullRequestsConfig {
 func (cfg *PullRequestsConfig) FromDB(bs []byte) error {
 	// set default values for existing PullRequestConfig in DB
 	*cfg = *DefaultPullRequestsConfig()
-	return json.UnmarshalHandleDoubleEncode(bs, &cfg)
+	if err := json.UnmarshalHandleDoubleEncode(bs, &cfg); err != nil {
+		return err
+	}
+	cfg.DefaultUpdateStyle = util.IfZero(cfg.DefaultUpdateStyle, UpdateStyleMerge)
+	return nil
 }
 
 // ToDB exports a PullRequestsConfig to a serialized format.
@@ -184,14 +188,6 @@ func (cfg *PullRequestsConfig) IsUpdateStyleAllowed(updateStyle UpdateStyle) boo
 	default:
 		return false
 	}
-}
-
-// GetDefaultUpdateStyle returns the default pull request branch update style
-func (cfg *PullRequestsConfig) GetDefaultUpdateStyle() UpdateStyle {
-	if cfg.DefaultUpdateStyle == UpdateStyleRebase {
-		return UpdateStyleRebase
-	}
-	return UpdateStyleMerge
 }
 
 func DefaultPullRequestsUnit(repoID int64) RepoUnit {

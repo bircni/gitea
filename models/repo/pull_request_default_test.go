@@ -30,3 +30,12 @@ func TestDefaultTargetBranchSelection(t *testing.T) {
 	repo.Units = nil
 	assert.Equal(t, "branch2", repo.GetPullRequestTargetBranch(ctx))
 }
+
+func TestPullRequestConfigDefaults(t *testing.T) {
+	cfg := new(PullRequestsConfig)
+	assert.NoError(t, cfg.FromDB([]byte("{}")))
+
+	assert.True(t, cfg.AllowMergeUpdate)
+	assert.True(t, cfg.AllowRebaseUpdate)
+	assert.Equal(t, UpdateStyleMerge, cfg.DefaultUpdateStyle)
+}

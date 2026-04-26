@@ -33,7 +33,7 @@ func GetDefaultUpdateStyle(ctx context.Context, pull *issues_model.PullRequest) 
 		return "", fmt.Errorf("get base repo unit: %w", err)
 	}
 
-	return prBaseUnit.PullRequestsConfig().GetDefaultUpdateStyle(), nil
+	return prBaseUnit.PullRequestsConfig().DefaultUpdateStyle, nil
 }
 
 // ResolveUpdateStyle returns the requested update style or the repository default when none was requested.

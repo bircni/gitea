@@ -122,7 +122,7 @@ func innerToRepo(ctx context.Context, repo *repo_model.Repository, permissionInR
 		autodetectManualMerge = config.AutodetectManualMerge
 		defaultDeleteBranchAfterMerge = config.DefaultDeleteBranchAfterMerge
 		defaultMergeStyle = config.DefaultMergeStyle
-		defaultUpdateStyle = config.GetDefaultUpdateStyle()
+		defaultUpdateStyle = config.DefaultUpdateStyle
 		defaultAllowMaintainerEdit = config.DefaultAllowMaintainerEdit
 		defaultTargetBranch = config.DefaultTargetBranch
 	}
