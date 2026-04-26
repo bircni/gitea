@@ -4,9 +4,8 @@
 package util
 
 import (
-	"regexp"
+	"bytes"
 	"strings"
-	"sync"
 )
 
 type sanitizedError struct {
@@ -26,28 +25,83 @@ func SanitizeErrorCredentialURLs(err error) error {
 	return sanitizedError{err: err}
 }
 
-const userPlaceholder = "sanitized-credential"
+var schemeSep = []byte("://")
 
-var globalVars = sync.OnceValue(func() (ret struct {
-	schemeCredentialURL     *regexp.Regexp
-	schemelessCredentialURL *regexp.Regexp
-},
-) {
-	// RFC 3986: userinfo can contain - . _ ~ ! $ & ' ( ) * + , ; = : and any percent-encoded chars
-	ret.schemeCredentialURL = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9-._~!$&'()*+,;=:%]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
-	ret.schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9-._~!$&'()*+,;=%]+:[A-Za-z0-9-._~!$&'()*+,;=:%]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
-	return ret
-})
+const userPlaceholder = "(masked)"
 
 // SanitizeCredentialURLs remove all credentials in URLs for the input string:
 // * "https://userinfo@domain.com" => "https://sanitized-credential@domain.com"
 // * "user:pass@domain.com" => "sanitized-credential@domain.com"
 func SanitizeCredentialURLs(s string) string {
-	if strings.Contains(s, ":") && strings.Contains(s, "@") {
-		return globalVars().schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
+	sepAtPos := strings.Index(s, "@")
+	sepColPos := strings.Index(s, ":")
+	if sepColPos == -1 || sepColPos > sepAtPos {
+		return s // fast path, unlikely contain any URL
 	}
-	if strings.Contains(s, "://") && strings.Contains(s, "@") {
-		return globalVars().schemeCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
+
+	res := make([]byte, 0, len(s)+len(userPlaceholder)) // a best guess to avoid too many re-allocations
+	bs := UnsafeStringToBytes(s)
+	for {
+		leftPos := sepAtPos - 1
+	leftLoop:
+		for leftPos >= 0 {
+			c := bs[leftPos]
+			switch c {
+			case '-', '.', '_', '~', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', ':', '%':
+				// RFC 3986, userinfo can contain - . _ ~ ! $ & ' ( ) * + , ; = : and any percent-encoded chars
+			default:
+				valid := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+				if !valid {
+					break leftLoop
+				}
+			}
+			leftPos--
+		}
+		leftPos++
+
+		rightPos := sepAtPos + 1
+	rightLoop:
+		for rightPos < len(bs) {
+			c := bs[rightPos]
+			switch c {
+			case '.', '-':
+				// valid host char
+			case '[':
+				// ipv6 begin
+				if rightPos != sepAtPos+1 {
+					break rightLoop
+				}
+			case ']':
+				// ipv6 end
+				rightPos++
+				break rightLoop
+			default:
+				valid := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+				if !valid {
+					break rightLoop
+				}
+			}
+			rightPos++
+		}
+
+		leading, leftPart, rightPart := bs[:leftPos], bs[leftPos:sepAtPos], bs[sepAtPos+1:rightPos]
+		needSanitize := bytes.IndexByte(leftPart, ':') >= 0 || bytes.HasSuffix(leading, schemeSep)
+		needSanitize = needSanitize && len(leftPart) > 0 && len(rightPart) > 0
+		// TODO: can also do more checks for right part, e.g.: ipv6
+		if needSanitize {
+			res = append(res, leading...)
+			res = append(res, userPlaceholder...)
+			res = append(res, '@')
+			res = append(res, rightPart...)
+		} else {
+			res = append(res, bs[:rightPos]...)
+		}
+		bs = bs[rightPos:]
+		sepAtPos = bytes.IndexByte(bs, '@')
+		if sepAtPos == -1 {
+			break
+		}
 	}
-	return s
+	res = append(res, bs...)
+	return UnsafeBytesToString(res)
 }

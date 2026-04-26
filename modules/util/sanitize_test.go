@@ -35,7 +35,7 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 		},
 		{
 			"ftp://x@",
-			"ftp://" + userPlaceholder + "@",
+			"ftp://x@",
 		},
 		{
 			"ftp://x/@",
