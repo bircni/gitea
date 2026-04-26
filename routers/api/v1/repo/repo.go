@@ -897,7 +897,8 @@ func updateRepoUnits(ctx *context.APIContext, opts api.EditRepoOption) error {
 			optional.AssignPtrValue(changed, &config.DefaultAllowMaintainerEdit, opts.DefaultAllowMaintainerEdit)
 			optional.AssignPtrString(changed, &config.DefaultMergeStyle, opts.DefaultMergeStyle)
 			optional.AssignPtrString(changed, &config.DefaultUpdateStyle, opts.DefaultUpdateStyle)
-			if config.DefaultUpdateStyle != repo_model.UpdateStyleMerge && config.DefaultUpdateStyle != repo_model.UpdateStyleRebase {
+			defaultUpdateStyle := config.GetDefaultUpdateStyle()
+			if config.DefaultUpdateStyle != "" && config.DefaultUpdateStyle != defaultUpdateStyle {
 				err := errors.New("default_update_style must be merge or rebase")
 				ctx.APIError(http.StatusUnprocessableEntity, err)
 				return err
@@ -907,11 +908,12 @@ func updateRepoUnits(ctx *context.APIContext, opts api.EditRepoOption) error {
 				ctx.APIError(http.StatusUnprocessableEntity, err)
 				return err
 			}
-			if !config.IsUpdateStyleAllowed(config.DefaultUpdateStyle) {
+			if !config.IsUpdateStyleAllowed(defaultUpdateStyle) {
 				err := errors.New("default_update_style must be enabled")
 				ctx.APIError(http.StatusUnprocessableEntity, err)
 				return err
 			}
+			config.DefaultUpdateStyle = defaultUpdateStyle
 			if *changed || mustInsertPullRequestUnit {
 				units = append(units, repo_model.RepoUnit{
 					RepoID: repo.ID,

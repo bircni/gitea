@@ -176,8 +176,22 @@ func (cfg *PullRequestsConfig) IsMergeStyleAllowed(mergeStyle MergeStyle) bool {
 
 // IsUpdateStyleAllowed returns if a pull request branch update style is allowed
 func (cfg *PullRequestsConfig) IsUpdateStyleAllowed(updateStyle UpdateStyle) bool {
-	return updateStyle == UpdateStyleMerge && cfg.AllowMergeUpdate ||
-		updateStyle == UpdateStyleRebase && cfg.AllowRebaseUpdate
+	switch updateStyle {
+	case UpdateStyleMerge:
+		return cfg.AllowMergeUpdate
+	case UpdateStyleRebase:
+		return cfg.AllowRebaseUpdate
+	default:
+		return false
+	}
+}
+
+// GetDefaultUpdateStyle returns the default pull request branch update style
+func (cfg *PullRequestsConfig) GetDefaultUpdateStyle() UpdateStyle {
+	if cfg.DefaultUpdateStyle == UpdateStyleRebase {
+		return UpdateStyleRebase
+	}
+	return UpdateStyleMerge
 }
 
 func DefaultPullRequestsUnit(repoID int64) RepoUnit {

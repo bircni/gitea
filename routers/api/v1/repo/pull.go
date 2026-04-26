@@ -1253,12 +1253,10 @@ func UpdatePullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	updateStyle := repo_model.UpdateStyle(ctx.FormString("style"))
-	if updateStyle == "" {
-		updateStyle = repo_model.UpdateStyleMerge
-		if prUnit, err := pr.BaseRepo.GetUnit(ctx, unit.TypePullRequests); err == nil {
-			updateStyle = prUnit.PullRequestsConfig().DefaultUpdateStyle
-		}
+	updateStyle, err := pull_service.ResolveUpdateStyle(ctx, pr, ctx.FormString("style"))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
 	}
 	rebase := updateStyle == repo_model.UpdateStyleRebase
 
@@ -1268,8 +1266,7 @@ func UpdatePullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	if (updateStyle != repo_model.UpdateStyleMerge && updateStyle != repo_model.UpdateStyleRebase) ||
-		(!allowedUpdateByMerge && !rebase) || (rebase && !allowedUpdateByRebase) {
+	if !pull_service.IsUpdateStyleAllowed(updateStyle, allowedUpdateByMerge, allowedUpdateByRebase) {
 		ctx.Status(http.StatusForbidden)
 		return
 	}

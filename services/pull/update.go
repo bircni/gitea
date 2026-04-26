@@ -20,6 +20,42 @@ import (
 	"code.gitea.io/gitea/modules/repository"
 )
 
+// GetDefaultUpdateStyle returns the default pull request branch update style from the base repository.
+func GetDefaultUpdateStyle(ctx context.Context, pull *issues_model.PullRequest) (repo_model.UpdateStyle, error) {
+	if err := pull.LoadBaseRepo(ctx); err != nil {
+		return "", err
+	}
+
+	prBaseUnit, err := pull.BaseRepo.GetUnit(ctx, unit.TypePullRequests)
+	if repo_model.IsErrUnitTypeNotExist(err) {
+		return repo_model.UpdateStyleMerge, nil
+	} else if err != nil {
+		return "", fmt.Errorf("get base repo unit: %w", err)
+	}
+
+	return prBaseUnit.PullRequestsConfig().GetDefaultUpdateStyle(), nil
+}
+
+// ResolveUpdateStyle returns the requested update style or the repository default when none was requested.
+func ResolveUpdateStyle(ctx context.Context, pull *issues_model.PullRequest, requestedStyle string) (repo_model.UpdateStyle, error) {
+	if requestedStyle != "" {
+		return repo_model.UpdateStyle(requestedStyle), nil
+	}
+	return GetDefaultUpdateStyle(ctx, pull)
+}
+
+// IsUpdateStyleAllowed returns whether an already-resolved update style is available to the user.
+func IsUpdateStyleAllowed(updateStyle repo_model.UpdateStyle, mergeAllowed, rebaseAllowed bool) bool {
+	switch updateStyle {
+	case repo_model.UpdateStyleMerge:
+		return mergeAllowed
+	case repo_model.UpdateStyleRebase:
+		return rebaseAllowed
+	default:
+		return false
+	}
+}
+
 // Update updates pull request with base branch.
 func Update(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, message string, rebase bool) error {
 	if pr.Flow == issues_model.PullRequestFlowAGit {

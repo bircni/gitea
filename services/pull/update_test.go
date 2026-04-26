@@ -20,6 +20,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUpdateStyleHelpers(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	pr2 := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: pr2.BaseRepoID, Type: unit.TypePullRequests})
+	repoUnit.PullRequestsConfig().DefaultUpdateStyle = ""
+	require.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
+
+	updateStyle, err := ResolveUpdateStyle(t.Context(), pr2, "")
+	require.NoError(t, err)
+	assert.Equal(t, repo_model.UpdateStyleMerge, updateStyle)
+
+	updateStyle, err = ResolveUpdateStyle(t.Context(), pr2, string(repo_model.UpdateStyleRebase))
+	require.NoError(t, err)
+	assert.Equal(t, repo_model.UpdateStyleRebase, updateStyle)
+
+	assert.True(t, IsUpdateStyleAllowed(repo_model.UpdateStyleMerge, true, false))
+	assert.True(t, IsUpdateStyleAllowed(repo_model.UpdateStyleRebase, false, true))
+	assert.False(t, IsUpdateStyleAllowed(repo_model.UpdateStyle("invalid"), true, true))
+}
+
 func TestIsUserAllowedToUpdate(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
