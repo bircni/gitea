@@ -947,12 +947,12 @@ func UpdatePullRequest(ctx *context.Context) {
 		return
 	}
 
-	updateStyle, err := pull_service.ResolveUpdateStyle(ctx, issue.PullRequest, ctx.FormString("style"))
+	defaultStyle, err := pull_service.GetDefaultUpdateStyle(ctx, issue.PullRequest)
 	if err != nil {
-		ctx.ServerError("ResolveUpdateStyle", err)
+		ctx.ServerError("GetDefaultUpdateStyle", err)
 		return
 	}
-	rebase := updateStyle == repo_model.UpdateStyleRebase
+	rebase := pull_service.ResolveUpdateStyle(ctx.FormString("style"), defaultStyle) == repo_model.UpdateStyleRebase
 
 	allowedUpdateByMerge, allowedUpdateByRebase, err := pull_service.IsUserAllowedToUpdate(ctx, issue.PullRequest, ctx.Doer)
 	if err != nil {
@@ -961,7 +961,7 @@ func UpdatePullRequest(ctx *context.Context) {
 	}
 
 	// ToDo: add check if maintainers are allowed to change branch ... (need migration & co)
-	if !pull_service.IsUpdateStyleAllowed(updateStyle, allowedUpdateByMerge, allowedUpdateByRebase) {
+	if (rebase && !allowedUpdateByRebase) || (!rebase && !allowedUpdateByMerge) {
 		ctx.Flash.Error(ctx.Tr("repo.pulls.update_not_allowed"))
 		ctx.Redirect(issue.Link())
 		return

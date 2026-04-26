@@ -5,6 +5,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/perm"
@@ -188,6 +189,27 @@ func (cfg *PullRequestsConfig) IsUpdateStyleAllowed(updateStyle UpdateStyle) boo
 	default:
 		return false
 	}
+}
+
+// PullRequestsConfig validation errors. Routers translate these to user-facing responses.
+var (
+	ErrInvalidDefaultUpdateStyle    = errors.New("default update style must be merge or rebase")
+	ErrNoUpdateStyleEnabled         = errors.New("at least one pull request branch update style must be enabled")
+	ErrDefaultUpdateStyleNotAllowed = errors.New("default update style must be enabled")
+)
+
+// ValidateUpdateSettings checks that the AllowMerge/RebaseUpdate flags and DefaultUpdateStyle are mutually consistent.
+func (cfg *PullRequestsConfig) ValidateUpdateSettings() error {
+	if cfg.DefaultUpdateStyle != UpdateStyleMerge && cfg.DefaultUpdateStyle != UpdateStyleRebase {
+		return ErrInvalidDefaultUpdateStyle
+	}
+	if !cfg.AllowMergeUpdate && !cfg.AllowRebaseUpdate {
+		return ErrNoUpdateStyleEnabled
+	}
+	if !cfg.IsUpdateStyleAllowed(cfg.DefaultUpdateStyle) {
+		return ErrDefaultUpdateStyleNotAllowed
+	}
+	return nil
 }
 
 func DefaultPullRequestsUnit(repoID int64) RepoUnit {

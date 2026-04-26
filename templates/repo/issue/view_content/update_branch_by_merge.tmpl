@@ -7,23 +7,19 @@
 		</div>
 		<div class="item-section-right">
 			{{if and $.UpdateAllowed $.UpdateByRebaseAllowed}}
-				{{$defaultUpdateStyle := $.DefaultUpdateStyle}}
+				{{$isRebase := eq $.DefaultUpdateStyle "rebase"}}
 				<div class="tw-inline-block">
 					<div id="update-pr-branch-with-base" class="ui buttons">
-						<button class="ui button" data-do="{{$.Issue.Link}}/update{{if eq $defaultUpdateStyle "rebase"}}?style=rebase{{end}}">
+						<button class="ui button" data-do="{{$.Issue.Link}}/update{{if $isRebase}}?style=rebase{{end}}">
 							<span class="button-text">
-								{{if eq $defaultUpdateStyle "rebase"}}
-									{{ctx.Locale.Tr "repo.pulls.update_branch_rebase"}}
-								{{else}}
-									{{ctx.Locale.Tr "repo.pulls.update_branch"}}
-								{{end}}
+								{{if $isRebase}}{{ctx.Locale.Tr "repo.pulls.update_branch_rebase"}}{{else}}{{ctx.Locale.Tr "repo.pulls.update_branch"}}{{end}}
 							</span>
 						</button>
 						<div class="ui dropdown icon button">
 							{{svg "octicon-triangle-down"}}
 							<div class="menu">
-								<a class="item {{if ne $defaultUpdateStyle "rebase"}}active selected{{end}}" data-do="{{$.Issue.Link}}/update?style=merge">{{ctx.Locale.Tr "repo.pulls.update_branch"}}</a>
-								<a class="item {{if eq $defaultUpdateStyle "rebase"}}active selected{{end}}" data-do="{{$.Issue.Link}}/update?style=rebase">{{ctx.Locale.Tr "repo.pulls.update_branch_rebase"}}</a>
+								<a class="item {{if not $isRebase}}active selected{{end}}" data-do="{{$.Issue.Link}}/update?style=merge">{{ctx.Locale.Tr "repo.pulls.update_branch"}}</a>
+								<a class="item {{if $isRebase}}active selected{{end}}" data-do="{{$.Issue.Link}}/update?style=rebase">{{ctx.Locale.Tr "repo.pulls.update_branch_rebase"}}</a>
 							</div>
 						</div>
 					</div>

@@ -61,20 +61,32 @@ func TestAPIPullUpdate(t *testing.T) {
 	})
 }
 
-func enableRepoAllowUpdateWithRebase(t *testing.T, repoID int64, allow bool) {
-	t.Helper()
-
-	repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
-	repoUnit.PullRequestsConfig().AllowRebaseUpdate = allow
-	assert.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
-}
-
 func updateRepoPullRequestConfig(t *testing.T, repoID int64, update func(*repo_model.PullRequestsConfig)) {
 	t.Helper()
 
 	repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
 	update(repoUnit.PullRequestsConfig())
 	assert.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
+}
+
+func enableRepoAllowUpdateWithRebase(t *testing.T, repoID int64, allow bool) {
+	updateRepoPullRequestConfig(t, repoID, func(c *repo_model.PullRequestsConfig) { c.AllowRebaseUpdate = allow })
+}
+
+// setupOutdatedPRWithConfig creates an outdated PR (user2 base, org26 fork), loads its
+// base repo, head repo, and issue, then applies the supplied PullRequestsConfig mutation.
+func setupOutdatedPRWithConfig(t *testing.T, mutate func(*repo_model.PullRequestsConfig)) *issues_model.PullRequest {
+	t.Helper()
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	org26 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 26})
+	pr := createOutdatedPR(t, user, org26)
+	require.NoError(t, pr.LoadBaseRepo(t.Context()))
+	require.NoError(t, pr.LoadHeadRepo(t.Context()))
+	require.NoError(t, pr.LoadIssue(t.Context()))
+	if mutate != nil {
+		updateRepoPullRequestConfig(t, pr.BaseRepo.ID, mutate)
+	}
+	return pr
 }
 
 func TestAPIPullUpdateByRebase(t *testing.T) {
@@ -128,17 +140,13 @@ func TestAPIPullUpdateByRebase(t *testing.T) {
 	})
 }
 
-func TestAPIPullUpdateUsesDefaultUpdateStyle(t *testing.T) {
+// TestAPIPullUpdateNoStyleStaysMerge guards back-compat: even when the repo's
+// DefaultUpdateStyle is rebase, an API call with no `style` parameter must still
+// perform a merge update so existing API clients don't silently flip behavior.
+func TestAPIPullUpdateNoStyleStaysMerge(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
-		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-		org26 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 26})
-		pr := createOutdatedPR(t, user, org26)
-		require.NoError(t, pr.LoadBaseRepo(t.Context()))
-		require.NoError(t, pr.LoadHeadRepo(t.Context()))
-		require.NoError(t, pr.LoadIssue(t.Context()))
-
-		updateRepoPullRequestConfig(t, pr.BaseRepo.ID, func(config *repo_model.PullRequestsConfig) {
-			config.DefaultUpdateStyle = repo_model.UpdateStyleRebase
+		pr := setupOutdatedPRWithConfig(t, func(c *repo_model.PullRequestsConfig) {
+			c.DefaultUpdateStyle = repo_model.UpdateStyleRebase
 		})
 
 		user40 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 40})
@@ -151,25 +159,21 @@ func TestAPIPullUpdateUsesDefaultUpdateStyle(t *testing.T) {
 			AddTokenAuth(token)
 		session.MakeRequest(t, req, http.StatusOK)
 
+		// merge update produces a merge commit on top of the head commit (Ahead=2),
+		// rebase update would replay the head commit alone (Ahead=1).
 		diffCount, err := gitrepo.GetDivergingCommits(t.Context(), pr.BaseRepo, pr.BaseBranch, pr.GetGitHeadRefName())
 		require.NoError(t, err)
 		assert.Equal(t, 0, diffCount.Behind)
-		assert.Equal(t, 1, diffCount.Ahead)
+		assert.Equal(t, 2, diffCount.Ahead)
 	})
 }
 
 func TestAPIPullUpdateDisabledStyleForbidden(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
-		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-		org26 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 26})
-		pr := createOutdatedPR(t, user, org26)
-		require.NoError(t, pr.LoadBaseRepo(t.Context()))
-		require.NoError(t, pr.LoadIssue(t.Context()))
-
-		updateRepoPullRequestConfig(t, pr.BaseRepo.ID, func(config *repo_model.PullRequestsConfig) {
-			config.AllowMergeUpdate = false
-			config.AllowRebaseUpdate = true
-			config.DefaultUpdateStyle = repo_model.UpdateStyleRebase
+		pr := setupOutdatedPRWithConfig(t, func(c *repo_model.PullRequestsConfig) {
+			c.AllowMergeUpdate = false
+			c.AllowRebaseUpdate = true
+			c.DefaultUpdateStyle = repo_model.UpdateStyleRebase
 		})
 
 		session := loginUser(t, "user2")

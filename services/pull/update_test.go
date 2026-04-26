@@ -20,36 +20,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateStyleHelpers(t *testing.T) {
+func TestGetDefaultUpdateStyle(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
 	pr2 := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
-
-	updateStyle, err := ResolveUpdateStyle(t.Context(), pr2, "")
+	updateStyle, err := GetDefaultUpdateStyle(t.Context(), pr2)
 	require.NoError(t, err)
 	assert.Equal(t, repo_model.UpdateStyleMerge, updateStyle)
-
-	updateStyle, err = ResolveUpdateStyle(t.Context(), pr2, string(repo_model.UpdateStyleRebase))
-	require.NoError(t, err)
-	assert.Equal(t, repo_model.UpdateStyleRebase, updateStyle)
-
-	assert.True(t, IsUpdateStyleAllowed(repo_model.UpdateStyleMerge, true, false))
-	assert.True(t, IsUpdateStyleAllowed(repo_model.UpdateStyleRebase, false, true))
-	assert.False(t, IsUpdateStyleAllowed(repo_model.UpdateStyle("invalid"), true, true))
 }
 
 func TestIsUserAllowedToUpdate(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
-	setRepoAllowRebaseUpdate := func(t *testing.T, repoID int64, allow bool) {
+	updatePRConfig := func(t *testing.T, repoID int64, update func(*repo_model.PullRequestsConfig)) {
 		repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
-		repoUnit.PullRequestsConfig().AllowRebaseUpdate = allow
+		update(repoUnit.PullRequestsConfig())
 		require.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
 	}
+	setRepoAllowRebaseUpdate := func(t *testing.T, repoID int64, allow bool) {
+		updatePRConfig(t, repoID, func(c *repo_model.PullRequestsConfig) { c.AllowRebaseUpdate = allow })
+	}
 	setRepoAllowMergeUpdate := func(t *testing.T, repoID int64, allow bool) {
-		repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repoID, Type: unit.TypePullRequests})
-		repoUnit.PullRequestsConfig().AllowMergeUpdate = allow
-		require.NoError(t, repo_model.UpdateRepoUnitConfig(t.Context(), repoUnit))
+		updatePRConfig(t, repoID, func(c *repo_model.PullRequestsConfig) { c.AllowMergeUpdate = allow })
 	}
 
 	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})

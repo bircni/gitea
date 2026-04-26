@@ -897,20 +897,13 @@ func updateRepoUnits(ctx *context.APIContext, opts api.EditRepoOption) error {
 			optional.AssignPtrValue(changed, &config.DefaultAllowMaintainerEdit, opts.DefaultAllowMaintainerEdit)
 			optional.AssignPtrString(changed, &config.DefaultMergeStyle, opts.DefaultMergeStyle)
 			optional.AssignPtrString(changed, &config.DefaultUpdateStyle, opts.DefaultUpdateStyle)
-			if config.DefaultUpdateStyle != repo_model.UpdateStyleMerge && config.DefaultUpdateStyle != repo_model.UpdateStyleRebase {
-				err := errors.New("default_update_style must be merge or rebase")
-				ctx.APIError(http.StatusUnprocessableEntity, err)
-				return err
-			}
-			if !config.AllowMergeUpdate && !config.AllowRebaseUpdate {
-				err := errors.New("at least one pull request branch update style must be enabled")
-				ctx.APIError(http.StatusUnprocessableEntity, err)
-				return err
-			}
-			if !config.IsUpdateStyleAllowed(config.DefaultUpdateStyle) {
-				err := errors.New("default_update_style must be enabled")
-				ctx.APIError(http.StatusUnprocessableEntity, err)
-				return err
+			// only validate update-style fields when the caller is actually changing one of them,
+			// so unrelated PATCH calls don't reject historical configs.
+			if opts.AllowMergeUpdate != nil || opts.AllowRebaseUpdate != nil || opts.DefaultUpdateStyle != nil {
+				if err := config.ValidateUpdateSettings(); err != nil {
+					ctx.APIError(http.StatusUnprocessableEntity, err)
+					return err
+				}
 			}
 			if *changed || mustInsertPullRequestUnit {
 				units = append(units, repo_model.RepoUnit{

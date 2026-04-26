@@ -611,27 +611,8 @@ func handleSettingsPostAdvanced(ctx *context.Context) {
 	}
 
 	if form.EnablePulls && !unit_model.TypePullRequests.UnitGlobalDisabled() {
-		defaultUpdateStyle := repo_model.UpdateStyle(form.PullsDefaultUpdateStyle)
-		if defaultUpdateStyle == "" {
-			defaultUpdateStyle = repo_model.UpdateStyleMerge
-		}
-		if defaultUpdateStyle != repo_model.UpdateStyleMerge && defaultUpdateStyle != repo_model.UpdateStyleRebase {
-			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.invalid_update_style"))
-			ctx.Redirect(repo.Link() + "/settings")
-			return
-		}
-		if !form.PullsAllowMergeUpdate && !form.PullsAllowRebaseUpdate {
-			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.update_style_required"))
-			ctx.Redirect(repo.Link() + "/settings")
-			return
-		}
-		if (defaultUpdateStyle == repo_model.UpdateStyleMerge && !form.PullsAllowMergeUpdate) ||
-			(defaultUpdateStyle == repo_model.UpdateStyleRebase && !form.PullsAllowRebaseUpdate) {
-			ctx.Flash.Error(ctx.Tr("repo.settings.pulls.default_update_style_not_allowed"))
-			ctx.Redirect(repo.Link() + "/settings")
-			return
-		}
-		units = append(units, newRepoUnit(repo, unit_model.TypePullRequests, &repo_model.PullRequestsConfig{
+		defaultUpdateStyle := util.IfZero(repo_model.UpdateStyle(form.PullsDefaultUpdateStyle), repo_model.UpdateStyleMerge)
+		prConfig := &repo_model.PullRequestsConfig{
 			IgnoreWhitespaceConflicts:     form.PullsIgnoreWhitespace,
 			AllowMerge:                    form.PullsAllowMerge,
 			AllowRebase:                   form.PullsAllowRebase,
@@ -647,7 +628,22 @@ func handleSettingsPostAdvanced(ctx *context.Context) {
 			DefaultMergeStyle:             repo_model.MergeStyle(form.PullsDefaultMergeStyle),
 			DefaultAllowMaintainerEdit:    form.DefaultAllowMaintainerEdit,
 			DefaultTargetBranch:           strings.TrimSpace(form.DefaultTargetBranch),
-		}))
+		}
+		if err := prConfig.ValidateUpdateSettings(); err != nil {
+			switch {
+			case errors.Is(err, repo_model.ErrInvalidDefaultUpdateStyle):
+				ctx.Flash.Error(ctx.Tr("repo.settings.pulls.invalid_update_style"))
+			case errors.Is(err, repo_model.ErrNoUpdateStyleEnabled):
+				ctx.Flash.Error(ctx.Tr("repo.settings.pulls.update_style_required"))
+			case errors.Is(err, repo_model.ErrDefaultUpdateStyleNotAllowed):
+				ctx.Flash.Error(ctx.Tr("repo.settings.pulls.default_update_style_not_allowed"))
+			default:
+				ctx.Flash.Error(err.Error())
+			}
+			ctx.Redirect(repo.Link() + "/settings")
+			return
+		}
+		units = append(units, newRepoUnit(repo, unit_model.TypePullRequests, prConfig))
 	} else if !unit_model.TypePullRequests.UnitGlobalDisabled() {
 		deleteUnitTypes = append(deleteUnitTypes, unit_model.TypePullRequests)
 	}

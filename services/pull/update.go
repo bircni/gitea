@@ -20,40 +20,29 @@ import (
 	"code.gitea.io/gitea/modules/repository"
 )
 
-// GetDefaultUpdateStyle returns the default pull request branch update style from the base repository.
+// ResolveUpdateStyle returns the explicitly requested style if non-empty, else the fallback.
+// API callers pass UpdateStyleMerge as fallback for back-compat; the web UI passes the repo's
+// configured default.
+func ResolveUpdateStyle(requested string, fallback repo_model.UpdateStyle) repo_model.UpdateStyle {
+	if requested != "" {
+		return repo_model.UpdateStyle(requested)
+	}
+	return fallback
+}
+
+// GetDefaultUpdateStyle returns the configured default branch-update style for the PR's base repo,
+// falling back to the global default when the PR unit is not configured.
 func GetDefaultUpdateStyle(ctx context.Context, pull *issues_model.PullRequest) (repo_model.UpdateStyle, error) {
 	if err := pull.LoadBaseRepo(ctx); err != nil {
 		return "", err
 	}
-
 	prBaseUnit, err := pull.BaseRepo.GetUnit(ctx, unit.TypePullRequests)
 	if repo_model.IsErrUnitTypeNotExist(err) {
-		return repo_model.UpdateStyleMerge, nil
+		return repo_model.DefaultPullRequestsConfig().DefaultUpdateStyle, nil
 	} else if err != nil {
 		return "", fmt.Errorf("get base repo unit: %w", err)
 	}
-
 	return prBaseUnit.PullRequestsConfig().DefaultUpdateStyle, nil
-}
-
-// ResolveUpdateStyle returns the requested update style or the repository default when none was requested.
-func ResolveUpdateStyle(ctx context.Context, pull *issues_model.PullRequest, requestedStyle string) (repo_model.UpdateStyle, error) {
-	if requestedStyle != "" {
-		return repo_model.UpdateStyle(requestedStyle), nil
-	}
-	return GetDefaultUpdateStyle(ctx, pull)
-}
-
-// IsUpdateStyleAllowed returns whether an already-resolved update style is available to the user.
-func IsUpdateStyleAllowed(updateStyle repo_model.UpdateStyle, mergeAllowed, rebaseAllowed bool) bool {
-	switch updateStyle {
-	case repo_model.UpdateStyleMerge:
-		return mergeAllowed
-	case repo_model.UpdateStyleRebase:
-		return rebaseAllowed
-	default:
-		return false
-	}
 }
 
 // Update updates pull request with base branch.
@@ -169,7 +158,7 @@ func isUserAllowedToPushOrForcePushInRepoBranch(ctx context.Context, user *user_
 
 // IsUserAllowedToUpdate check if user is allowed to update PR with given permissions and branch protections
 // update PR means send new commits to PR head branch from base branch
-func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, user *user_model.User) (pushAllowed, rebaseAllowed bool, err error) {
+func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, user *user_model.User) (mergeAllowed, rebaseAllowed bool, err error) {
 	if user == nil {
 		return false, false, nil
 	}
@@ -194,14 +183,14 @@ func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, 
 	}
 
 	// 3. check user push permission on head repository
-	pushAllowed, rebaseAllowed, err = isUserAllowedToPushOrForcePushInRepoBranch(ctx, user, pull.HeadRepo, pull.HeadBranch)
+	mergeAllowed, rebaseAllowed, err = isUserAllowedToPushOrForcePushInRepoBranch(ctx, user, pull.HeadRepo, pull.HeadBranch)
 	if err != nil {
 		return false, false, err
 	}
 
 	// 4. if the pull creator allows maintainer to edit, we need to check whether
 	// user is a maintainer (has permission to merge into base branch) and inherit pull request poster's permission
-	if pull.AllowMaintainerEdit && (!pushAllowed || !rebaseAllowed) {
+	if pull.AllowMaintainerEdit && (!mergeAllowed || !rebaseAllowed) {
 		baseRepoPerm, err := access_model.GetDoerRepoPermission(ctx, pull.BaseRepo, user)
 		if err != nil {
 			return false, false, err
@@ -223,8 +212,8 @@ func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, 
 			if err != nil {
 				return false, false, err
 			}
-			if !pushAllowed {
-				pushAllowed = posterPushAllowed
+			if !mergeAllowed {
+				mergeAllowed = posterPushAllowed
 			}
 			if !rebaseAllowed {
 				rebaseAllowed = posterRebaseAllowed
@@ -232,10 +221,10 @@ func IsUserAllowedToUpdate(ctx context.Context, pull *issues_model.PullRequest, 
 		}
 	}
 
-	// 5. check base repository's update configuration
-	// it is a config in base repo but controls the head (fork) repo's "Update" behavior
+	// 5. apply base repository's update configuration; it is a config on the base repo
+	// but it controls the head (fork) repo's "Update" behavior.
 	prConfig := prBaseUnit.PullRequestsConfig()
-	return pushAllowed && prConfig.AllowMergeUpdate, rebaseAllowed && prConfig.AllowRebaseUpdate, nil
+	return mergeAllowed && prConfig.AllowMergeUpdate, rebaseAllowed && prConfig.AllowRebaseUpdate, nil
 }
 
 func syncCommitDivergence(ctx context.Context, pr *issues_model.PullRequest) error {

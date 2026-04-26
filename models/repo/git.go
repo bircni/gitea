@@ -33,9 +33,9 @@ const (
 type UpdateStyle string
 
 const (
-	// UpdateStyleMerge updates the pull request branch by merging the base branch
+	// UpdateStyleMerge merges the base branch into the pull request branch
 	UpdateStyleMerge UpdateStyle = "merge"
-	// UpdateStyleRebase updates the pull request branch by rebasing onto the base branch
+	// UpdateStyleRebase rebases the pull request branch onto the base branch
 	UpdateStyleRebase UpdateStyle = "rebase"
 )
 
