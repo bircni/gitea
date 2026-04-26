@@ -1,7 +1,7 @@
 import {checkAppUrl} from '../common-page.ts';
 import {hideElem, queryElems, showElem, toggleElem} from '../../utils/dom.ts';
 import {POST} from '../../modules/fetch.ts';
-import {showFomanticModal} from '../../modules/fomantic/modal.ts';
+import {initFomanticModal, showFomanticModal} from '../../modules/fomantic/modal.ts';
 import {pathEscape} from '../../utils/url.ts';
 
 const {appSubUrl} = window.config;
@@ -396,11 +396,12 @@ function initAdminRunners() {
     }
   });
 
-  fomanticQuery(deleteModal).modal({
+  initFomanticModal(deleteModal, {
     closable: false,
     onHidden: () => {
       deleteModal.classList.remove('is-loading');
       confirmDeleteButton.classList.remove('disabled');
+      confirmDeleteButton.disabled = false;
       updateBatchActionButtons();
     },
   });
@@ -408,7 +409,7 @@ function initAdminRunners() {
   deleteButton.addEventListener('click', (e) => {
     e.preventDefault();
     if (deleteButton.disabled) return;
-    fomanticQuery(deleteModal).modal('show');
+    showFomanticModal(deleteModal);
   });
 
   confirmDeleteButton.addEventListener('click', async (e) => {
