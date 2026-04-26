@@ -6,6 +6,7 @@ package util
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type sanitizedError struct {
@@ -27,16 +28,22 @@ func SanitizeErrorCredentialURLs(err error) error {
 
 const userPlaceholder = "sanitized-credential"
 
-var (
-	schemeCredentialURL     = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
-	schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~!$&'()*+,;=%-]+:[A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
-)
+var globalVars = sync.OnceValue(func() (ret struct {
+	schemeCredentialURL     *regexp.Regexp
+	schemelessCredentialURL *regexp.Regexp
+}) {
+	ret.schemeCredentialURL = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
+	ret.schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~!$&'()*+,;=%-]+:[A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
+	return ret
+})
 
 // SanitizeCredentialURLs remove all credentials in URLs for the input string: "https://user:pass@domain.com" => "https://sanitized-credential@domain.com"
 func SanitizeCredentialURLs(s string) string {
-	if !strings.Contains(s, "@") {
-		return s // fast return if there is no userinfo
+	if strings.Contains(s, ":") && strings.Contains(s, "@") {
+		return globalVars().schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
 	}
-	s = schemeCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
-	return schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
+	if strings.Contains(s, "://") && strings.Contains(s, "@") {
+		return globalVars().schemeCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
+	}
+	return s
 }
