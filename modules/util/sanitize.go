@@ -4,9 +4,8 @@
 package util
 
 import (
-	"bytes"
 	"regexp"
-	"unicode"
+	"strings"
 )
 
 type sanitizedError struct {
@@ -29,51 +28,15 @@ func SanitizeErrorCredentialURLs(err error) error {
 const userPlaceholder = "sanitized-credential"
 
 var (
-	schemeSep               = []byte("://")
+	schemeCredentialURL     = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9._~%!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
 	schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~%!$&'()*+,;=%-]+:[A-Za-z0-9._~%!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
 )
 
 // SanitizeCredentialURLs remove all credentials in URLs for the input string: "https://user:pass@domain.com" => "https://sanitized-credential@domain.com"
 func SanitizeCredentialURLs(s string) string {
-	bs := UnsafeStringToBytes(s)
-	schemeSepPos := bytes.Index(bs, schemeSep)
-	if bytes.IndexByte(bs, '@') == -1 {
+	if !strings.Contains(s, "@") {
 		return s // fast return if there is no userinfo
 	}
-	if schemeSepPos == -1 {
-		return schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
-	}
-	out := make([]byte, 0, len(bs)+len(userPlaceholder))
-	for schemeSepPos != -1 {
-		schemeSepPos += 3         // skip the "://"
-		sepAtPos := -1            // the possible '@' position: "https://foo@[^here]host"
-		sepEndPos := schemeSepPos // the possible end position: "The https://host[^here] in log for test"
-	sepLoop:
-		for ; sepEndPos < len(bs); sepEndPos++ {
-			c := bs[sepEndPos]
-			if ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') {
-				continue
-			}
-			switch c {
-			case '@':
-				sepAtPos = sepEndPos
-			case '-', '.', '_', '~', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', ':', '%':
-				continue // due to RFC 3986, userinfo can contain - . _ ~ ! $ & ' ( ) * + , ; = : and any percent-encoded chars
-			default:
-				break sepLoop // if it is an invalid char for URL (eg: space, '/', and others), stop the loop
-			}
-		}
-		// if there is '@', and the string is like "s://u@h", then hide the "u" part
-		if sepAtPos != -1 && (schemeSepPos >= 4 && unicode.IsLetter(rune(bs[schemeSepPos-4]))) && sepAtPos-schemeSepPos > 0 && sepEndPos-sepAtPos > 0 {
-			out = append(out, bs[:schemeSepPos]...)
-			out = append(out, userPlaceholder...)
-			out = append(out, bs[sepAtPos:sepEndPos]...)
-		} else {
-			out = append(out, bs[:sepEndPos]...)
-		}
-		bs = bs[sepEndPos:]
-		schemeSepPos = bytes.Index(bs, schemeSep)
-	}
-	out = append(out, bs...)
-	return schemelessCredentialURL.ReplaceAllString(UnsafeBytesToString(out), "${1}"+userPlaceholder+"@${3}")
+	s = schemeCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
+	return schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
 }
