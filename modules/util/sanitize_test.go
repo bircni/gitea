@@ -62,7 +62,7 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"//" + userInfoPlaceholder + "@h",
 		},
 		{
-			"s://u@h", // the minimal pattern to be sanitized
+			"s://u@h",
 			"s://" + userInfoPlaceholder + "@h",
 		},
 		{
