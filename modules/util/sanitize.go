@@ -85,6 +85,10 @@ func SanitizeCredentialURLs(s string) string {
 		}
 
 		leading, leftPart, rightPart := bs[:leftPos], bs[leftPos:sepAtPos], bs[sepAtPos+1:rightPos]
+
+		// Either:
+		// * git log message: "user:pass@host" (it contains a colon in userinfo)
+		// * http like URL: "https://userinfo@host.com" (it has "://" before the userinfo)
 		needSanitize := bytes.IndexByte(leftPart, ':') >= 0 || bytes.HasSuffix(leading, schemeSep)
 		needSanitize = needSanitize && len(leftPart) > 0 && len(rightPart) > 0
 		// TODO: can also do more checks for right part, e.g.: ipv6

@@ -34,6 +34,10 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"https://" + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 		{
+			"https://user:password@[::]/go-gitea/test_repo.git",
+			"https://" + userInfoPlaceholder + "@[::]/go-gitea/test_repo.git",
+		},
+		{
 			"ftp://x@",
 			"ftp://x@",
 		},
@@ -58,20 +62,20 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"//" + userInfoPlaceholder + "@h",
 		},
 		{
-			"fatal: unable to look up username:token@github.com (port 9418)",
-			"fatal: unable to look up " + userInfoPlaceholder + "@github.com (port 9418)",
-		},
-		{
-			"git failed for user:token@github.com/go-gitea/test_repo.git",
-			"git failed for " + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
-		},
-		{
 			"s://u@h", // the minimal pattern to be sanitized
 			"s://" + userInfoPlaceholder + "@h",
 		},
 		{
 			"URLs in log https://u:b@h and https://u:b@h:80/, with https://h.com and u@h.com",
 			"URLs in log https://" + userInfoPlaceholder + "@h and https://" + userInfoPlaceholder + "@h:80/, with https://h.com and u@h.com",
+		},
+		{
+			"fatal: unable to look up username:token@github.com (port 9418)",
+			"fatal: unable to look up " + userInfoPlaceholder + "@github.com (port 9418)",
+		},
+		{
+			"git failed for user:token@github.com/go-gitea/test_repo.git",
+			"git failed for " + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 	}
 
