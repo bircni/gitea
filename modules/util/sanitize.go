@@ -27,11 +27,11 @@ func SanitizeErrorCredentialURLs(err error) error {
 
 var schemeSep = []byte("://")
 
-const userPlaceholder = "(masked)"
+const userInfoPlaceholder = "(masked)"
 
 // SanitizeCredentialURLs remove all credentials in URLs for the input string:
-// * "https://userinfo@domain.com" => "https://sanitized-credential@domain.com"
-// * "user:pass@domain.com" => "sanitized-credential@domain.com"
+// * "https://userinfo@domain.com" => "https://***@domain.com"
+// * "user:pass@domain.com" => "***@domain.com"
 func SanitizeCredentialURLs(s string) string {
 	sepAtPos := strings.Index(s, "@")
 	sepColPos := strings.Index(s, ":")
@@ -39,7 +39,7 @@ func SanitizeCredentialURLs(s string) string {
 		return s // fast path, unlikely contain any URL
 	}
 
-	res := make([]byte, 0, len(s)+len(userPlaceholder)) // a best guess to avoid too many re-allocations
+	res := make([]byte, 0, len(s)+len(userInfoPlaceholder)) // a best guess to avoid too many re-allocations
 	bs := UnsafeStringToBytes(s)
 	for {
 		leftPos := sepAtPos - 1
@@ -90,7 +90,7 @@ func SanitizeCredentialURLs(s string) string {
 		// TODO: can also do more checks for right part, e.g.: ipv6
 		if needSanitize {
 			res = append(res, leading...)
-			res = append(res, userPlaceholder...)
+			res = append(res, userInfoPlaceholder...)
 			res = append(res, '@')
 			res = append(res, rightPart...)
 		} else {

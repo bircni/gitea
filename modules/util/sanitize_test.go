@@ -13,7 +13,7 @@ import (
 func TestSanitizeErrorCredentialURLs(t *testing.T) {
 	err := errors.New("error with https://a@b.com")
 	se := SanitizeErrorCredentialURLs(err)
-	assert.Equal(t, "error with https://"+userPlaceholder+"@b.com", se.Error())
+	assert.Equal(t, "error with https://"+userInfoPlaceholder+"@b.com", se.Error())
 }
 
 func TestSanitizeCredentialURLs(t *testing.T) {
@@ -27,11 +27,11 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 		},
 		{
 			"https://mytoken@github.com/go-gitea/test_repo.git",
-			"https://" + userPlaceholder + "@github.com/go-gitea/test_repo.git",
+			"https://" + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 		{
 			"https://user:password@github.com/go-gitea/test_repo.git",
-			"https://" + userPlaceholder + "@github.com/go-gitea/test_repo.git",
+			"https://" + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 		{
 			"ftp://x@",
@@ -43,11 +43,11 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 		},
 		{
 			"ftp://u@x/@", // test multiple @ chars
-			"ftp://" + userPlaceholder + "@x/@",
+			"ftp://" + userInfoPlaceholder + "@x/@",
 		},
 		{
 			"😊ftp://u@x😊", // test unicode
-			"😊ftp://" + userPlaceholder + "@x😊",
+			"😊ftp://" + userInfoPlaceholder + "@x😊",
 		},
 		{
 			"://@",
@@ -55,23 +55,23 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 		},
 		{
 			"//u:p@h",
-			"//" + userPlaceholder + "@h",
+			"//" + userInfoPlaceholder + "@h",
 		},
 		{
 			"fatal: unable to look up username:token@github.com (port 9418)",
-			"fatal: unable to look up " + userPlaceholder + "@github.com (port 9418)",
+			"fatal: unable to look up " + userInfoPlaceholder + "@github.com (port 9418)",
 		},
 		{
 			"git failed for user:token@github.com/go-gitea/test_repo.git",
-			"git failed for " + userPlaceholder + "@github.com/go-gitea/test_repo.git",
+			"git failed for " + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 		{
 			"s://u@h", // the minimal pattern to be sanitized
-			"s://" + userPlaceholder + "@h",
+			"s://" + userInfoPlaceholder + "@h",
 		},
 		{
 			"URLs in log https://u:b@h and https://u:b@h:80/, with https://h.com and u@h.com",
-			"URLs in log https://" + userPlaceholder + "@h and https://" + userPlaceholder + "@h:80/, with https://h.com and u@h.com",
+			"URLs in log https://" + userInfoPlaceholder + "@h and https://" + userInfoPlaceholder + "@h:80/, with https://h.com and u@h.com",
 		},
 	}
 
