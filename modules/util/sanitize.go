@@ -28,8 +28,8 @@ func SanitizeErrorCredentialURLs(err error) error {
 const userPlaceholder = "sanitized-credential"
 
 var (
-	schemeCredentialURL     = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9._~%!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
-	schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~%!$&'()*+,;=%-]+:[A-Za-z0-9._~%!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
+	schemeCredentialURL     = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?|$)`)
+	schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~!$&'()*+,;=%-]+:[A-Za-z0-9._~!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
 )
 
 // SanitizeCredentialURLs remove all credentials in URLs for the input string: "https://user:pass@domain.com" => "https://sanitized-credential@domain.com"
