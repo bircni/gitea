@@ -54,8 +54,16 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"://@",
 		},
 		{
-			"//u:p@h", // do not process URLs without explicit scheme, they are not treated as "valid" URLs because there is no scheme context in string
 			"//u:p@h",
+			"//" + userPlaceholder + "@h",
+		},
+		{
+			"fatal: unable to look up username:token@github.com (port 9418)",
+			"fatal: unable to look up " + userPlaceholder + "@github.com (port 9418)",
+		},
+		{
+			"git failed for user:token@github.com/go-gitea/test_repo.git",
+			"git failed for " + userPlaceholder + "@github.com/go-gitea/test_repo.git",
 		},
 		{
 			"s://u@h", // the minimal pattern to be sanitized

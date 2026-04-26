@@ -57,7 +57,7 @@ type Command struct {
 }
 
 func logArgSanitize(arg string) string {
-	if strings.Contains(arg, "://") && strings.Contains(arg, "@") {
+	if strings.Contains(arg, "://") || strings.Contains(arg, "@") {
 		return util.SanitizeCredentialURLs(arg)
 	} else if filepath.IsAbs(arg) {
 		base := filepath.Base(arg)

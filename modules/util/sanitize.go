@@ -5,6 +5,7 @@ package util
 
 import (
 	"bytes"
+	"regexp"
 	"unicode"
 )
 
@@ -27,14 +28,20 @@ func SanitizeErrorCredentialURLs(err error) error {
 
 const userPlaceholder = "sanitized-credential"
 
-var schemeSep = []byte("://")
+var (
+	schemeSep               = []byte("://")
+	schemelessCredentialURL = regexp.MustCompile(`(^|[^A-Za-z0-9._~%!$&'()*+,;=-])([A-Za-z0-9._~%!$&'()*+,;=%-]+:[A-Za-z0-9._~%!$&'()*+,;=:%-]+@)([A-Za-z0-9.-]+(:[0-9]+)?)`)
+)
 
-// SanitizeCredentialURLs remove all credentials in URLs (starting with "scheme://") for the input string: "https://user:pass@domain.com" => "https://sanitized-credential@domain.com"
+// SanitizeCredentialURLs remove all credentials in URLs for the input string: "https://user:pass@domain.com" => "https://sanitized-credential@domain.com"
 func SanitizeCredentialURLs(s string) string {
 	bs := UnsafeStringToBytes(s)
 	schemeSepPos := bytes.Index(bs, schemeSep)
-	if schemeSepPos == -1 || bytes.IndexByte(bs[schemeSepPos:], '@') == -1 {
-		return s // fast return if there is no URL scheme or no userinfo
+	if bytes.IndexByte(bs, '@') == -1 {
+		return s // fast return if there is no userinfo
+	}
+	if schemeSepPos == -1 {
+		return schemelessCredentialURL.ReplaceAllString(s, "${1}"+userPlaceholder+"@${3}")
 	}
 	out := make([]byte, 0, len(bs)+len(userPlaceholder))
 	for schemeSepPos != -1 {
@@ -68,5 +75,5 @@ func SanitizeCredentialURLs(s string) string {
 		schemeSepPos = bytes.Index(bs, schemeSep)
 	}
 	out = append(out, bs...)
-	return UnsafeBytesToString(out)
+	return schemelessCredentialURL.ReplaceAllString(UnsafeBytesToString(out), "${1}"+userPlaceholder+"@${3}")
 }

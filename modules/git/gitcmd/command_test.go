@@ -110,6 +110,9 @@ func TestCommandString(t *testing.T) {
 
 	cmd = NewCommand("url: https://a:b@c/", "/root/dir-a/dir-b")
 	assert.Equal(t, cmd.prog+` "url: https://sanitized-credential@c/" .../dir-a/dir-b`, cmd.LogString())
+
+	cmd = NewCommand("url: a:b@c/", "/root/dir-a/dir-b")
+	assert.Equal(t, cmd.prog+` "url: sanitized-credential@c/" .../dir-a/dir-b`, cmd.LogString())
 }
 
 func TestRunStdError(t *testing.T) {
