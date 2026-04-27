@@ -38,6 +38,18 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"https://" + userInfoPlaceholder + "@[::]/go-gitea/test_repo.git",
 		},
 		{
+			"https://user:password@[2001:db8::1]:8080/go-gitea/test_repo.git",
+			"https://" + userInfoPlaceholder + "@[2001:db8::1]:8080/go-gitea/test_repo.git",
+		},
+		{
+			"see https://u:p@[::1]/x and https://u2:p2@h2",
+			"see https://" + userInfoPlaceholder + "@[::1]/x and https://" + userInfoPlaceholder + "@h2",
+		},
+		{
+			"https://user:secret@[abc", // unmatched '[' must still mask credentials
+			"https://" + userInfoPlaceholder + "@[abc",
+		},
+		{
 			"ftp://x@",
 			"ftp://x@",
 		},
@@ -76,6 +88,11 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 		{
 			"git failed for user:token@github.com/go-gitea/test_repo.git",
 			"git failed for " + userInfoPlaceholder + "@github.com/go-gitea/test_repo.git",
+		},
+		{
+			// SSH-form git URL ("git@host:path") must not let a later credential URL through
+			"failed remote git@github.com:foo, retried via https://user:tok@github.com/foo",
+			"failed remote git@github.com:foo, retried via https://" + userInfoPlaceholder + "@github.com/foo",
 		},
 	}
 
