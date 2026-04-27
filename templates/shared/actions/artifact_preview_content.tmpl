@@ -49,7 +49,8 @@
 		</div>
 		<div class="twelve wide column">
 			{{if .SelectedPath}}
-				<iframe class="artifact-preview-frame" src="{{.PreviewRawURL}}/{{PathEscapeSegments .SelectedPath}}" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+				{{/* iframe sandbox="" matches the response CSP `sandbox` directive: opaque origin, no scripts, no forms, no popups. */}}
+				<iframe class="artifact-preview-frame" src="{{.PreviewRawURL}}/{{PathEscapeSegments .SelectedPath}}" sandbox="" referrerpolicy="no-referrer"></iframe>
 			{{else}}
 				<div class="ui attached segment">{{ctx.Locale.Tr "none"}}</div>
 			{{end}}

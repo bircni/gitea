@@ -1279,6 +1279,48 @@ func ArtifactsPreviewView(ctx *context_module.Context) {
 	ctx.HTML(http.StatusOK, tplArtifactPreviewAction)
 }
 
+// serveArtifactV4PreviewRaw opens the v4 artifact zip once and serves a single file from it,
+// avoiding the redundant parse that listPreviewPaths would do for raw fetches.
+func serveArtifactV4PreviewRaw(ctx *context_module.Context, artifact *actions_model.ActionArtifact, requested string) {
+	obj, reader, err := openArtifactV4ZipReader(artifact)
+	if err != nil {
+		if !errors.Is(err, zip.ErrFormat) {
+			ctx.ServerError("openArtifactV4ZipReader", err)
+			return
+		}
+		fallbackPath := artifactPreviewFallbackPath(artifact)
+		selectedPath := ChoosePreviewPath([]string{fallbackPath}, requested)
+		if selectedPath == "" {
+			ctx.HTTPError(http.StatusNotFound, "artifact file not found")
+			return
+		}
+		f, err := storage.ActionsArtifacts.Open(artifact.StoragePath)
+		if err != nil {
+			ctx.ServerError("ActionsArtifacts.Open", err)
+			return
+		}
+		defer f.Close()
+		previewArtifactByReadSeeker(ctx, selectedPath, f)
+		return
+	}
+	defer obj.Close()
+
+	paths, files := listArtifactV4ZipFiles(reader)
+	selectedPath := ChoosePreviewPath(paths, requested)
+	if selectedPath == "" {
+		ctx.HTTPError(http.StatusNotFound, "artifact file not found")
+		return
+	}
+	zf := files[selectedPath]
+	r, err := zf.Open()
+	if err != nil {
+		ctx.ServerError("zip.File.Open", err)
+		return
+	}
+	defer r.Close()
+	previewArtifactByReader(ctx, selectedPath, r)
+}
+
 func ArtifactsPreviewRawView(ctx *context_module.Context) {
 	artifactName := ctx.PathParam("artifact_name")
 
@@ -1286,61 +1328,17 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 	if !ok {
 		return
 	}
-
-	paths, err := listPreviewPaths(artifacts)
-	if err != nil {
-		ctx.ServerError("listPreviewPaths", err)
-		return
-	}
-	selectedPath := ChoosePreviewPath(paths, GetRequestedPreviewPath(ctx))
-	if selectedPath == "" {
-		ctx.HTTPError(http.StatusNotFound, "artifact file not found")
-		return
-	}
+	requested := GetRequestedPreviewPath(ctx)
 
 	if len(artifacts) == 1 && actions.IsArtifactV4(artifacts[0]) {
-		artifact := artifacts[0]
+		serveArtifactV4PreviewRaw(ctx, artifacts[0], requested)
+		return
+	}
 
-		obj, reader, err := openArtifactV4ZipReader(artifact)
-		if err != nil {
-			if !errors.Is(err, zip.ErrFormat) {
-				ctx.ServerError("openArtifactV4ZipReader", err)
-				return
-			}
-
-			fallbackPath := artifactPreviewFallbackPath(artifact)
-			if selectedPath != fallbackPath {
-				ctx.HTTPError(http.StatusNotFound, "artifact file not found")
-				return
-			}
-
-			f, err := storage.ActionsArtifacts.Open(artifact.StoragePath)
-			if err != nil {
-				ctx.ServerError("ActionsArtifacts.Open", err)
-				return
-			}
-			defer f.Close()
-
-			previewArtifactByReadSeeker(ctx, selectedPath, f)
-			return
-		}
-		defer obj.Close()
-
-		_, files := listArtifactV4ZipFiles(reader)
-		zf, ok := files[selectedPath]
-		if !ok {
-			ctx.HTTPError(http.StatusNotFound, "artifact file not found")
-			return
-		}
-
-		r, err := zf.Open()
-		if err != nil {
-			ctx.ServerError("zip.File.Open", err)
-			return
-		}
-		defer r.Close()
-
-		previewArtifactByReader(ctx, selectedPath, r)
+	paths := listPreviewPathsForLegacyArtifacts(artifacts)
+	selectedPath := ChoosePreviewPath(paths, requested)
+	if selectedPath == "" {
+		ctx.HTTPError(http.StatusNotFound, "artifact file not found")
 		return
 	}
 
