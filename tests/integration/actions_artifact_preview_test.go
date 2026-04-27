@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"archive/zip"
 	"bytes"
 	"net/http"
 	"net/url"
@@ -18,6 +19,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func buildArtifactZip(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for name, content := range files {
+		fw, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = fw.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
 
 func overwriteArtifactStorageContent(t *testing.T, artifactID int64, content []byte) {
 	t.Helper()
@@ -65,6 +80,25 @@ func TestActionsArtifactPreviewMultiFile(t *testing.T) {
 	assert.Equal(t, strings.Repeat("C", 1024), resp.Body.String())
 }
 
+func TestActionsArtifactPreviewPathTraversal(t *testing.T) {
+	defer prepareTestEnvActionsArtifacts(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+	session := loginUser(t, "user2")
+
+	// A traversal-style path normalizes to a path that doesn't match any file in
+	// the artifact. The page still renders with the file list, but no preview is selected.
+	req := NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/multi-file-download/preview?path=%s", repo.FullName(), url.QueryEscape("../../../etc/passwd"))
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), "abc.txt")
+	assert.NotContains(t, resp.Body.String(), "etc/passwd")
+	assert.NotContains(t, resp.Body.String(), "artifact-preview-frame")
+
+	// URL-encoded so the router doesn't collapse the segments before the handler sees them.
+	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/multi-file-download/preview/raw/%s", repo.FullName(), "%2E%2E%2F%2E%2E%2Fetc%2Fpasswd")
+	session.MakeRequest(t, req, http.StatusNotFound)
+}
+
 func TestActionsArtifactPreviewUnsupportedType(t *testing.T) {
 	defer prepareTestEnvActionsArtifacts(t)()
 
@@ -87,6 +121,41 @@ func TestActionsArtifactPreviewHTMLSandboxCSP(t *testing.T) {
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Header().Get("Content-Security-Policy"), "sandbox")
 	assert.Contains(t, resp.Header().Get("Content-Type"), "text/html")
+}
+
+func TestActionsArtifactPreviewV4Zip(t *testing.T) {
+	defer prepareTestEnvActionsArtifacts(t)()
+
+	zipBytes := buildArtifactZip(t, map[string]string{
+		"index.html":      "<html><body><h1>v4 zip</h1></body></html>",
+		"logs/output.txt": "v4 log output",
+	})
+	overwriteArtifactStorageContent(t, 22, zipBytes)
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+	session := loginUser(t, "user2")
+
+	// /preview lists files extracted from the zip's central directory.
+	req := NewRequestf(t, "GET", "/%s/actions/runs/188/artifacts/artifact-v4-download/preview", repo.FullName())
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	body := resp.Body.String()
+	assert.Contains(t, body, "index.html")
+	assert.Contains(t, body, "logs/output.txt")
+	assert.Contains(t, body, "/preview/raw/index.html")
+
+	req = NewRequestf(t, "GET", "/%s/actions/runs/188/artifacts/artifact-v4-download/preview/raw/index.html", repo.FullName())
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	assert.Equal(t, "<html><body><h1>v4 zip</h1></body></html>", resp.Body.String())
+	assert.Contains(t, resp.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, resp.Header().Get("Content-Security-Policy"), "sandbox")
+
+	req = NewRequestf(t, "GET", "/%s/actions/runs/188/artifacts/artifact-v4-download/preview/raw/logs/output.txt", repo.FullName())
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	assert.Equal(t, "v4 log output", resp.Body.String())
+
+	// Unknown path inside the zip returns 404 instead of falling back.
+	req = NewRequestf(t, "GET", "/%s/actions/runs/188/artifacts/artifact-v4-download/preview/raw/missing.txt", repo.FullName())
+	session.MakeRequest(t, req, http.StatusNotFound)
 }
 
 func TestActionsArtifactDownloadViewUnchanged(t *testing.T) {

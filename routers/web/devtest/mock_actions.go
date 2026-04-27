@@ -17,8 +17,8 @@ import (
 	"time"
 
 	actions_model "code.gitea.io/gitea/models/actions"
-	"code.gitea.io/gitea/modules/httplib"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
@@ -590,20 +590,14 @@ func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 		return
 	}
 
+	contentType := "text/plain; charset=utf-8"
 	if path.Ext(selectedFile.Path) == ".html" {
-		ctx.Resp.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
-		size := int64(len(selectedFile.Content))
-		ctx.ServeContent(strings.NewReader(selectedFile.Content), context.ServeHeaderOptions{
-			Filename:      selectedFile.Path,
-			ContentLength: &size,
-			ContentType:   "text/html",
-		})
-		return
+		contentType = "text/html"
 	}
 	size := int64(len(selectedFile.Content))
 	ctx.ServeContent(strings.NewReader(selectedFile.Content), context.ServeHeaderOptions{
 		Filename:      selectedFile.Path,
 		ContentLength: &size,
-		ContentType:   "text/plain; charset=utf-8",
+		ContentType:   contentType,
 	})
 }

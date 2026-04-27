@@ -1033,14 +1033,20 @@ func artifactPreviewFallbackPath(artifact *actions_model.ActionArtifact) string 
 	return artifact.ArtifactName
 }
 
+// choosePreviewPath resolves the preview path to render.
+// An empty `requested` means no path was specified, so the first file is selected as a default.
+// A non-empty `requested` that is not present in `paths` returns "" so callers can 404 instead of silently swapping to a different file.
 func choosePreviewPath(paths []string, requested string) string {
 	if len(paths) == 0 {
 		return ""
 	}
+	if requested == "" {
+		return paths[0]
+	}
 	if util.SliceContainsString(paths, requested) {
 		return requested
 	}
-	return paths[0]
+	return ""
 }
 
 func listPreviewPathsForLegacyArtifacts(artifacts []*actions_model.ActionArtifact) []string {
@@ -1120,7 +1126,7 @@ func listPreviewPathsForV4Artifact(artifact *actions_model.ActionArtifact) ([]st
 }
 
 func artifactPreviewV4ZipListCacheKey(artifact *actions_model.ActionArtifact) string {
-	return strconv.FormatInt(artifact.ID, 10) + ":" + strconv.FormatInt(int64(artifact.UpdatedUnix), 10) + ":" + artifact.StoragePath
+	return strconv.FormatInt(artifact.ID, 10) + ":" + strconv.FormatInt(int64(artifact.UpdatedUnix), 10)
 }
 
 func removeArtifactPreviewV4ZipListCacheOrderKey(order []string, key string) []string {
@@ -1159,9 +1165,10 @@ func setArtifactPreviewV4ZipListCache(artifact *actions_model.ActionArtifact, pa
 	artifactPreviewV4ZipListCache.mu.Lock()
 	defer artifactPreviewV4ZipListCache.mu.Unlock()
 
-	if _, ok := artifactPreviewV4ZipListCache.entries[key]; !ok {
-		artifactPreviewV4ZipListCache.order = append(artifactPreviewV4ZipListCache.order, key)
+	if _, ok := artifactPreviewV4ZipListCache.entries[key]; ok {
+		artifactPreviewV4ZipListCache.order = removeArtifactPreviewV4ZipListCacheOrderKey(artifactPreviewV4ZipListCache.order, key)
 	}
+	artifactPreviewV4ZipListCache.order = append(artifactPreviewV4ZipListCache.order, key)
 	artifactPreviewV4ZipListCache.entries[key] = artifactPreviewV4ZipListCacheEntry{
 		paths:     append([]string(nil), paths...),
 		expiresAt: time.Now().Add(artifactPreviewV4ZipListCacheTTL),
@@ -1188,13 +1195,7 @@ func isPreviewableArtifactType(st typesniffer.SniffedType) bool {
 	return st.IsText() || st.IsPDF()
 }
 
-func setArtifactPreviewCSP(ctx *context_module.Context, st typesniffer.SniffedType) {
-	if st.GetMimeType() == "text/html" {
-		ctx.Resp.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	}
-}
-
-func previewArtifactByReader(ctx *context_module.Context, path string, _ int64, reader io.Reader) {
+func previewArtifactByReader(ctx *context_module.Context, path string, reader io.Reader) {
 	buf := filebuffer.New(int(setting.UI.MaxDisplayFileSize), "")
 	defer buf.Close()
 	if _, err := io.Copy(buf, io.LimitReader(reader, setting.UI.MaxDisplayFileSize)); err != nil {
@@ -1227,15 +1228,8 @@ func previewArtifactByReadSeeker(ctx *context_module.Context, path string, reade
 		ctx.HTTPError(http.StatusUnsupportedMediaType, "artifact preview is not supported for this file type")
 		return
 	}
-	setArtifactPreviewCSP(ctx, st)
 
-	if st.GetMimeType() == "text/html" {
-		ctx.ServeContent(reader, context_module.ServeHeaderOptions{
-			Filename:    path,
-			ContentType: "text/html",
-		})
-		return
-	}
+	// CSP sandbox is applied by httplib.ServeSetHeaders, see HINT: PDF-RENDER-SANDBOX
 	ctx.ServeContent(reader, context_module.ServeHeaderOptions{
 		Filename:    path,
 		ContentType: st.GetMimeType(),
@@ -1343,7 +1337,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 		}
 		defer r.Close()
 
-		previewArtifactByReader(ctx, selectedPath, int64(zf.UncompressedSize64), r)
+		previewArtifactByReader(ctx, selectedPath, r)
 		return
 	}
 
@@ -1377,7 +1371,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 		}
 		defer r.Close()
 
-		previewArtifactByReader(ctx, selectedPath, artifact.FileSize, r)
+		previewArtifactByReader(ctx, selectedPath, r)
 		return
 	}
 
