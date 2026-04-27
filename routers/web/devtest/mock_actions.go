@@ -17,6 +17,7 @@ import (
 	"time"
 
 	actions_model "code.gitea.io/gitea/models/actions"
+	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/modules/web"
@@ -34,6 +35,106 @@ var mockActionsArtifactFiles = map[string][]mockArtifactFile{
 		{
 			Path:    "report.txt",
 			Content: "artifact-b report",
+		},
+	},
+	"artifact-lcov-coverage": {
+		{
+			Path: "coverage/index.html",
+			Content: `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Coverage Report</title>
+    <style>
+      body { font-family: sans-serif; margin: 2rem; }
+      table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+      th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+      .ok { color: #1f883d; font-weight: 600; }
+      .warn { color: #9a6700; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>LCOV Coverage Report</h1>
+    <p>Generated from mock fixture artifact.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Lines</th>
+          <th>Branches</th>
+          <th>Functions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>web_src/js/components/RepoActionView.vue</td>
+          <td class="ok">100.0% (7/7)</td>
+          <td class="warn">75.0% (3/4)</td>
+          <td class="ok">100.0% (3/3)</td>
+        </tr>
+        <tr>
+          <td>web_src/js/features/repo-actions.ts</td>
+          <td class="ok">100.0% (5/5)</td>
+          <td>n/a</td>
+          <td class="ok">100.0% (2/2)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><a href="./lcov.info">Open raw lcov.info</a></p>
+  </body>
+</html>`,
+		},
+		{
+			Path: "coverage/lcov.info",
+			Content: `TN:
+SF:web_src/js/components/RepoActionView.vue
+FN:33,artifactBaseURL
+FN:37,artifactPreviewURL
+FN:41,deleteArtifact
+FNF:3
+FNH:3
+FNDA:9,artifactBaseURL
+FNDA:8,artifactPreviewURL
+FNDA:2,deleteArtifact
+DA:33,9
+DA:34,9
+DA:37,8
+DA:38,8
+DA:41,2
+DA:42,2
+DA:43,2
+LF:7
+LH:7
+BRDA:131,0,0,1
+BRDA:131,0,1,3
+BRDA:140,1,0,1
+BRDA:140,1,1,0
+BRF:4
+BRH:3
+end_of_record
+TN:
+SF:web_src/js/features/repo-actions.ts
+FN:12,loadRunView
+FN:61,fetchRunArtifacts
+FNF:2
+FNH:2
+FNDA:5,loadRunView
+FNDA:5,fetchRunArtifacts
+DA:12,5
+DA:13,5
+DA:14,5
+DA:61,5
+DA:62,5
+LF:5
+LH:5
+BRF:0
+BRH:0
+end_of_record
+`,
+		},
+		{
+			Path:    "coverage/summary.txt",
+			Content: "HTML coverage fixture with linked lcov.info and realistic function/line/branch records.",
 		},
 	},
 	"artifact-really-loooooooooooooooooooooooooooooooooooooooooooooooooooooooong": {
@@ -158,6 +259,11 @@ func MockActionsRunsJobs(ctx *context.Context) {
 	resp.Artifacts = append(resp.Artifacts, &actions.ArtifactsViewItem{
 		Name:   "artifact-b",
 		Size:   1024 * 1024,
+		Status: "completed",
+	})
+	resp.Artifacts = append(resp.Artifacts, &actions.ArtifactsViewItem{
+		Name:   "artifact-lcov-coverage",
+		Size:   256 * 1024,
 		Status: "completed",
 	})
 	resp.Artifacts = append(resp.Artifacts, &actions.ArtifactsViewItem{
@@ -291,7 +397,7 @@ func MockActionsArtifactDownload(ctx *context.Context) {
 		return
 	}
 
-	ctx.Resp.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.zip; filename*=UTF-8''%s.zip", url.PathEscape(artifactName), artifactName))
+	ctx.Resp.Header().Set("Content-Disposition", httplib.EncodeContentDispositionAttachment(artifactName+".zip"))
 	writer := zip.NewWriter(ctx.Resp)
 	defer writer.Close()
 	for _, file := range files {

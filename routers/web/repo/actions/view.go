@@ -135,6 +135,24 @@ type ArtifactPreviewFile struct {
 	Selected bool
 }
 
+const (
+	artifactPreviewV4ZipListCacheTTL        = 10 * time.Minute
+	artifactPreviewV4ZipListCacheMaxEntries = 128
+)
+
+type artifactPreviewV4ZipListCacheEntry struct {
+	paths     []string
+	expiresAt time.Time
+}
+
+var artifactPreviewV4ZipListCache = struct {
+	mu      sync.Mutex
+	entries map[string]artifactPreviewV4ZipListCacheEntry
+	order   []string
+}{
+	entries: map[string]artifactPreviewV4ZipListCacheEntry{},
+}
+
 type readAtBySeeker struct {
 	rs io.ReadSeeker
 	mu sync.Mutex
@@ -841,17 +859,82 @@ func listArtifactV4ZipFiles(reader *zip.Reader) ([]string, map[string]*zip.File)
 }
 
 func listPreviewPathsForV4Artifact(artifact *actions_model.ActionArtifact) ([]string, error) {
+	if paths, ok := getArtifactPreviewV4ZipListFromCache(artifact); ok {
+		return paths, nil
+	}
+
 	obj, reader, err := openArtifactV4ZipReader(artifact)
 	if err != nil {
 		if errors.Is(err, zip.ErrFormat) {
-			return []string{artifactPreviewFallbackPath(artifact)}, nil
+			paths := []string{artifactPreviewFallbackPath(artifact)}
+			setArtifactPreviewV4ZipListCache(artifact, paths)
+			return paths, nil
 		}
 		return nil, err
 	}
 	defer obj.Close()
 
 	paths, _ := listArtifactV4ZipFiles(reader)
+	setArtifactPreviewV4ZipListCache(artifact, paths)
 	return paths, nil
+}
+
+func artifactPreviewV4ZipListCacheKey(artifact *actions_model.ActionArtifact) string {
+	return strconv.FormatInt(artifact.ID, 10) + ":" + strconv.FormatInt(int64(artifact.UpdatedUnix), 10) + ":" + artifact.StoragePath
+}
+
+func removeArtifactPreviewV4ZipListCacheOrderKey(order []string, key string) []string {
+	for i, current := range order {
+		if current != key {
+			continue
+		}
+		return append(order[:i], order[i+1:]...)
+	}
+	return order
+}
+
+func getArtifactPreviewV4ZipListFromCache(artifact *actions_model.ActionArtifact) ([]string, bool) {
+	key := artifactPreviewV4ZipListCacheKey(artifact)
+
+	artifactPreviewV4ZipListCache.mu.Lock()
+	entry, ok := artifactPreviewV4ZipListCache.entries[key]
+	if !ok {
+		artifactPreviewV4ZipListCache.mu.Unlock()
+		return nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(artifactPreviewV4ZipListCache.entries, key)
+		artifactPreviewV4ZipListCache.order = removeArtifactPreviewV4ZipListCacheOrderKey(artifactPreviewV4ZipListCache.order, key)
+		artifactPreviewV4ZipListCache.mu.Unlock()
+		return nil, false
+	}
+	paths := append([]string(nil), entry.paths...)
+	artifactPreviewV4ZipListCache.mu.Unlock()
+	return paths, true
+}
+
+func setArtifactPreviewV4ZipListCache(artifact *actions_model.ActionArtifact, paths []string) {
+	key := artifactPreviewV4ZipListCacheKey(artifact)
+
+	artifactPreviewV4ZipListCache.mu.Lock()
+	defer artifactPreviewV4ZipListCache.mu.Unlock()
+
+	if _, ok := artifactPreviewV4ZipListCache.entries[key]; !ok {
+		artifactPreviewV4ZipListCache.order = append(artifactPreviewV4ZipListCache.order, key)
+	}
+	artifactPreviewV4ZipListCache.entries[key] = artifactPreviewV4ZipListCacheEntry{
+		paths:     append([]string(nil), paths...),
+		expiresAt: time.Now().Add(artifactPreviewV4ZipListCacheTTL),
+	}
+
+	for len(artifactPreviewV4ZipListCache.entries) > artifactPreviewV4ZipListCacheMaxEntries && len(artifactPreviewV4ZipListCache.order) > 0 {
+		oldestKey := artifactPreviewV4ZipListCache.order[0]
+		artifactPreviewV4ZipListCache.order = artifactPreviewV4ZipListCache.order[1:]
+		if _, ok := artifactPreviewV4ZipListCache.entries[oldestKey]; !ok {
+			continue
+		}
+		delete(artifactPreviewV4ZipListCache.entries, oldestKey)
+	}
 }
 
 func listPreviewPaths(artifacts []*actions_model.ActionArtifact) ([]string, error) {
@@ -1081,7 +1164,7 @@ func ArtifactsDownloadView(ctx *context_module.Context) {
 		return
 	}
 
-	ctx.Resp.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.zip; filename*=UTF-8''%s.zip", url.PathEscape(artifactName), artifactName))
+	ctx.Resp.Header().Set("Content-Disposition", httplib.EncodeContentDispositionAttachment(artifactName+".zip"))
 	if len(artifacts) == 1 && actions.IsArtifactV4(artifacts[0]) {
 		err := actions.DownloadArtifactV4(ctx.Base, artifacts[0])
 		if err != nil {
@@ -1093,7 +1176,6 @@ func ArtifactsDownloadView(ctx *context_module.Context) {
 
 	// Artifacts using the v1-v3 backend are stored as multiple individual files per artifact on the backend
 	// Those need to be zipped for download
-	ctx.Resp.Header().Set("Content-Disposition", httplib.EncodeContentDispositionAttachment(artifactName+".zip"))
 	zipWriter := zip.NewWriter(ctx.Resp)
 	defer zipWriter.Close()
 

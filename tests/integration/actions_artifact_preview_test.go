@@ -36,6 +36,8 @@ func TestActionsArtifactPreviewSingleFile(t *testing.T) {
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Body.String(), "abc.txt")
 	assert.Contains(t, resp.Body.String(), "/preview/raw/abc.txt")
+	assert.Contains(t, resp.Body.String(), "sandbox=\"allow-scripts\"")
+	assert.Contains(t, resp.Body.String(), "referrerpolicy=\"no-referrer\"")
 
 	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/artifact-download/preview/raw", repo.FullName())
 	resp = session.MakeRequest(t, req, http.StatusOK)
@@ -54,7 +56,11 @@ func TestActionsArtifactPreviewMultiFile(t *testing.T) {
 	assert.Contains(t, resp.Body.String(), "abc.txt")
 	assert.Contains(t, resp.Body.String(), "xyz/def.txt")
 
-	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/multi-file-download/preview/raw?path=%s", repo.FullName(), url.QueryEscape("xyz/def.txt"))
+	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/multi-file-download/preview?path=%s", repo.FullName(), url.QueryEscape("xyz/def.txt"))
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), "/preview/raw/xyz/def.txt")
+
+	req = NewRequestf(t, "GET", "/%s/actions/runs/187/artifacts/multi-file-download/preview/raw/xyz/def.txt", repo.FullName())
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	assert.Equal(t, strings.Repeat("C", 1024), resp.Body.String())
 }
