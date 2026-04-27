@@ -157,24 +157,12 @@ end_of_record
 	},
 }
 
-func normalizeMockArtifactPath(path string) string {
-	path = util.PathJoinRelX(path)
-	if path == "." {
-		return ""
+func mockArtifactFilePaths(files []mockArtifactFile) []string {
+	paths := make([]string, len(files))
+	for i, file := range files {
+		paths[i] = file.Path
 	}
-	return path
-}
-
-func chooseMockArtifactPath(files []mockArtifactFile, requestedPath string) string {
-	if len(files) == 0 {
-		return ""
-	}
-	for _, file := range files {
-		if file.Path == requestedPath {
-			return requestedPath
-		}
-	}
-	return files[0].Path
+	return paths
 }
 
 type generateMockStepsLogOptions struct {
@@ -534,11 +522,7 @@ func MockActionsArtifactPreview(ctx *context.Context) {
 		return
 	}
 
-	selectedPath := normalizeMockArtifactPath(strings.TrimPrefix(ctx.PathParam("*"), "/"))
-	if selectedPath == "" {
-		selectedPath = normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path"))
-	}
-	selectedPath = chooseMockArtifactPath(files, selectedPath)
+	selectedPath := actions.ChoosePreviewPath(mockArtifactFilePaths(files), actions.GetRequestedPreviewPath(ctx))
 	previewFiles := make([]actions.ArtifactPreviewFile, 0, len(files))
 	for _, file := range files {
 		previewFiles = append(previewFiles, actions.ArtifactPreviewFile{
@@ -568,11 +552,7 @@ func MockActionsArtifactPreviewRaw(ctx *context.Context) {
 		return
 	}
 
-	selectedPath := normalizeMockArtifactPath(strings.TrimPrefix(ctx.PathParam("*"), "/"))
-	if selectedPath == "" {
-		selectedPath = normalizeMockArtifactPath(ctx.Req.URL.Query().Get("path"))
-	}
-	selectedPath = chooseMockArtifactPath(files, selectedPath)
+	selectedPath := actions.ChoosePreviewPath(mockArtifactFilePaths(files), actions.GetRequestedPreviewPath(ctx))
 	if selectedPath == "" {
 		ctx.NotFound(nil)
 		return

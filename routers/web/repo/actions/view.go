@@ -1017,7 +1017,10 @@ func normalizeArtifactPreviewPath(path string) string {
 	return path
 }
 
-func getRequestedPreviewPath(ctx *context_module.Context) string {
+// GetRequestedPreviewPath reads the requested artifact preview path from a
+// request, accepting either the trailing `/preview/raw/*` path segment or a
+// `?path=` query parameter, and normalizes it to a safe relative path.
+func GetRequestedPreviewPath(ctx *context_module.Context) string {
 	path := strings.TrimPrefix(ctx.PathParam("*"), "/")
 	if path == "" {
 		path = ctx.Req.URL.Query().Get("path")
@@ -1033,10 +1036,10 @@ func artifactPreviewFallbackPath(artifact *actions_model.ActionArtifact) string 
 	return artifact.ArtifactName
 }
 
-// choosePreviewPath resolves the preview path to render.
+// ChoosePreviewPath resolves the preview path to render.
 // An empty `requested` means no path was specified, so the first file is selected as a default.
 // A non-empty `requested` that is not present in `paths` returns "" so callers can 404 instead of silently swapping to a different file.
-func choosePreviewPath(paths []string, requested string) string {
+func ChoosePreviewPath(paths []string, requested string) string {
 	if len(paths) == 0 {
 		return ""
 	}
@@ -1249,7 +1252,7 @@ func ArtifactsPreviewView(ctx *context_module.Context) {
 		ctx.ServerError("listPreviewPaths", err)
 		return
 	}
-	selectedPath := choosePreviewPath(paths, getRequestedPreviewPath(ctx))
+	selectedPath := ChoosePreviewPath(paths, GetRequestedPreviewPath(ctx))
 
 	previewFiles := make([]ArtifactPreviewFile, 0, len(paths))
 	for _, path := range paths {
@@ -1289,7 +1292,7 @@ func ArtifactsPreviewRawView(ctx *context_module.Context) {
 		ctx.ServerError("listPreviewPaths", err)
 		return
 	}
-	selectedPath := choosePreviewPath(paths, getRequestedPreviewPath(ctx))
+	selectedPath := ChoosePreviewPath(paths, GetRequestedPreviewPath(ctx))
 	if selectedPath == "" {
 		ctx.HTTPError(http.StatusNotFound, "artifact file not found")
 		return
