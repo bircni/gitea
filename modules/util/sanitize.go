@@ -36,14 +36,19 @@ const userInfoPlaceholder = "(masked)"
 // "***" is a magic string internally used, doesn't guarantee to be anything.
 func SanitizeCredentialURLs(s string) string {
 	sepColPos := strings.Index(s, ":")
-	sepAtPos := sepColPos + 1 + strings.Index(s[sepColPos+1:], "@")
-	for sepAtPos == -1 {
-		return s // fast path, unlikely contain any URL
+	if sepColPos == -1 {
+		return s // fast path: no colon, unlikely contain any URL credential
 	}
+	sepAtPos := strings.Index(s[sepColPos+1:], "@")
+	for sepAtPos == -1 {
+		return s // fast path: no "@" after colon, unlikely contain any URL credential
+	}
+	sepAtPos += sepColPos + 1
 
 	res := make([]byte, 0, len(s)+len(userInfoPlaceholder)) // a best guess to avoid too many re-allocations
 	bs := UnsafeStringToBytes(s)
 	for {
+		// left part (before "@") is likely to be the "userinfo" (single username, or "username:password")
 		leftPos := sepAtPos - 1
 	leftLoop:
 		for leftPos >= 0 {
@@ -59,8 +64,10 @@ func SanitizeCredentialURLs(s string) string {
 			}
 			leftPos--
 		}
+		// left pos should point to the beginning of the left part, this pos is always valid in the buffer
 		leftPos++
 
+		// right part is likely to be the host (domain name, ip address)
 		rightPos := sepAtPos + 1
 	rightLoop:
 		for rightPos < len(bs) {
@@ -93,7 +100,7 @@ func SanitizeCredentialURLs(s string) string {
 		leading, leftPart, rightPart := bs[:leftPos], bs[leftPos:sepAtPos], bs[sepAtPos+1:rightPos]
 
 		// Either:
-		// * git log message: "user:pass@host" (it contains a colon in userinfo)
+		// * git log message: "user:pass@host" (it contains a colon in userinfo), ignore "git@host" pattern
 		// * http like URL: "https://userinfo@host.com" (it has "://" before the userinfo)
 		needSanitize := bytes.IndexByte(leftPart, ':') >= 0 || bytes.HasSuffix(leading, schemeSep)
 		needSanitize = needSanitize && len(leftPart) > 0 && len(rightPart) > 0
