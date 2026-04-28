@@ -5,6 +5,7 @@ package util
 
 import (
 	"bytes"
+	"net"
 	"strings"
 )
 
@@ -78,6 +79,10 @@ func SanitizeCredentialURLs(s string) string {
 				break rightLoop
 			default:
 				valid := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+				if bs[sepAtPos+1] == '[' {
+					// ipv6 host
+					valid = 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F' || '0' <= c && c <= '9' || c == ':'
+				}
 				if !valid {
 					break rightLoop
 				}
@@ -92,7 +97,11 @@ func SanitizeCredentialURLs(s string) string {
 		// * http like URL: "https://userinfo@host.com" (it has "://" before the userinfo)
 		needSanitize := bytes.IndexByte(leftPart, ':') >= 0 || bytes.HasSuffix(leading, schemeSep)
 		needSanitize = needSanitize && len(leftPart) > 0 && len(rightPart) > 0
-		// TODO: can also do more checks for right part, e.g.: ipv6
+		// TODO: can also do more checks for right part
+		// for example: ipv6 quick check
+		if needSanitize && rightPart[0] == '[' {
+			needSanitize = rightPart[len(rightPart)-1] == ']' && net.ParseIP(UnsafeBytesToString(rightPart[1:len(rightPart)-1])) != nil
+		}
 		if needSanitize {
 			res = append(res, leading...)
 			res = append(res, userInfoPlaceholder...)

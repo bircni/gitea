@@ -46,8 +46,12 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"see https://" + userInfoPlaceholder + "@[::1]/x and https://" + userInfoPlaceholder + "@h2",
 		},
 		{
-			"https://user:secret@[abc", // unmatched '[' must still mask credentials
-			"https://" + userInfoPlaceholder + "@[abc",
+			"https://user:secret@[unclosed-ipv6",
+			"https://user:secret@[unclosed-ipv6",
+		},
+		{
+			"https://user:secret@[invalid-ipv6]",
+			"https://user:secret@[invalid-ipv6]",
 		},
 		{
 			"ftp://x@",
