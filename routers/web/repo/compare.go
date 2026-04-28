@@ -415,7 +415,7 @@ func ParseCompareInfo(ctx *context.Context) (*git_service.CompareInfo, bool) {
 	if err != nil {
 		var noMergeBase gitrepo.ErrNoMergeBase
 		if errors.As(err, &noMergeBase) {
-			return &compareInfo, true
+			return compareInfo, true
 		}
 		ctx.ServerError("GetCompareInfo", err)
 		return nil, false
@@ -425,7 +425,7 @@ func ParseCompareInfo(ctx *context.Context) (*git_service.CompareInfo, bool) {
 	} else {
 		ctx.Data["BeforeCommitID"] = compareInfo.MergeBase
 	}
-	return &compareInfo, false
+	return compareInfo, false
 }
 
 func prepareNewPullRequestTitleContent(ci *git_service.CompareInfo, commits []*git_model.SignCommitWithStatuses) (title, content string) {
