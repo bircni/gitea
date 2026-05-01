@@ -708,7 +708,7 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
 
 .graph-container {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   padding: 10px 14px 18px;
   border-radius: 0 0 var(--border-radius) var(--border-radius);
   cursor: grab;

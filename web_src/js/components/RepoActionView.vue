@@ -155,9 +155,9 @@ async function deleteArtifact(name: string) {
           <li class="item job-brief-item" v-for="job in run.jobs" :key="job.id" :class="props.jobId === job.id ? 'selected' : ''">
             <a class="tw-contents silenced" :href="job.link">
               <ActionRunStatus :locale-status="locale.status[job.status]" :status="job.status"/>
-              <span class="tw-flex-1 gt-ellipsis">{{ job.name }}</span>
+              <span class="job-brief-name tw-flex-1 gt-ellipsis">{{ job.name }}</span>
               <SvgIcon name="octicon-sync" role="button" :data-tooltip-content="locale.rerun" class="tw-cursor-pointer link-action interact-fg" :data-url="`${run.link}/jobs/${job.id}/rerun`" v-if="job.canRerun"/>
-              <span>{{ job.duration }}</span>
+              <span class="job-brief-duration" :data-tooltip-content="job.duration">{{ job.duration }}</span>
             </a>
           </li>
         </ul>
@@ -321,6 +321,21 @@ async function deleteArtifact(name: string) {
   flex-wrap: nowrap;
   align-items: center;
   gap: var(--gap-block);
+}
+
+.job-brief-name {
+  min-width: 0;
+}
+
+.job-brief-duration {
+  flex-shrink: 0;
+  min-width: 9ch;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--fonts-monospace);
+  font-size: 12px;
+  color: var(--color-text-light-2);
 }
 
 .job-brief-item:hover {

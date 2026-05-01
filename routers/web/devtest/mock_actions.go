@@ -240,7 +240,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		Name:     "ULTRA LOOOOOOOOOOOONG job name 102 that exceeds the limit",
 		Status:   actions_model.StatusFailure.String(),
 		CanRerun: false,
-		Duration: "3h",
+		Duration: "3h35m10s",
 		Needs:    []string{"job-100", "job-101"},
 	})
 	resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
@@ -267,6 +267,51 @@ func MockActionsRunsJobs(ctx *context.Context) {
 				CanRerun: false,
 				Duration: "2m",
 				Needs:    []string{"job-103", "job-101", "job-100"},
+			})
+		}
+	}
+
+	// A wide DAG to reproduce graph overflow and long-duration layout issues.
+	// It creates multiple dependency levels horizontally so the SVG exceeds the container width.
+	if runID == 40 {
+		resp.State.Run.WorkflowID = "workflow-wide-dag"
+		resp.State.Run.Duration = "7h 12m 34s"
+
+		type mockJob struct {
+			jobID    string
+			name     string
+			duration string
+			needs    []string
+		}
+
+		mockJobs := []mockJob{
+			{jobID: "wide-00", name: "Bootstrap", duration: "2m", needs: nil},
+			{jobID: "wide-01", name: "Fetch dependencies", duration: "4m", needs: nil},
+			{jobID: "wide-10", name: "Lint (JS)", duration: "12m", needs: []string{"wide-00", "wide-01"}},
+			{jobID: "wide-11", name: "Lint (Go)", duration: "9m", needs: []string{"wide-00", "wide-01"}},
+			{jobID: "wide-12", name: "Typecheck", duration: "18m", needs: []string{"wide-00", "wide-01"}},
+			{jobID: "wide-20", name: "Unit tests (fast)", duration: "1h2m3s", needs: []string{"wide-10"}},
+			{jobID: "wide-21", name: "Unit tests (slow)", duration: "3h35m10s", needs: []string{"wide-11"}},
+			{jobID: "wide-22", name: "Integration tests", duration: "47m", needs: []string{"wide-12"}},
+			{jobID: "wide-30", name: "Build linux/amd64", duration: "22m", needs: []string{"wide-20", "wide-21"}},
+			{jobID: "wide-31", name: "Build windows/amd64", duration: "25m", needs: []string{"wide-20", "wide-22"}},
+			{jobID: "wide-40", name: "E2E (chromium)", duration: "33m", needs: []string{"wide-30"}},
+			{jobID: "wide-41", name: "E2E (firefox)", duration: "31m", needs: []string{"wide-31"}},
+			{jobID: "wide-50", name: "Package artifacts", duration: "6m", needs: []string{"wide-40", "wide-41"}},
+			{jobID: "wide-60", name: "Deploy preview environment with an extremely long job name that used to get squeezed by the duration label", duration: "14m", needs: []string{"wide-50"}},
+		}
+
+		for i, mj := range mockJobs {
+			id := runID*1000 + int64(i)
+			resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
+				ID:       id,
+				Link:     jobLink(id),
+				JobID:    mj.jobID,
+				Name:     mj.name,
+				Status:   actions_model.StatusSuccess.String(),
+				CanRerun: false,
+				Duration: mj.duration,
+				Needs:    mj.needs,
 			})
 		}
 	}
