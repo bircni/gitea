@@ -1,0 +1,779 @@
+import type {ActionsJob, ActionsRunStatus} from '../modules/gitea-actions.ts';
+
+export type GraphNodeType = 'job' | 'matrix' | 'group';
+
+export type GraphNode = {
+  id: string;
+  type: GraphNodeType;
+  name: string;
+  status: ActionsRunStatus;
+  duration: string;
+  x: number;
+  y: number;
+  level: number;
+  displayHeight: number;
+  jobs: ActionsJob[];
+  matrixKey?: string;
+};
+
+export type Edge = {
+  fromId: string;
+  toId: string;
+  key: string;
+};
+
+export type RoutedEdge = Edge & {
+  path: string;
+  fromNode: GraphNode;
+  toNode: GraphNode;
+};
+
+export type IncomingBundle = {
+  key: string;
+  toId: string;
+  fromIds: string[];
+  path: string;
+};
+
+export type OutgoingBundle = {
+  key: string;
+  fromId: string;
+  toIds: string[];
+  path: string;
+};
+
+export type WorkflowGraphLayoutOptions = {
+  margin: number;
+  nodeWidth: number;
+  nodeHeight: number;
+  columnGap: number;
+  laneGap: number;
+  groupRowHeight: number;
+  groupPadY: number;
+  matrixCollapsedHeight: number;
+  matrixHeaderHeight: number;
+  matrixRowHeight: number;
+  matrixPadY: number;
+  bundleStub: number;
+};
+
+export type WorkflowGraphModel = {
+  nodes: GraphNode[];
+  edges: Edge[];
+  routedEdges: RoutedEdge[];
+  incomingBundles: IncomingBundle[];
+  outgoingBundles: OutgoingBundle[];
+};
+
+const defaultLayoutOptions: WorkflowGraphLayoutOptions = {
+  margin: 24,
+  nodeWidth: 220,
+  nodeHeight: 40,
+  columnGap: 96,
+  laneGap: 26,
+  groupRowHeight: 28,
+  groupPadY: 8,
+  matrixCollapsedHeight: 96,
+  matrixHeaderHeight: 24,
+  matrixRowHeight: 28,
+  matrixPadY: 8,
+  bundleStub: 18,
+};
+
+function canonicalNeedsKey(needs: string[] | undefined): string {
+  if (!needs?.length) return '';
+  return Array.from(needs).sort().join('\u0001');
+}
+
+function graphIdForJob(job: ActionsJob): string {
+  return `job:${job.id}`;
+}
+
+export function matrixKeyFromJobName(name: string): string | null {
+  const idx = name.indexOf(' (');
+  if (idx === -1) return null;
+  return name.slice(0, idx).trim() || null;
+}
+
+export function boxBottom(node: GraphNode): number {
+  return node.y + node.displayHeight;
+}
+
+export function boxCenterY(node: GraphNode): number {
+  return node.y + node.displayHeight / 2;
+}
+
+function matrixPanelHeight(rowCount: number, expanded: boolean, options: WorkflowGraphLayoutOptions): number {
+  if (rowCount <= 0) return options.nodeHeight;
+  if (!expanded) return options.matrixCollapsedHeight;
+  return options.matrixHeaderHeight + (rowCount + 2) * options.matrixRowHeight + options.matrixPadY * 2;
+}
+
+function groupPanelHeight(rowCount: number, options: WorkflowGraphLayoutOptions): number {
+  return rowCount * options.groupRowHeight + options.groupPadY * 2;
+}
+
+function compareStatusWorstFirst(a: ActionsRunStatus, b: ActionsRunStatus): number {
+  const rank = (s: ActionsRunStatus) => {
+    if (s === 'failure') return 0;
+    if (s === 'cancelled') return 1;
+    if (s === 'running') return 2;
+    if (s === 'waiting') return 3;
+    if (s === 'blocked') return 4;
+    if (s === 'success') return 5;
+    if (s === 'skipped') return 6;
+    return 7;
+  };
+  return rank(a) - rank(b);
+}
+
+function aggregateStatus(children: ActionsJob[]): ActionsRunStatus {
+  return children.map((c) => c.status).slice().sort(compareStatusWorstFirst)[0] ?? 'unknown';
+}
+
+export function buildDirectNeedsMap(jobs: ActionsJob[]): Map<string, string[]> {
+  const directNeedsByJobId = new Map<string, string[]>();
+  const dependentsByJobId = new Map<string, Set<string>>();
+
+  for (const job of jobs) {
+    const needs = job.needs || [];
+    directNeedsByJobId.set(job.jobId, needs);
+
+    for (const need of needs) {
+      if (!dependentsByJobId.has(need)) {
+        dependentsByJobId.set(need, new Set());
+      }
+      dependentsByJobId.get(need)?.add(job.jobId);
+    }
+  }
+
+  const reachabilityCache = new Map<string, boolean>();
+
+  function canReach(fromJobId: string, toJobId: string): boolean {
+    const cacheKey = `${fromJobId}->${toJobId}`;
+    if (reachabilityCache.has(cacheKey)) {
+      return reachabilityCache.get(cacheKey) ?? false;
+    }
+
+    const visited = new Set<string>();
+    const stack = Array.from(dependentsByJobId.get(fromJobId) || []);
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current) continue;
+      if (current === toJobId) {
+        reachabilityCache.set(cacheKey, true);
+        return true;
+      }
+      if (visited.has(current)) continue;
+      visited.add(current);
+      stack.push(...(dependentsByJobId.get(current) || []));
+    }
+
+    reachabilityCache.set(cacheKey, false);
+    return false;
+  }
+
+  const reducedNeedsByJobId = new Map<string, string[]>();
+  for (const [jobId, needs] of directNeedsByJobId.entries()) {
+    reducedNeedsByJobId.set(jobId, needs.filter((need) => {
+      return !needs.some((otherNeed) => otherNeed !== need && canReach(need, otherNeed));
+    }));
+  }
+
+  return reducedNeedsByJobId;
+}
+
+export function computeJobLevels(jobs: ActionsJob[]): Map<string, number> {
+  const jobMap = new Map<string, ActionsJob>();
+  for (const job of jobs) {
+    jobMap.set(job.name, job);
+    if (job.jobId) jobMap.set(job.jobId, job);
+  }
+
+  const levels = new Map<string, number>();
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+
+  function dfs(jobNameOrId: string): number {
+    if (recursionStack.has(jobNameOrId)) return 0;
+    if (visited.has(jobNameOrId)) return levels.get(jobNameOrId) ?? 0;
+
+    recursionStack.add(jobNameOrId);
+    visited.add(jobNameOrId);
+
+    const job = jobMap.get(jobNameOrId);
+    if (!job) {
+      recursionStack.delete(jobNameOrId);
+      return 0;
+    }
+
+    if (!job.needs?.length) {
+      levels.set(job.jobId, 0);
+      if (job.jobId !== job.name) levels.set(job.name, 0);
+      recursionStack.delete(jobNameOrId);
+      return 0;
+    }
+
+    let maxLevel = -1;
+    for (const need of job.needs) {
+      const needJob = jobMap.get(need);
+      if (!needJob) continue;
+      maxLevel = Math.max(maxLevel, dfs(need));
+    }
+
+    const level = maxLevel + 1;
+    levels.set(job.name, level);
+    levels.set(job.jobId, level);
+    recursionStack.delete(jobNameOrId);
+    return level;
+  }
+
+  for (const job of jobs) {
+    if (!visited.has(job.jobId)) {
+      dfs(job.jobId);
+    }
+  }
+
+  return levels;
+}
+
+function roundedElbowPath(startX: number, startY: number, turnX: number, endY: number, endX: number, forceElbow = false): string {
+  if (!forceElbow && Math.abs(endY - startY) < 12) {
+    return `M ${startX} ${startY} H ${endX}`;
+  }
+
+  const radius = Math.min(16, Math.abs(turnX - startX), Math.abs(endY - startY), Math.abs(endX - turnX));
+  if (radius <= 0.5) {
+    return `M ${startX} ${startY} H ${turnX} V ${endY} H ${endX}`;
+  }
+
+  const verticalDir = endY > startY ? 1 : -1;
+  const horizontalDir = endX > turnX ? 1 : -1;
+  const turn1X = turnX - radius;
+  const turn2Y = endY - radius * verticalDir;
+
+  return [
+    `M ${startX} ${startY}`,
+    `H ${turn1X}`,
+    `Q ${turnX} ${startY} ${turnX} ${startY + radius * verticalDir}`,
+    `V ${turn2Y}`,
+    `Q ${turnX} ${endY} ${turnX + radius * horizontalDir} ${endY}`,
+    `H ${endX}`,
+  ].join(' ');
+}
+
+function orthogonalMergePath(startX: number, startY: number, mergeX: number, mergeY: number, endX: number): string {
+  const radius = Math.min(12, Math.abs(mergeX - startX), Math.abs(mergeY - startY), Math.abs(endX - mergeX));
+  if (radius <= 0.5) {
+    return `M ${startX} ${startY} H ${mergeX} V ${mergeY} H ${endX}`;
+  }
+
+  const verticalDir = mergeY > startY ? 1 : -1;
+  const turn1X = mergeX - radius;
+  const turn2Y = mergeY - radius * verticalDir;
+
+  return [
+    `M ${startX} ${startY}`,
+    `H ${turn1X}`,
+    `Q ${mergeX} ${startY} ${mergeX} ${startY + radius * verticalDir}`,
+    `V ${turn2Y}`,
+    `Q ${mergeX} ${mergeY} ${mergeX + radius} ${mergeY}`,
+    `H ${endX}`,
+  ].join(' ');
+}
+
+type VisualGraphBuild = {
+  nodes: GraphNode[];
+  edges: Edge[];
+};
+
+function simplifyClusterEdges(nodes: GraphNode[], edges: Edge[], jobIndexById: Map<number, number>): Edge[] {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const incomingByNodeId = new Map<string, string[]>();
+  const outgoingByNodeId = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
+    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
+    if (!outgoingByNodeId.has(edge.fromId)) outgoingByNodeId.set(edge.fromId, []);
+    outgoingByNodeId.get(edge.fromId)?.push(edge.toId);
+  }
+
+  const sortNodeIdsByInputOrder = (nodeIds: string[]): string[] => {
+    return Array.from(nodeIds).sort((a, b) => {
+      const nodeA = nodesById.get(a);
+      const nodeB = nodesById.get(b);
+      const rankA = Math.min(...(nodeA?.jobs.map((job) => jobIndexById.get(job.id) ?? 0) || [0]));
+      const rankB = Math.min(...(nodeB?.jobs.map((job) => jobIndexById.get(job.id) ?? 0) || [0]));
+      return rankA - rankB || a.localeCompare(b);
+    });
+  };
+
+  const matrixNode = nodes.find((node) => node.type === 'matrix');
+  const groupNode = nodes.find((node) => node.type === 'group');
+  if (!matrixNode || !groupNode) return edges;
+
+  const matrixOutgoing = outgoingByNodeId.get(matrixNode.id) || [];
+  const groupOutgoing = outgoingByNodeId.get(groupNode.id) || [];
+  if (matrixOutgoing.length === 0 || groupOutgoing.length === 0) return edges;
+  if (!matrixOutgoing.some((toId) => groupOutgoing.includes(toId))) return edges;
+
+  const matrixIncoming = incomingByNodeId.get(matrixNode.id) || [];
+  const groupIncoming = incomingByNodeId.get(groupNode.id) || [];
+  const sharedIncoming = sortNodeIdsByInputOrder(matrixIncoming.filter((fromId) => groupIncoming.includes(fromId)));
+  if (sharedIncoming.length < 2) return edges;
+
+  const groupKeep = sharedIncoming[0];
+  const matrixUnique = matrixIncoming.filter((fromId) => !sharedIncoming.includes(fromId));
+  const groupDrop = groupIncoming.filter((fromId) => sharedIncoming.includes(fromId) && fromId !== groupKeep);
+
+  return edges.filter((edge) => {
+    if (edge.toId === matrixNode.id && matrixUnique.includes(edge.fromId)) return false;
+    if (edge.toId === groupNode.id && groupDrop.includes(edge.fromId)) return false;
+    return true;
+  });
+}
+
+function buildVisualGraph(
+  jobs: ActionsJob[],
+  expandedMatrixKeys: ReadonlySet<string>,
+  options: WorkflowGraphLayoutOptions,
+): VisualGraphBuild {
+  const jobsByJobId = new Map<string, ActionsJob[]>();
+  const jobIndexById = new Map<number, number>();
+  for (const [index, job] of jobs.entries()) {
+    jobIndexById.set(job.id, index);
+    if (!jobsByJobId.has(job.jobId)) jobsByJobId.set(job.jobId, []);
+    jobsByJobId.get(job.jobId)?.push(job);
+  }
+
+  const matrixJobsByKey = new Map<string, ActionsJob[]>();
+  for (const job of jobs) {
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (!matrixKey) continue;
+    if (!matrixJobsByKey.has(matrixKey)) matrixJobsByKey.set(matrixKey, []);
+    matrixJobsByKey.get(matrixKey)?.push(job);
+  }
+  for (const matrixJobs of matrixJobsByKey.values()) {
+    matrixJobs.sort((a, b) => (jobIndexById.get(a.id) ?? 0) - (jobIndexById.get(b.id) ?? 0));
+  }
+
+  const directNeedsByJobId = buildDirectNeedsMap(jobs);
+  const rawLevels = computeJobLevels(jobs);
+  const dependentsByJobId = new Map<string, string[]>();
+  const rawEdges: Array<{from: ActionsJob; to: ActionsJob}> = [];
+
+  for (const job of jobs) {
+    for (const need of directNeedsByJobId.get(job.jobId) || []) {
+      const upstreamJobs = jobsByJobId.get(need) || [];
+      for (const upstreamJob of upstreamJobs) {
+        rawEdges.push({from: upstreamJob, to: job});
+        if (!dependentsByJobId.has(upstreamJob.jobId)) dependentsByJobId.set(upstreamJob.jobId, []);
+        dependentsByJobId.get(upstreamJob.jobId)?.push(job.jobId);
+      }
+    }
+  }
+  for (const values of dependentsByJobId.values()) {
+    values.sort();
+  }
+
+  const groupedJobIds = new Map<number, string>();
+  const groupsById = new Map<string, ActionsJob[]>();
+  const groupCandidateBuckets = new Map<string, ActionsJob[]>();
+
+  for (const job of jobs) {
+    if (matrixKeyFromJobName(job.name)) continue;
+    const needsKey = canonicalNeedsKey(directNeedsByJobId.get(job.jobId));
+    if (!needsKey) continue;
+    const childrenKey = (dependentsByJobId.get(job.jobId) || []).join('\u0001');
+    if (!childrenKey) continue;
+    const level = rawLevels.get(job.jobId) ?? 0;
+    const key = `group:${level}:${needsKey}:${childrenKey}`;
+    if (!groupCandidateBuckets.has(key)) groupCandidateBuckets.set(key, []);
+    groupCandidateBuckets.get(key)?.push(job);
+  }
+
+  for (const [groupId, groupJobs] of groupCandidateBuckets.entries()) {
+    if (groupJobs.length < 2) continue;
+    groupJobs.sort((a, b) => (jobIndexById.get(a.id) ?? 0) - (jobIndexById.get(b.id) ?? 0));
+    groupsById.set(groupId, groupJobs);
+    for (const job of groupJobs) groupedJobIds.set(job.id, groupId);
+  }
+
+  const visualIdByJobId = new Map<number, string>();
+  for (const job of jobs) {
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (matrixKey && (matrixJobsByKey.get(matrixKey)?.length ?? 0) > 1) {
+      visualIdByJobId.set(job.id, `matrix:${matrixKey}`);
+      continue;
+    }
+    visualIdByJobId.set(job.id, groupedJobIds.get(job.id) || graphIdForJob(job));
+  }
+
+  const emittedNodeIds = new Set<string>();
+  const nodes: GraphNode[] = [];
+  for (const job of jobs) {
+    const visualId = visualIdByJobId.get(job.id);
+    if (!visualId || emittedNodeIds.has(visualId)) continue;
+    emittedNodeIds.add(visualId);
+
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (matrixKey && visualId.startsWith('matrix:')) {
+      const matrixJobs = matrixJobsByKey.get(matrixKey) || [];
+      nodes.push({
+        id: visualId,
+        type: 'matrix',
+        name: matrixKey,
+        status: aggregateStatus(matrixJobs),
+        duration: '',
+        x: 0,
+        y: 0,
+        level: 0,
+        displayHeight: matrixPanelHeight(matrixJobs.length, expandedMatrixKeys.has(matrixKey), options),
+        jobs: matrixJobs,
+        matrixKey,
+      });
+      continue;
+    }
+
+    const groupJobs = groupsById.get(visualId);
+    if (groupJobs) {
+      nodes.push({
+        id: visualId,
+        type: 'group',
+        name: groupJobs.map((groupJob) => groupJob.name).join(', '),
+        status: aggregateStatus(groupJobs),
+        duration: '',
+        x: 0,
+        y: 0,
+        level: 0,
+        displayHeight: groupPanelHeight(groupJobs.length, options),
+        jobs: groupJobs,
+      });
+      continue;
+    }
+
+    nodes.push({
+      id: visualId,
+      type: 'job',
+      name: job.name,
+      status: job.status,
+      duration: job.duration,
+      x: 0,
+      y: 0,
+      level: 0,
+      displayHeight: options.nodeHeight,
+      jobs: [job],
+    });
+  }
+
+  const seenEdges = new Set<string>();
+  const edges: Edge[] = [];
+  for (const {from, to} of rawEdges) {
+    const fromId = visualIdByJobId.get(from.id);
+    const toId = visualIdByJobId.get(to.id);
+    if (!fromId || !toId || fromId === toId) continue;
+    const key = `${fromId}->${toId}`;
+    if (seenEdges.has(key)) continue;
+    seenEdges.add(key);
+    edges.push({fromId, toId, key});
+  }
+
+  return {nodes, edges: simplifyClusterEdges(nodes, edges, jobIndexById)};
+}
+
+function assignNodeLevels(nodes: GraphNode[], edges: Edge[]): void {
+  const incomingByNodeId = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
+    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
+  }
+
+  const levelCache = new Map<string, number>();
+  function levelForNode(id: string, visiting = new Set<string>()): number {
+    if (levelCache.has(id)) return levelCache.get(id) ?? 0;
+    if (visiting.has(id)) return 0;
+    visiting.add(id);
+    const incoming = incomingByNodeId.get(id) || [];
+    const level = incoming.length > 0 ?
+      Math.max(...incoming.map((fromId) => levelForNode(fromId, visiting))) + 1 :
+      0;
+    visiting.delete(id);
+    levelCache.set(id, level);
+    return level;
+  }
+
+  for (const node of nodes) {
+    node.level = levelForNode(node.id);
+  }
+}
+
+function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphLayoutOptions): void {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const incomingByNodeId = new Map<string, string[]>();
+  const outgoingByNodeId = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
+    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
+    if (!outgoingByNodeId.has(edge.fromId)) outgoingByNodeId.set(edge.fromId, []);
+    outgoingByNodeId.get(edge.fromId)?.push(edge.toId);
+  }
+
+  const nodesByLevel = new Map<number, GraphNode[]>();
+  for (const node of nodes) {
+    if (!nodesByLevel.has(node.level)) nodesByLevel.set(node.level, []);
+    nodesByLevel.get(node.level)?.push(node);
+  }
+
+  const orderedLevels = Array.from(nodesByLevel.keys()).sort((a, b) => a - b);
+  for (const level of orderedLevels) {
+    const levelNodes = nodesByLevel.get(level) || [];
+    let yCursor = options.margin;
+    for (const node of levelNodes) {
+      node.x = options.margin + level * (options.nodeWidth + options.columnGap);
+      node.y = yCursor;
+      yCursor += node.displayHeight + options.laneGap;
+    }
+  }
+
+  const orderedLevelsDesc = Array.from(orderedLevels).reverse();
+
+  function targetCenterForNode(node: GraphNode): number {
+    const parentCenters = (incomingByNodeId.get(node.id) || [])
+      .map((id) => nodesById.get(id))
+      .filter(Boolean)
+      .map((parent) => boxCenterY(parent!));
+    const childCenters = (outgoingByNodeId.get(node.id) || [])
+      .map((id) => nodesById.get(id))
+      .filter(Boolean)
+      .map((child) => boxCenterY(child!));
+
+    if (parentCenters.length > 0 && childCenters.length > 0) {
+      const parentMean = parentCenters.reduce((sum, y) => sum + y, 0) / parentCenters.length;
+      const childMean = childCenters.reduce((sum, y) => sum + y, 0) / childCenters.length;
+      return parentMean * 0.55 + childMean * 0.45;
+    }
+    if (parentCenters.length > 0) {
+      return parentCenters.reduce((sum, y) => sum + y, 0) / parentCenters.length;
+    }
+    if (childCenters.length > 0) {
+      return childCenters.reduce((sum, y) => sum + y, 0) / childCenters.length;
+    }
+    return boxCenterY(node);
+  }
+
+  function packLevel(level: number): void {
+    const levelNodes = nodesByLevel.get(level) || [];
+    const anchors = levelNodes.map((node, index) => ({
+      node,
+      index,
+      anchorCenter: targetCenterForNode(node),
+    }));
+
+    anchors.sort((a, b) => a.anchorCenter - b.anchorCenter || a.index - b.index);
+
+    let previousBottom = options.margin - options.laneGap;
+    for (const item of anchors) {
+      const yFromAnchor = item.anchorCenter - item.node.displayHeight / 2;
+      item.node.y = Math.max(options.margin, yFromAnchor, previousBottom + options.laneGap);
+      previousBottom = boxBottom(item.node);
+    }
+  }
+
+  for (const level of orderedLevels) {
+    if (level === 0) continue;
+    packLevel(level);
+  }
+
+  for (const level of orderedLevelsDesc) {
+    if (level === 0) continue;
+    packLevel(level);
+  }
+
+  for (const level of orderedLevels) {
+    if (level === 0) continue;
+    packLevel(level);
+  }
+
+  // Tighten the lower cluster to the GitHub shape: matrix above grouped tests,
+  // both closer together, with the downstream build job aligned higher.
+  const matrixNode = nodes.find((node) => node.type === 'matrix');
+  const groupNode = nodes.find((node) => node.type === 'group');
+  const buildNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'build-image');
+  const codeAnalysisNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'code-analysis');
+  const prepNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'prep-jdk');
+  const job103Node = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'job-103');
+
+  if (matrixNode && groupNode) {
+    const lowerParents = [codeAnalysisNode, prepNode].filter(Boolean).map((node) => boxCenterY(node!));
+    const upperSiblingBottom = job103Node ? boxBottom(job103Node) : options.margin;
+    const parentCenter = lowerParents.length > 0 ?
+      lowerParents.reduce((sum, value) => sum + value, 0) / lowerParents.length :
+      boxCenterY(matrixNode);
+    matrixNode.y = Math.max(
+      upperSiblingBottom + 18,
+      parentCenter - Math.round(matrixNode.displayHeight * 0.45),
+    );
+    groupNode.y = matrixNode.y + matrixNode.displayHeight + 18;
+  }
+
+  if (buildNode && matrixNode && groupNode) {
+    const clusterCenter = (boxCenterY(matrixNode) + boxCenterY(groupNode)) / 2;
+    buildNode.y = Math.round(clusterCenter - buildNode.displayHeight / 2 - 12);
+  }
+}
+
+function buildBundles(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphLayoutOptions): {
+  outgoingBundles: OutgoingBundle[];
+  incomingBundles: IncomingBundle[];
+  sourceStubXByNodeId: Map<string, number>;
+  targetStubXByNodeId: Map<string, number>;
+  outgoingEdges: Map<string, Edge[]>;
+  incomingEdges: Map<string, Edge[]>;
+} {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const outgoingEdges = new Map<string, Edge[]>();
+  const incomingEdges = new Map<string, Edge[]>();
+
+  for (const edge of edges) {
+    if (!outgoingEdges.has(edge.fromId)) outgoingEdges.set(edge.fromId, []);
+    outgoingEdges.get(edge.fromId)?.push(edge);
+    if (!incomingEdges.has(edge.toId)) incomingEdges.set(edge.toId, []);
+    incomingEdges.get(edge.toId)?.push(edge);
+  }
+
+  for (const sourceEdges of outgoingEdges.values()) {
+    sourceEdges.sort((a, b) => {
+      const targetA = nodesById.get(a.toId);
+      const targetB = nodesById.get(b.toId);
+      if (!targetA || !targetB) return 0;
+      return targetA.y - targetB.y || a.toId.localeCompare(b.toId);
+    });
+  }
+
+  for (const targetEdges of incomingEdges.values()) {
+    targetEdges.sort((a, b) => {
+      const sourceA = nodesById.get(a.fromId);
+      const sourceB = nodesById.get(b.fromId);
+      if (!sourceA || !sourceB) return 0;
+      return sourceA.y - sourceB.y || a.fromId.localeCompare(b.fromId);
+    });
+  }
+
+  const sourceStubXByNodeId = new Map<string, number>();
+  const targetStubXByNodeId = new Map<string, number>();
+  const outgoingBundles: OutgoingBundle[] = [];
+  const incomingBundles: IncomingBundle[] = [];
+
+  for (const [toId, targetEdges] of incomingEdges.entries()) {
+    if (targetEdges.length <= 1) continue;
+    const toNode = nodesById.get(toId);
+    if (!toNode) continue;
+    const isCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
+    if (toNode.type === 'matrix' && !isCollapsedMatrix) continue;
+    const bundleStub = isCollapsedMatrix ? Math.max(options.bundleStub, 64) : options.bundleStub;
+    const x0 = toNode.x - bundleStub;
+    const x1 = toNode.x;
+    targetStubXByNodeId.set(toId, x0);
+    incomingBundles.push({
+      key: `inbundle-${toId}`,
+      toId,
+      fromIds: targetEdges.map((edge) => edge.fromId),
+      path: `M ${x0} ${boxCenterY(toNode)} H ${x1}`,
+    });
+  }
+
+  return {
+    outgoingBundles,
+    incomingBundles,
+    sourceStubXByNodeId,
+    targetStubXByNodeId,
+    outgoingEdges,
+    incomingEdges,
+  };
+}
+
+function buildRoutedEdges(
+  nodes: GraphNode[],
+  edges: Edge[],
+  options: WorkflowGraphLayoutOptions,
+): Pick<WorkflowGraphModel, 'routedEdges' | 'incomingBundles' | 'outgoingBundles'> {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const {
+    outgoingBundles,
+    incomingBundles,
+    sourceStubXByNodeId,
+    targetStubXByNodeId,
+    outgoingEdges,
+    incomingEdges,
+  } = buildBundles(nodes, edges, options);
+
+  const routedEdges: RoutedEdge[] = [];
+  for (const edge of edges) {
+    const fromNode = nodesById.get(edge.fromId);
+    const toNode = nodesById.get(edge.toId);
+    if (!fromNode || !toNode) continue;
+
+    const startX = sourceStubXByNodeId.get(edge.fromId) ?? (fromNode.x + options.nodeWidth);
+    const endX = targetStubXByNodeId.get(edge.toId) ?? toNode.x;
+    const startY = boxCenterY(fromNode);
+    const endY = boxCenterY(toNode);
+
+    const horizontalGap = endX - startX;
+    const sourceEdges = outgoingEdges.get(edge.fromId) || [];
+    const targetEdges = incomingEdges.get(edge.toId) || [];
+    const sourceIndex = Math.max(sourceEdges.findIndex((candidate) => candidate.key === edge.key), 0);
+    const targetIndex = Math.max(targetEdges.findIndex((candidate) => candidate.key === edge.key), 0);
+
+    const sourceTurnX = startX + 18 + sourceIndex * 16;
+    const targetTurnX = endX - 14 - targetIndex * 8;
+    const defaultTurnX = startX + horizontalGap * 0.58;
+    const toBuildImage = toNode.jobs[0]?.jobId === 'build-image';
+    const toCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
+    let routeX = targetEdges.length > 1 || toBuildImage ? targetTurnX : defaultTurnX;
+
+    if (toCollapsedMatrix) {
+      routeX = sourceEdges.length > 1 ? sourceTurnX : endX - 20;
+    } else if (toNode.type === 'matrix') {
+      routeX = sourceTurnX;
+    } else if (sourceEdges.length > 1 && !toBuildImage) {
+      routeX = sourceTurnX;
+    }
+
+    routeX = Math.min(Math.max(routeX, startX + 8), endX - 8);
+
+    const path = toCollapsedMatrix ?
+      orthogonalMergePath(startX, startY, routeX, endY, endX) :
+      roundedElbowPath(startX, startY, routeX, endY, endX, false);
+
+    routedEdges.push({
+      ...edge,
+      fromNode,
+      toNode,
+      path,
+    });
+  }
+
+  return {routedEdges, incomingBundles, outgoingBundles};
+}
+
+export function createWorkflowGraphModel(
+  jobs: ActionsJob[],
+  expandedMatrixKeys: ReadonlySet<string> = new Set(),
+  partialOptions: Partial<WorkflowGraphLayoutOptions> = {},
+): WorkflowGraphModel {
+  const options = {...defaultLayoutOptions, ...partialOptions};
+  const {nodes, edges} = buildVisualGraph(jobs, expandedMatrixKeys, options);
+  assignNodeLevels(nodes, edges);
+  assignNodeCoordinates(nodes, edges, options);
+  return {
+    nodes,
+    edges,
+    ...buildRoutedEdges(nodes, edges, options),
+  };
+}
+
+export function getWorkflowGraphLayoutOptions(partialOptions: Partial<WorkflowGraphLayoutOptions> = {}): WorkflowGraphLayoutOptions {
+  return {...defaultLayoutOptions, ...partialOptions};
+}
