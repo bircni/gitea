@@ -131,7 +131,9 @@ const jobsWithLayout = computed<JobNode[]>(() => {
         return;
       }
 
-      const startY = margin;
+      // Center shorter columns so edges don't visually "attach" to unrelated jobs just because
+      // a column is top-aligned while its neighbors have more nodes.
+      const startY = margin + (maxJobsPerLevel - levelJobs.length) * (verticalSpacing / 2);
 
       levelJobs.forEach((job, jobIndex) => {
         result.push({
