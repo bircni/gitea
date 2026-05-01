@@ -6,9 +6,11 @@ package setting
 // Project settings
 var (
 	Project = struct {
+		Enabled                     bool
 		ProjectBoardBasicKanbanType []string
 		ProjectBoardBugTriageType   []string
 	}{
+		Enabled:                     true,
 		ProjectBoardBasicKanbanType: []string{"To Do", "In Progress", "Done"},
 		ProjectBoardBugTriageType:   []string{"Needs Triage", "High Priority", "Low Priority", "Closed"},
 	}
