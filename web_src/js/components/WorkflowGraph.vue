@@ -14,6 +14,7 @@ import {
   getWorkflowGraphLayoutOptions,
   type GraphNode,
   type IncomingBundle,
+  type OutgoingBundle,
   type RoutedEdge,
 } from './WorkflowGraph.utils.ts';
 
@@ -90,6 +91,7 @@ const jobsWithLayout = computed(() => graphModel.value.nodes);
 const edges = computed(() => graphModel.value.edges);
 const routedEdges = computed<RoutedEdge[]>(() => graphModel.value.routedEdges);
 const incomingBundles = computed<IncomingBundle[]>(() => graphModel.value.incomingBundles);
+const outgoingBundles = computed<OutgoingBundle[]>(() => graphModel.value.outgoingBundles);
 
 const nodeWidth = computed(() => layout.nodeWidth);
 const graphWidth = computed(() => {
@@ -209,6 +211,10 @@ function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
   return !!hoveredGraphId.value && (bundle.toId === hoveredGraphId.value || bundle.fromIds.includes(hoveredGraphId.value));
 }
 
+function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
+  return !!hoveredGraphId.value && (bundle.fromId === hoveredGraphId.value || bundle.toIds.includes(hoveredGraphId.value));
+}
+
 const nodesWithIncomingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.toId)));
 const nodesWithOutgoingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.fromId)));
 
@@ -298,6 +304,14 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
             fill="none"
             class="node-edge"
             :class="{ 'highlighted-edge': isIncomingBundleHighlighted(bundle) }"
+          />
+          <path
+            v-for="bundle in outgoingBundles"
+            :key="bundle.key"
+            :d="bundle.path"
+            fill="none"
+            class="node-edge"
+            :class="{ 'highlighted-edge': isOutgoingBundleHighlighted(bundle) }"
           />
         </g>
 

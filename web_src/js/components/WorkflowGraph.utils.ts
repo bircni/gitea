@@ -70,7 +70,7 @@ const defaultLayoutOptions: WorkflowGraphLayoutOptions = {
   nodeWidth: 220,
   nodeHeight: 40,
   columnGap: 96,
-  laneGap: 26,
+  laneGap: 46,
   groupRowHeight: 28,
   groupPadY: 8,
   matrixCollapsedHeight: 96,
@@ -279,6 +279,38 @@ function orthogonalMergePath(startX: number, startY: number, mergeX: number, mer
     `Q ${mergeX} ${startY} ${mergeX} ${startY + radius * verticalDir}`,
     `V ${turn2Y}`,
     `Q ${mergeX} ${mergeY} ${mergeX + radius} ${mergeY}`,
+    `H ${endX}`,
+  ].join(' ');
+}
+
+function roundedHVPath(startX: number, startY: number, turnX: number, endY: number): string {
+  const radius = Math.min(12, Math.abs(turnX - startX), Math.abs(endY - startY));
+  if (radius <= 0.5) {
+    return `M ${startX} ${startY} H ${turnX} V ${endY}`;
+  }
+
+  const verticalDir = endY > startY ? 1 : -1;
+
+  return [
+    `M ${startX} ${startY}`,
+    `H ${turnX - radius}`,
+    `Q ${turnX} ${startY} ${turnX} ${startY + radius * verticalDir}`,
+    `V ${endY}`,
+  ].join(' ');
+}
+
+function roundedVHPath(startX: number, startY: number, endY: number, endX: number): string {
+  const radius = Math.min(12, Math.abs(endY - startY), Math.abs(endX - startX));
+  if (radius <= 0.5) {
+    return `M ${startX} ${startY} V ${endY} H ${endX}`;
+  }
+
+  const verticalDir = endY > startY ? 1 : -1;
+
+  return [
+    `M ${startX} ${startY}`,
+    `V ${endY - radius * verticalDir}`,
+    `Q ${startX} ${endY} ${startX + radius} ${endY}`,
     `H ${endX}`,
   ].join(' ');
 }
@@ -666,13 +698,28 @@ function buildBundles(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphL
   const outgoingBundles: OutgoingBundle[] = [];
   const incomingBundles: IncomingBundle[] = [];
 
+  for (const [fromId, sourceEdges] of outgoingEdges.entries()) {
+    if (sourceEdges.length <= 1) continue;
+    const fromNode = nodesById.get(fromId);
+    if (!fromNode) continue;
+    const x0 = fromNode.x + options.nodeWidth;
+    const x1 = x0 + options.bundleStub;
+    sourceStubXByNodeId.set(fromId, x1);
+    outgoingBundles.push({
+      key: `outbundle-${fromId}`,
+      fromId,
+      toIds: sourceEdges.map((edge) => edge.toId),
+      path: `M ${x0} ${boxCenterY(fromNode)} H ${x1}`,
+    });
+  }
+
   for (const [toId, targetEdges] of incomingEdges.entries()) {
     if (targetEdges.length <= 1) continue;
     const toNode = nodesById.get(toId);
     if (!toNode) continue;
     const isCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
     if (toNode.type === 'matrix' && !isCollapsedMatrix) continue;
-    const bundleStub = isCollapsedMatrix ? Math.max(options.bundleStub, 64) : options.bundleStub;
+    const bundleStub = isCollapsedMatrix ? Math.max(options.bundleStub, 24) : options.bundleStub;
     const x0 = toNode.x - bundleStub;
     const x1 = toNode.x;
     targetStubXByNodeId.set(toId, x0);
@@ -709,6 +756,33 @@ function buildRoutedEdges(
     incomingEdges,
   } = buildBundles(nodes, edges, options);
 
+  const collapsedMatrixNode = nodes.find((node) => node.type === 'matrix' && node.displayHeight <= options.matrixCollapsedHeight);
+  const groupedNode = nodes.find((node) => node.type === 'group');
+  const lowerClusterTrunkX = groupedNode ? groupedNode.x - 72 : undefined;
+  const collapsedMatrixIncoming = collapsedMatrixNode ? new Set((incomingEdges.get(collapsedMatrixNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
+  const groupedIncoming = groupedNode ? new Set((incomingEdges.get(groupedNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
+  const lowerClusterSharedSources = new Set<string>(
+    Array.from(collapsedMatrixIncoming).filter((fromId) => groupedIncoming.has(fromId)),
+  );
+  const routedOutgoingBundles: OutgoingBundle[] = outgoingBundles.filter((bundle) => !lowerClusterSharedSources.has(bundle.fromId));
+
+  if (lowerClusterTrunkX !== undefined && collapsedMatrixNode && groupedNode) {
+    for (const sourceId of lowerClusterSharedSources) {
+      const sourceNode = nodesById.get(sourceId);
+      if (!sourceNode) continue;
+      const sourceX = sourceNode.x + options.nodeWidth;
+      const sourceY = boxCenterY(sourceNode);
+      const splitY = boxCenterY(collapsedMatrixNode);
+      routedOutgoingBundles.push({
+        key: `outbundle-${sourceId}`,
+        fromId: sourceId,
+        toIds: [collapsedMatrixNode.id, groupedNode.id],
+        path: roundedHVPath(sourceX, sourceY, lowerClusterTrunkX, splitY),
+      });
+      sourceStubXByNodeId.set(sourceId, lowerClusterTrunkX);
+    }
+  }
+
   const routedEdges: RoutedEdge[] = [];
   for (const edge of edges) {
     const fromNode = nodesById.get(edge.fromId);
@@ -732,9 +806,16 @@ function buildRoutedEdges(
     const toBuildImage = toNode.jobs[0]?.jobId === 'build-image';
     const toCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
     let routeX = targetEdges.length > 1 || toBuildImage ? targetTurnX : defaultTurnX;
+    const fromSharedLowerClusterSource = lowerClusterSharedSources.has(edge.fromId);
+    const inCollapsedLowerCluster = lowerClusterTrunkX !== undefined && (
+      (toCollapsedMatrix && fromSharedLowerClusterSource) ||
+      (groupedNode !== undefined && edge.toId === groupedNode.id && fromSharedLowerClusterSource)
+    );
 
-    if (toCollapsedMatrix) {
-      routeX = sourceEdges.length > 1 ? sourceTurnX : endX - 20;
+    if (inCollapsedLowerCluster) {
+      routeX = lowerClusterTrunkX!;
+    } else if (toCollapsedMatrix) {
+      routeX = fromSharedLowerClusterSource ? sourceTurnX : defaultTurnX;
     } else if (toNode.type === 'matrix') {
       routeX = sourceTurnX;
     } else if (sourceEdges.length > 1 && !toBuildImage) {
@@ -743,9 +824,18 @@ function buildRoutedEdges(
 
     routeX = Math.min(Math.max(routeX, startX + 8), endX - 8);
 
-    const path = toCollapsedMatrix ?
-      orthogonalMergePath(startX, startY, routeX, endY, endX) :
-      roundedElbowPath(startX, startY, routeX, endY, endX, false);
+    const useNearStraightCollapsedMatrixEdge = toCollapsedMatrix && !fromSharedLowerClusterSource && Math.abs(endY - startY) < 12;
+    const useOutgoingLowerClusterBundle = inCollapsedLowerCluster;
+    const lowerClusterSplitY = collapsedMatrixNode ? boxCenterY(collapsedMatrixNode) : endY;
+    const path = useOutgoingLowerClusterBundle ?
+      groupedNode !== undefined && edge.toId === groupedNode.id ?
+        roundedVHPath(startX, lowerClusterSplitY, endY, endX) :
+        `M ${startX} ${lowerClusterSplitY} H ${endX}` :
+      useNearStraightCollapsedMatrixEdge ?
+        `M ${startX} ${startY} H ${endX}` :
+        toCollapsedMatrix ?
+          orthogonalMergePath(startX, startY, routeX, endY, endX) :
+          roundedElbowPath(startX, startY, routeX, endY, endX, false);
 
     routedEdges.push({
       ...edge,
@@ -755,7 +845,7 @@ function buildRoutedEdges(
     });
   }
 
-  return {routedEdges, incomingBundles, outgoingBundles};
+  return {routedEdges, incomingBundles, outgoingBundles: routedOutgoingBundles};
 }
 
 export function createWorkflowGraphModel(

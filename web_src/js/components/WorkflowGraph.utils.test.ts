@@ -85,11 +85,12 @@ test('bundled routes stay orthogonal and include bundle stubs', () => {
   const graph = createWorkflowGraphModel(mockJobs);
   const matrixIncomingBundle = graph.incomingBundles.find((bundle) => bundle.toId === 'matrix:matrix-e2e');
   const buildImageIncomingBundle = graph.incomingBundles.find((bundle) => bundle.toId === 'job:16');
+  const lowerClusterOutgoingBundle = graph.outgoingBundles.find((bundle) => bundle.fromId === 'job:5');
   const buildImageEdge = graph.routedEdges.find((edge) => edge.fromId === 'matrix:matrix-e2e' && edge.toId === 'job:16');
   const matrixIncomingEdges = graph.edges.filter((edge) => edge.toId === 'matrix:matrix-e2e').map((edge) => edge.fromId).sort();
   const groupIncomingEdges = graph.edges.filter((edge) => edge.toId.includes('group:')).map((edge) => edge.fromId);
 
-  expect(graph.outgoingBundles).toHaveLength(0);
+  expect(lowerClusterOutgoingBundle?.toIds.sort()).toEqual(['group:1:code-analysis\u0001prep-jdk:build-image', 'matrix:matrix-e2e']);
   expect(matrixIncomingEdges).toEqual(['job:5', 'job:6']);
   expect(groupIncomingEdges).toEqual(['job:5']);
   expect(matrixIncomingBundle?.fromIds).toEqual(['job:5', 'job:6']);
