@@ -8,8 +8,11 @@ import {debounce} from 'throttle-debounce';
 import type {ActionsJob, ActionsRunStatus} from '../modules/gitea-actions.ts';
 import type {ActionRunViewStore} from './ActionRunView.ts';
 
-interface JobNode {
-  id: number;
+type GraphNodeType = 'job' | 'matrix' | 'group';
+
+interface GraphNode {
+  id: string;
+  type: GraphNodeType;
   name: string;
   status: ActionsRunStatus;
   duration: string;
@@ -17,18 +20,23 @@ interface JobNode {
   x: number;
   y: number;
   level: number;
+
+  /** Pixel height of the rendered visual node. */
+  displayHeight: number;
+  jobs: ActionsJob[];
+  matrixKey?: string;
 }
 
 interface Edge {
-  fromId: number;
-  toId: number;
+  fromId: string;
+  toId: string;
   key: string;
 }
 
 interface RoutedEdge extends Edge {
   path: string;
-  fromNode: JobNode;
-  toNode: JobNode;
+  fromNode: GraphNode;
+  toNode: GraphNode;
 }
 
 interface StoredState {
@@ -54,9 +62,75 @@ const translateY = ref(0);
 const isDragging = ref(false);
 const lastMousePos = ref({x: 0, y: 0});
 const graphContainer = ref<HTMLElement | null>(null);
-const hoveredJobId = ref<number | null>(null);
+const hoveredGraphId = ref<string | null>(null);
+
+const nodeHeight = 52;
+const verticalSpacing = 90;
+const margin = 40;
+const interCardGap = verticalSpacing - nodeHeight;
+const groupPanelHeaderHeight = 0;
+const groupPanelRowHeight = 46;
+const groupPanelPadY = 14;
+const matrixCollapsedHeight = 104;
+const matrixPanelHeaderH = 32;
+const matrixPanelRowH = 38;
+const matrixPanelPadY = 14;
 
 const stateKey = () => `${props.store.viewData.currentRun.repoId}-${props.workflowId}`;
+
+const expandedMatrixKeys = ref<Set<string>>(new Set());
+
+function isMatrixExpanded(key: string): boolean {
+  return expandedMatrixKeys.value.has(key);
+}
+
+function toggleMatrixExpanded(key: string) {
+  const next = new Set(expandedMatrixKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedMatrixKeys.value = next;
+}
+
+function matrixKeyFromJobName(name: string): string | null {
+  // Heuristic: GitHub matrix jobs are commonly rendered like: "matrix-job (dims...)"
+  const idx = name.indexOf(' (');
+  if (idx === -1) return null;
+  return name.slice(0, idx).trim() || null;
+}
+
+function boxBottom(job: GraphNode): number {
+  return job.y + job.displayHeight;
+}
+
+function boxCenterY(job: GraphNode): number {
+  return job.y + job.displayHeight / 2;
+}
+
+function matrixPanelHeight(rowCount: number, expanded: boolean): number {
+  if (rowCount <= 0) return nodeHeight;
+  if (!expanded) return matrixCollapsedHeight;
+  return matrixPanelHeaderH + rowCount * matrixPanelRowH + matrixPanelPadY;
+}
+
+function groupPanelHeight(rowCount: number): number {
+  return groupPanelHeaderHeight + rowCount * groupPanelRowHeight + groupPanelPadY * 2;
+}
+
+function compareStatusWorstFirst(a: ActionsRunStatus, b: ActionsRunStatus): number {
+  const rank = (s: ActionsRunStatus) => {
+    if (s === 'failure') return 0;
+    if (s === 'cancelled') return 1;
+    if (s === 'running') return 2;
+    if (s === 'waiting') return 3;
+    if (s === 'success') return 4;
+    return 5;
+  };
+  return rank(a) - rank(b);
+}
+
+function aggregateMatrixStatus(children: ActionsJob[]): ActionsRunStatus {
+  return children.map((c) => c.status).slice().sort(compareStatusWorstFirst)[0]!;
+}
 
 const loadSavedState = () => {
   const allStates = localUserSettings.getJsonObject<Record<string, StoredState>>(settingKeyStates, {});
@@ -99,70 +173,19 @@ const graphWidth = computed(() => {
 
 const graphHeight = computed(() => {
   if (jobsWithLayout.value.length === 0) return 400;
-  const maxY = Math.max(...jobsWithLayout.value.map(j => j.y + nodeHeight));
+  const maxY = Math.max(...jobsWithLayout.value.map(j => boxBottom(j)));
   return maxY + margin * 2;
 });
 
 
-const jobsWithLayout = computed<JobNode[]>(() => {
-  try {
-    const levels = computeJobLevels(props.jobs);
-    const currentHorizontalSpacing = horizontalSpacing.value;
+function canonicalNeedsKey(needs: string[] | undefined): string {
+  if (!needs?.length) return '';
+  return [...needs].sort().join('\u0001');
+}
 
-    const jobsByLevel: ActionsJob[][] = [];
-    let maxJobsPerLevel = 0;
-
-    props.jobs.forEach(job => {
-      const level = levels.get(job.name) || levels.get(job.jobId) || 0;
-
-      if (!jobsByLevel[level]) {
-        jobsByLevel[level] = [];
-      }
-      jobsByLevel[level].push(job);
-
-      if (jobsByLevel[level].length > maxJobsPerLevel) {
-        maxJobsPerLevel = jobsByLevel[level].length;
-      }
-    });
-
-    const result: JobNode[] = [];
-    jobsByLevel.forEach((levelJobs, levelIndex) => {
-      if (!levelJobs || levelJobs.length === 0) {
-        return;
-      }
-
-      // Center shorter columns so edges don't visually "attach" to unrelated jobs just because
-      // a column is top-aligned while its neighbors have more nodes.
-      const startY = margin + (maxJobsPerLevel - levelJobs.length) * (verticalSpacing / 2);
-
-      levelJobs.forEach((job, jobIndex) => {
-        result.push({
-          id: job.id,
-          name: job.name,
-          status: job.status,
-          duration: job.duration,
-
-          x: margin + levelIndex * currentHorizontalSpacing,
-          y: startY + jobIndex * verticalSpacing,
-          level: levelIndex,
-        });
-      });
-    });
-
-    return result;
-  } catch (error) {
-    return props.jobs.map((job, index) => ({
-      id: job.id,
-      name: job.name,
-      status: job.status,
-      duration: job.duration,
-
-      x: margin + index * horizontalSpacing.value,
-      y: margin,
-      level: 0,
-    }));
-  }
-});
+function graphIdForJob(job: ActionsJob): string {
+  return `job:${job.id}`;
+}
 
 function buildDirectNeedsMap(jobs: ActionsJob[]): Map<string, string[]> {
   const directNeedsByJobId = new Map<string, string[]>();
@@ -218,62 +241,238 @@ function buildDirectNeedsMap(jobs: ActionsJob[]): Map<string, string[]> {
 
 const directNeedsByJobId = computed(() => buildDirectNeedsMap(props.jobs));
 
-const edges = computed<Edge[]>(() => {
-  const edgesList: Edge[] = [];
+const visualGraph = computed(() => {
   const jobsByJobId = new Map<string, ActionsJob[]>();
-  const seen = new Set<string>();
-
-  for (const job of props.jobs) {
+  const jobIndexById = new Map<number, number>();
+  props.jobs.forEach((job, index) => {
+    jobIndexById.set(job.id, index);
     if (!jobsByJobId.has(job.jobId)) {
       jobsByJobId.set(job.jobId, []);
     }
     jobsByJobId.get(job.jobId)!.push(job);
+  });
+
+  const matrixJobsByKey = new Map<string, ActionsJob[]>();
+  for (const job of props.jobs) {
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (!matrixKey) continue;
+    if (!matrixJobsByKey.has(matrixKey)) matrixJobsByKey.set(matrixKey, []);
+    matrixJobsByKey.get(matrixKey)!.push(job);
+  }
+  for (const [, jobs] of matrixJobsByKey) {
+    jobs.sort((a, b) => (jobIndexById.get(a.id) ?? 0) - (jobIndexById.get(b.id) ?? 0));
   }
 
+  const rawEdges: Array<{from: ActionsJob; to: ActionsJob}> = [];
+  const dependentsByJobId = new Map<string, string[]>();
   for (const job of props.jobs) {
     for (const need of directNeedsByJobId.value.get(job.jobId) || []) {
       const upstreamJobs = jobsByJobId.get(need) || [];
       for (const upstreamJob of upstreamJobs) {
-        const dedupeKey = `${upstreamJob.id}->${job.id}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-        edgesList.push({
-          fromId: upstreamJob.id,
-          toId: job.id,
-          key: `${upstreamJob.id}-${job.id}`,
-        });
+        rawEdges.push({from: upstreamJob, to: job});
+        if (!dependentsByJobId.has(upstreamJob.jobId)) dependentsByJobId.set(upstreamJob.jobId, []);
+        dependentsByJobId.get(upstreamJob.jobId)!.push(job.jobId);
       }
     }
   }
+  for (const [, values] of dependentsByJobId.entries()) {
+    values.sort();
+  }
 
-  return edgesList;
+  const rawLevels = computeJobLevels(props.jobs);
+  const groupedJobIds = new Map<number, string>();
+  const groupsById = new Map<string, ActionsJob[]>();
+  const groupCandidateBuckets = new Map<string, ActionsJob[]>();
+
+  for (const job of props.jobs) {
+    if (matrixKeyFromJobName(job.name)) continue;
+    const needsKey = canonicalNeedsKey(directNeedsByJobId.value.get(job.jobId));
+    if (!needsKey) continue;
+    const childrenKey = (dependentsByJobId.get(job.jobId) || []).join('\u0001');
+    if (!childrenKey) continue;
+    const level = rawLevels.get(job.jobId) || rawLevels.get(job.name) || 0;
+    const key = `group:${level}:${needsKey}:${childrenKey}`;
+    if (!groupCandidateBuckets.has(key)) groupCandidateBuckets.set(key, []);
+    groupCandidateBuckets.get(key)!.push(job);
+  }
+
+  for (const [groupId, jobs] of groupCandidateBuckets.entries()) {
+    if (jobs.length < 2) continue;
+    jobs.sort((a, b) => (jobIndexById.get(a.id) ?? 0) - (jobIndexById.get(b.id) ?? 0));
+    groupsById.set(groupId, jobs);
+    for (const job of jobs) {
+      groupedJobIds.set(job.id, groupId);
+    }
+  }
+
+  const visualIdByJobId = new Map<number, string>();
+  for (const job of props.jobs) {
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (matrixKey && (matrixJobsByKey.get(matrixKey)?.length || 0) > 1) {
+      visualIdByJobId.set(job.id, `matrix:${matrixKey}`);
+      continue;
+    }
+    const groupId = groupedJobIds.get(job.id);
+    visualIdByJobId.set(job.id, groupId || graphIdForJob(job));
+  }
+
+  const emittedNodeIds = new Set<string>();
+  const nodes: GraphNode[] = [];
+  for (const job of props.jobs) {
+    const visualId = visualIdByJobId.get(job.id)!;
+    if (emittedNodeIds.has(visualId)) continue;
+    emittedNodeIds.add(visualId);
+
+    const matrixKey = matrixKeyFromJobName(job.name);
+    if (matrixKey && visualId.startsWith('matrix:')) {
+      const jobs = matrixJobsByKey.get(matrixKey)!;
+      nodes.push({
+        id: visualId,
+        type: 'matrix',
+        name: matrixKey,
+        status: aggregateMatrixStatus(jobs),
+        duration: '',
+        x: 0,
+        y: 0,
+        level: 0,
+        displayHeight: matrixPanelHeight(jobs.length, isMatrixExpanded(matrixKey)),
+        jobs,
+        matrixKey,
+      });
+      continue;
+    }
+
+    const groupJobs = groupsById.get(visualId);
+    if (groupJobs) {
+      nodes.push({
+        id: visualId,
+        type: 'group',
+        name: groupJobs.map((j) => j.name).join(', '),
+        status: aggregateMatrixStatus(groupJobs),
+        duration: '',
+        x: 0,
+        y: 0,
+        level: 0,
+        displayHeight: groupPanelHeight(groupJobs.length),
+        jobs: groupJobs,
+      });
+      continue;
+    }
+
+    nodes.push({
+      id: visualId,
+      type: 'job',
+      name: job.name,
+      status: job.status,
+      duration: job.duration,
+      x: 0,
+      y: 0,
+      level: 0,
+      displayHeight: nodeHeight,
+      jobs: [job],
+    });
+  }
+
+  const edgesList: Edge[] = [];
+  const seenEdges = new Set<string>();
+  for (const {from, to} of rawEdges) {
+    const fromId = visualIdByJobId.get(from.id)!;
+    const toId = visualIdByJobId.get(to.id)!;
+    if (fromId === toId) continue;
+    const key = `${fromId}->${toId}`;
+    if (seenEdges.has(key)) continue;
+    seenEdges.add(key);
+    edgesList.push({fromId, toId, key});
+  }
+
+  const incomingByNodeId = new Map<string, string[]>();
+  for (const edge of edgesList) {
+    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
+    incomingByNodeId.get(edge.toId)!.push(edge.fromId);
+  }
+
+  const levelCache = new Map<string, number>();
+  function levelForNode(id: string, visiting = new Set<string>()): number {
+    if (levelCache.has(id)) return levelCache.get(id)!;
+    if (visiting.has(id)) return 0;
+    visiting.add(id);
+    const incoming = incomingByNodeId.get(id) || [];
+    const level = incoming.length ? Math.max(...incoming.map((fromId) => levelForNode(fromId, visiting))) + 1 : 0;
+    visiting.delete(id);
+    levelCache.set(id, level);
+    return level;
+  }
+
+  for (const node of nodes) {
+    node.level = levelForNode(node.id);
+  }
+
+  const nodesByLevel = new Map<number, GraphNode[]>();
+  for (const node of nodes) {
+    if (!nodesByLevel.has(node.level)) nodesByLevel.set(node.level, []);
+    nodesByLevel.get(node.level)!.push(node);
+  }
+
+  const columnBottoms = new Map<number, number>();
+  for (const [level, levelNodes] of nodesByLevel.entries()) {
+    let yCursor = margin;
+    for (let i = 0; i < levelNodes.length; i++) {
+      const node = levelNodes[i]!;
+      node.x = margin + level * horizontalSpacing.value;
+      node.y = yCursor;
+      yCursor += node.displayHeight + (i < levelNodes.length - 1 ? interCardGap : 0);
+    }
+    columnBottoms.set(level, yCursor);
+  }
+
+  const maxBottom = Math.max(...columnBottoms.values(), margin);
+  for (const [level, levelNodes] of nodesByLevel.entries()) {
+    const yShift = (maxBottom - (columnBottoms.get(level) || margin)) / 2;
+    for (const node of levelNodes) {
+      node.y += yShift;
+    }
+  }
+
+  return {nodes, edges: edgesList};
 });
 
-function buildRoundedConnectorPath(startX: number, startY: number, endX: number, endY: number, turnX: number): string {
-  const deltaY = endY - startY;
-  if (Math.abs(deltaY) < 1) {
+const jobsWithLayout = computed(() => visualGraph.value.nodes);
+
+const edges = computed(() => visualGraph.value.edges);
+
+function buildGithubLikeConnectorPath(startX: number, startY: number, endX: number, endY: number, turnX: number): string {
+  // GitHub-like: smooth S-curves that still exit/enter nodes horizontally.
+  if (Math.abs(endY - startY) < 1) {
     return `M ${startX} ${startY} H ${endX}`;
   }
 
-  const direction = deltaY > 0 ? 1 : -1;
-  const elbowSize = Math.max(8, Math.min(24, Math.abs(deltaY) / 2, Math.abs(endX - startX) / 2));
-  const controlOffset = elbowSize / 2;
-  const clampedTurnX = Math.min(Math.max(turnX, startX + elbowSize), endX - elbowSize);
+  const minX = Math.min(startX, endX);
+  const maxX = Math.max(startX, endX);
+  const mx = Math.min(Math.max(turnX, minX + 12), maxX - 12);
+
+  const dx = Math.abs(endX - startX);
+  const dy = Math.abs(endY - startY);
+  if (dx < 8) {
+    // Too tight for a meaningful S-curve; fall back to a simple elbow.
+    const midY = (startY + endY) / 2;
+    return `M ${startX} ${startY} V ${midY} H ${endX} V ${endY}`;
+  }
+  const h = Math.max(18, Math.min(44, dx * 0.35, dy * 0.55));
+
+  const c1x = startX + (mx - startX) * 0.55;
+  const c2x = endX - (endX - mx) * 0.55;
 
   return [
     `M ${startX} ${startY}`,
-    `H ${clampedTurnX - elbowSize}`,
-    `C ${clampedTurnX - controlOffset} ${startY} ${clampedTurnX} ${startY + direction * controlOffset} ${clampedTurnX} ${startY + direction * elbowSize}`,
-    `V ${endY - direction * elbowSize}`,
-    `C ${clampedTurnX} ${endY - direction * controlOffset} ${clampedTurnX + controlOffset} ${endY} ${clampedTurnX + elbowSize} ${endY}`,
-    `H ${endX}`,
+    `C ${c1x} ${startY} ${mx} ${startY + Math.sign(endY - startY) * h} ${mx} ${(startY + endY) / 2}`,
+    `C ${mx} ${endY - Math.sign(endY - startY) * h} ${c2x} ${endY} ${endX} ${endY}`,
   ].join(' ');
 }
 
 const routedEdges = computed<RoutedEdge[]>(() => {
   const nodesById = new Map(jobsWithLayout.value.map((job) => [job.id, job]));
-  const outgoingEdges = new Map<number, Edge[]>();
-  const incomingEdges = new Map<number, Edge[]>();
+  const outgoingEdges = new Map<string, Edge[]>();
+  const incomingEdges = new Map<string, Edge[]>();
 
   for (const edge of edges.value) {
     if (!outgoingEdges.has(edge.fromId)) {
@@ -292,13 +491,13 @@ const routedEdges = computed<RoutedEdge[]>(() => {
       const targetA = nodesById.get(a.toId);
       const targetB = nodesById.get(b.toId);
       if (!targetA || !targetB) return 0;
-      return targetA.y - targetB.y || a.toId - b.toId;
+      return targetA.y - targetB.y || a.toId.localeCompare(b.toId);
     });
   }
 
   // Bundle incoming edges: if a node has multiple parents, draw one shared
   // short "trunk" into the node and route each edge into the trunk point.
-  const bundleXByTargetId = new Map<number, number>();
+  const bundleXByTargetId = new Map<string, number>();
   for (const [toId, inc] of incomingEdges.entries()) {
     if (inc.length <= 1) continue;
     const toNode = nodesById.get(toId);
@@ -308,7 +507,7 @@ const routedEdges = computed<RoutedEdge[]>(() => {
 
   // Bundle outgoing edges: if a node has multiple children, route each edge from a
   // shared "trunk" point leaving the node.
-  const bundleXBySourceId = new Map<number, number>();
+  const bundleXBySourceId = new Map<string, number>();
   for (const [fromId, out] of outgoingEdges.entries()) {
     if (out.length <= 1) continue;
     const fromNode = nodesById.get(fromId);
@@ -324,9 +523,9 @@ const routedEdges = computed<RoutedEdge[]>(() => {
     if (!fromNode || !toNode) continue;
 
     const startX = bundleXBySourceId.get(edge.fromId) ?? (fromNode.x + nodeWidth.value);
-    const startY = fromNode.y + nodeHeight / 2;
+    const startY = boxCenterY(fromNode);
     const endX = bundleXByTargetId.get(edge.toId) ?? toNode.x;
-    const endY = toNode.y + nodeHeight / 2;
+    const endY = boxCenterY(toNode);
     const sourceEdges = outgoingEdges.get(edge.fromId) || [];
     const targetEdges = incomingEdges.get(edge.toId) || [];
     const horizontalGap = endX - startX;
@@ -348,7 +547,7 @@ const routedEdges = computed<RoutedEdge[]>(() => {
     // Avoid over-shooting which can create strange loops for very tight layouts.
     turnX = Math.min(Math.max(turnX, startX + 10), endX - 10);
 
-    const path = buildRoundedConnectorPath(startX, startY, endX, endY, turnX);
+    const path = buildGithubLikeConnectorPath(startX, startY, endX, endY, turnX);
 
     edgePaths.push({
       ...edge,
@@ -363,22 +562,22 @@ const routedEdges = computed<RoutedEdge[]>(() => {
 
 type IncomingBundle = {
   key: string;
-  toId: number;
-  fromIds: number[];
+  toId: string;
+  fromIds: string[];
   path: string;
 };
 
 type OutgoingBundle = {
   key: string;
-  fromId: number;
-  toIds: number[];
+  fromId: string;
+  toIds: string[];
   path: string;
 };
 
 const incomingBundles = computed<IncomingBundle[]>(() => {
   const nodesById = new Map(jobsWithLayout.value.map((job) => [job.id, job]));
 
-  const fromIdsByTarget = new Map<number, number[]>();
+  const fromIdsByTarget = new Map<string, string[]>();
   for (const e of edges.value) {
     if (!fromIdsByTarget.has(e.toId)) fromIdsByTarget.set(e.toId, []);
     fromIdsByTarget.get(e.toId)!.push(e.fromId);
@@ -391,7 +590,7 @@ const incomingBundles = computed<IncomingBundle[]>(() => {
     if (!toNode) continue;
     const x0 = toNode.x - 18;
     const x1 = toNode.x;
-    const y = toNode.y + nodeHeight / 2;
+    const y = boxCenterY(toNode);
     bundles.push({
       key: `inbundle-${toId}`,
       toId,
@@ -405,7 +604,7 @@ const incomingBundles = computed<IncomingBundle[]>(() => {
 const outgoingBundles = computed<OutgoingBundle[]>(() => {
   const nodesById = new Map(jobsWithLayout.value.map((job) => [job.id, job]));
 
-  const toIdsBySource = new Map<number, number[]>();
+  const toIdsBySource = new Map<string, string[]>();
   for (const e of edges.value) {
     if (!toIdsBySource.has(e.fromId)) toIdsBySource.set(e.fromId, []);
     toIdsBySource.get(e.fromId)!.push(e.toId);
@@ -418,7 +617,7 @@ const outgoingBundles = computed<OutgoingBundle[]>(() => {
     if (!fromNode) continue;
     const x0 = fromNode.x + nodeWidth.value;
     const x1 = x0 + 18;
-    const y = fromNode.y + nodeHeight / 2;
+    const y = boxCenterY(fromNode);
     bundles.push({
       key: `outbundle-${fromId}`,
       fromId,
@@ -430,7 +629,7 @@ const outgoingBundles = computed<OutgoingBundle[]>(() => {
 });
 
 const graphMetrics = computed(() => {
-  const successCount = jobsWithLayout.value.filter(job => job.status === 'success').length;
+  const successCount = props.jobs.filter(job => job.status === 'success').length;
 
   const levels = new Map<number, number>();
   jobsWithLayout.value.forEach(job => {
@@ -440,14 +639,10 @@ const graphMetrics = computed(() => {
   const parallelism = Math.max(...Array.from(levels.values()), 0);
 
   return {
-    successRate: `${((successCount / jobsWithLayout.value.length) * 100).toFixed(0)}%`,
+    successRate: `${((successCount / props.jobs.length) * 100).toFixed(0)}%`,
     parallelism,
   };
 })
-
-const nodeHeight = 52;
-const verticalSpacing = 90;
-const margin = 40;
 
 const minScale = 0.3;
 const maxScale = 1;
@@ -533,39 +728,43 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', handleMouseUpOnDocument);
 });
 
-function handleNodeMouseEnter(job: JobNode) {
-  hoveredJobId.value = job.id;
+function handleNodeMouseEnter(job: GraphNode) {
+  hoveredGraphId.value = job.id;
 }
 
 function handleNodeMouseLeave() {
-  hoveredJobId.value = null;
+  hoveredGraphId.value = null;
+}
+
+function handleMatrixMouseEnter(groupId: string) {
+  hoveredGraphId.value = groupId;
 }
 
 function isEdgeHighlighted(edge: RoutedEdge): boolean {
-  if (!hoveredJobId.value) {
+  if (!hoveredGraphId.value) {
     return false;
   }
-  return edge.fromId === hoveredJobId.value || edge.toId === hoveredJobId.value;
+  return edge.fromId === hoveredGraphId.value || edge.toId === hoveredGraphId.value;
 }
 
 function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
-  if (!hoveredJobId.value) return false;
-  return bundle.toId === hoveredJobId.value || bundle.fromIds.includes(hoveredJobId.value);
+  if (!hoveredGraphId.value) return false;
+  return bundle.toId === hoveredGraphId.value || bundle.fromIds.includes(hoveredGraphId.value);
 }
 
 function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
-  if (!hoveredJobId.value) return false;
-  return bundle.fromId === hoveredJobId.value || bundle.toIds.includes(hoveredJobId.value);
+  if (!hoveredGraphId.value) return false;
+  return bundle.fromId === hoveredGraphId.value || bundle.toIds.includes(hoveredGraphId.value);
 }
 
 const nodesWithIncomingEdge = computed(() => {
-  const set = new Set<number>();
+  const set = new Set<string>();
   for (const edge of routedEdges.value) set.add(edge.toId);
   return set;
 });
 
 const nodesWithOutgoingEdge = computed(() => {
-  const set = new Set<number>();
+  const set = new Set<string>();
   for (const edge of routedEdges.value) set.add(edge.fromId);
   return set;
 });
@@ -641,8 +840,9 @@ function computeJobLevels(jobs: ActionsJob[]): Map<string, number> {
   return levels;
 }
 
-function onNodeClick(job: JobNode, event: MouseEvent) {
-  const link = `${props.runLink}/jobs/${job.id}`;
+function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
+  const jobId = 'jobs' in job ? job.jobs[0]!.id : job.id;
+  const link = `${props.runLink}/jobs/${jobId}`;
   if (event.ctrlKey || event.metaKey) {
     window.open(link, '_blank');
     return;
@@ -706,8 +906,8 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
               :x="job.x"
               :y="job.y"
               :width="nodeWidth"
-              :height="nodeHeight"
-              rx="8"
+              :height="job.displayHeight"
+              :rx="job.type === 'job' ? 8 : 12"
               fill="black"
             />
           </mask>
@@ -743,72 +943,229 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
           />
         </g>
 
-        <g
-          v-for="job in jobsWithLayout"
-          :key="job.id"
-          class="job-node-group"
-          @click="onNodeClick(job, $event)"
-          @mouseenter="handleNodeMouseEnter(job)"
-          @mouseleave="handleNodeMouseLeave"
-        >
-          <title>{{ job.name }}</title>
-
-          <rect
-            :x="job.x"
-            :y="job.y"
-            :width="nodeWidth"
-            :height="nodeHeight"
-            rx="8"
-            fill="var(--color-box-body)"
-            stroke="var(--color-secondary)"
-            stroke-width="1"
-            class="job-rect"
-          />
-
-          <circle
-            v-if="nodesWithIncomingEdge.has(job.id)"
-            :cx="job.x"
-            :cy="job.y + nodeHeight / 2"
-            r="4.5"
-            class="node-port"
-          />
-
-          <circle
-            v-if="nodesWithOutgoingEdge.has(job.id)"
-            :cx="job.x + nodeWidth"
-            :cy="job.y + nodeHeight / 2"
-            r="4.5"
-            class="node-port"
-          />
-
-          <foreignObject
-            :x="job.x + 10"
-            :y="job.y + 16"
-            width="20"
-            height="20"
-            class="job-status-fg-obj"
+        <template v-for="job in jobsWithLayout" :key="job.id">
+          <g
+            v-if="job.type === 'matrix'"
+            class="job-node-group matrix-job-group"
+            @mouseenter="handleMatrixMouseEnter(job.id)"
+            @mouseleave="handleNodeMouseLeave"
           >
-            <div class="job-status-icon-wrap">
-              <ActionRunStatus :status="job.status"/>
-            </div>
-          </foreignObject>
+            <title>Matrix: {{ job.matrixKey }}</title>
 
-          <foreignObject
-            :x="job.x + 38"
-            :y="job.y + 2"
-            :width="nodeWidth - 44"
-            :height="nodeHeight - 4"
+            <rect
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="job.displayHeight"
+              rx="12"
+              fill="var(--color-box-body)"
+              stroke="var(--color-secondary)"
+              stroke-width="1"
+              class="job-rect matrix-panel-rect"
+            />
+
+            <circle
+              v-if="nodesWithIncomingEdge.has(job.id)"
+              :cx="job.x"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <circle
+              v-if="nodesWithOutgoingEdge.has(job.id)"
+              :cx="job.x + nodeWidth"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <foreignObject
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="job.displayHeight"
+              class="matrix-foreign-object"
+            >
+              <div class="matrix-panel" xmlns="http://www.w3.org/1999/xhtml" @click.stop>
+                <div class="matrix-panel-tab">
+                  <span class="matrix-panel-tab-label">Matrix: {{ job.matrixKey }}</span>
+                </div>
+                <div class="matrix-panel-body">
+                  <div class="matrix-panel-summary-row">
+                    <div class="matrix-row-status">
+                      <ActionRunStatus :status="job.status"/>
+                    </div>
+                    <span class="matrix-panel-summary">
+                      {{ job.jobs.length }} jobs
+                      <span v-if="job.jobs.every((c) => c.status === 'success')">completed</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="matrix-panel-toggle"
+                    @click.stop="toggleMatrixExpanded(job.matrixKey!)"
+                  >
+                    {{ isMatrixExpanded(job.matrixKey!) ? 'Hide jobs' : 'Show all jobs' }}
+                  </button>
+
+                  <template v-if="isMatrixExpanded(job.matrixKey!)">
+                    <div
+                      v-for="ch in job.jobs"
+                      :key="ch.id"
+                      class="graph-list-row"
+                      @mouseenter="handleMatrixMouseEnter(job.id)"
+                      @click="onNodeClick(ch, $event)"
+                    >
+                      <div class="matrix-row-status">
+                        <ActionRunStatus :status="ch.status"/>
+                      </div>
+                      <div class="graph-list-row-text">
+                        <span class="graph-list-row-name">{{ ch.name }}</span>
+                        <span
+                          v-if="ch.duration || ch.status === 'success' || ch.status === 'failure'"
+                          class="graph-list-row-duration"
+                        >{{ ch.duration }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </foreignObject>
+          </g>
+
+          <g
+            v-else-if="job.type === 'group'"
+            class="job-node-group grouped-job-group"
+            @mouseenter="handleNodeMouseEnter(job)"
+            @mouseleave="handleNodeMouseLeave"
           >
-            <div class="job-text-wrap">
-              <span class="job-name">{{ job.name }}</span>
-              <span
-                v-if="job.duration || job.status === 'success' || job.status === 'failure'"
-                class="job-duration"
-              >{{ job.duration }}</span>
-            </div>
-          </foreignObject>
+            <title>{{ job.name }}</title>
 
-        </g>
+            <rect
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="job.displayHeight"
+              rx="12"
+              fill="var(--color-box-body)"
+              stroke="var(--color-secondary)"
+              stroke-width="1"
+              class="job-rect grouped-panel-rect"
+            />
+
+            <circle
+              v-if="nodesWithIncomingEdge.has(job.id)"
+              :cx="job.x"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <circle
+              v-if="nodesWithOutgoingEdge.has(job.id)"
+              :cx="job.x + nodeWidth"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <foreignObject
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="job.displayHeight"
+              class="matrix-foreign-object"
+            >
+              <div class="grouped-panel" xmlns="http://www.w3.org/1999/xhtml" @click.stop>
+                <div
+                  v-for="ch in job.jobs"
+                  :key="ch.id"
+                  class="graph-list-row"
+                  @mouseenter="handleMatrixMouseEnter(job.id)"
+                  @click="onNodeClick(ch, $event)"
+                >
+                  <div class="matrix-row-status">
+                    <ActionRunStatus :status="ch.status"/>
+                  </div>
+                  <div class="graph-list-row-text">
+                    <span class="graph-list-row-name">{{ ch.name }}</span>
+                    <span
+                      v-if="ch.duration || ch.status === 'success' || ch.status === 'failure'"
+                      class="graph-list-row-duration"
+                    >{{ ch.duration }}</span>
+                  </div>
+                </div>
+              </div>
+            </foreignObject>
+          </g>
+
+          <g
+            v-else
+            class="job-node-group"
+            @click="onNodeClick(job, $event)"
+            @mouseenter="handleNodeMouseEnter(job)"
+            @mouseleave="handleNodeMouseLeave"
+          >
+            <title>{{ job.name }}</title>
+
+            <rect
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="job.displayHeight"
+              rx="8"
+              fill="var(--color-box-body)"
+              stroke="var(--color-secondary)"
+              stroke-width="1"
+              class="job-rect"
+            />
+
+            <circle
+              v-if="nodesWithIncomingEdge.has(job.id)"
+              :cx="job.x"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <circle
+              v-if="nodesWithOutgoingEdge.has(job.id)"
+              :cx="job.x + nodeWidth"
+              :cy="job.y + job.displayHeight / 2"
+              r="4.5"
+              class="node-port"
+            />
+
+            <foreignObject
+              :x="job.x + 10"
+              :y="job.y + job.displayHeight / 2 - 10"
+              width="20"
+              height="20"
+              class="job-status-fg-obj"
+            >
+              <div class="job-status-icon-wrap">
+                <ActionRunStatus :status="job.status"/>
+              </div>
+            </foreignObject>
+
+            <foreignObject
+              :x="job.x + 38"
+              :y="job.y + 2"
+              :width="nodeWidth - 44"
+              :height="job.displayHeight - 4"
+            >
+              <div class="job-text-wrap">
+                <span class="job-name">{{ job.name }}</span>
+                <span
+                  v-if="job.duration || job.status === 'success' || job.status === 'failure'"
+                  class="job-duration"
+                >{{ job.duration }}</span>
+              </div>
+            </foreignObject>
+
+          </g>
+        </template>
       </svg>
     </div>
   </div>
@@ -893,6 +1250,134 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
   /* due to SVG rendering limitation, only one of fill and drop-shadow can work */
   fill: var(--color-hover);
   /* filter: drop-shadow(0 1px 3px var(--color-shadow-opaque)); */
+}
+
+.matrix-foreign-object {
+  pointer-events: auto;
+}
+
+.matrix-panel {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.matrix-panel-tab {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  background: var(--color-console-bg);
+  border-bottom: 1px solid var(--color-secondary-alpha-50);
+}
+
+.matrix-panel-tab-label {
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.matrix-panel-body {
+  flex: 1 1 auto;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.matrix-panel-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.matrix-panel-summary {
+  font-size: 11px;
+  color: var(--color-text-light-2);
+}
+
+.matrix-panel-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-primary);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.matrix-panel-toggle:hover {
+  text-decoration: underline;
+}
+
+.grouped-panel {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  padding: 14px 18px;
+  overflow: hidden;
+  border-radius: 12px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.graph-list-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.graph-list-row:hover {
+  background: var(--color-hover);
+}
+
+.matrix-row-status {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.graph-list-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.graph-list-row-name {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-list-row-duration {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--color-text-light-2);
+  white-space: nowrap;
 }
 
 .job-text-wrap {

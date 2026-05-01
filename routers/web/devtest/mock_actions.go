@@ -229,19 +229,37 @@ func MockActionsRunsJobs(ctx *context.Context) {
 			needs    []string
 		}
 		mockJobs := []mj{
-			{jobID: "job-100", name: "job 100 (testsubname)", status: actions_model.StatusRunning, duration: "1h23m45s", needs: nil},
-			{jobID: "job-101", name: "job 101", status: actions_model.StatusWaiting, duration: "2h", needs: []string{"job-100"}},
-			{jobID: "job-102", name: "ULTRA LOOOOOOOOOOOONG job name 102 that exceeds the limit", status: actions_model.StatusFailure, duration: "3h35m10s", needs: []string{"job-100", "job-101"}},
-			{jobID: "job-103", name: "job 103", status: actions_model.StatusCancelled, duration: "2m", needs: []string{"job-100"}},
+			{jobID: "job-100", name: "job-100", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
+			{jobID: "job-101", name: "job-101", status: actions_model.StatusSuccess, duration: "3s", needs: []string{"job-100"}},
+			{jobID: "job-102", name: "job-102", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"job-101"}},
+			{jobID: "job-103", name: "job-103", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100"}},
 
-			{jobID: "prep-jdk", name: "置备JDK", status: actions_model.StatusSuccess, duration: "2m", needs: nil},
-			{jobID: "code-analysis", name: "代码分析", status: actions_model.StatusSuccess, duration: "5m", needs: nil},
+			{jobID: "prep-jdk", name: "prep-jdk", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
+			{jobID: "code-analysis", name: "code-analysis", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
 
-			{jobID: "unit-test", name: "单元测试", status: actions_model.StatusSuccess, duration: "8m", needs: []string{"prep-jdk"}},
-			{jobID: "arch-test", name: "架构测试", status: actions_model.StatusSuccess, duration: "11m", needs: []string{"prep-jdk"}},
-			{jobID: "integration-test", name: "集成测试", status: actions_model.StatusSuccess, duration: "14m", needs: []string{"prep-jdk"}},
+			// Matrix expansion (names intentionally match GitHub's common rendering pattern)
+			{jobID: "matrix-e2e-1-chromium", name: "matrix-e2e (1, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-1-firefox", name: "matrix-e2e (1, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-2-chromium", name: "matrix-e2e (2, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-3-chromium", name: "matrix-e2e (3, chromium)", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-3-firefox", name: "matrix-e2e (3, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-99-webkit", name: "matrix-e2e (99, webkit)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
 
-			{jobID: "build-image", name: "构建镜像", status: actions_model.StatusSuccess, duration: "9m", needs: []string{"unit-test", "arch-test", "integration-test", "code-analysis"}},
+			{jobID: "unit-test", name: "unit-test", status: actions_model.StatusSuccess, duration: "3s", needs: []string{"prep-jdk", "code-analysis"}},
+			{jobID: "arch-test", name: "arch-test", status: actions_model.StatusSuccess, duration: "3s", needs: []string{"prep-jdk", "code-analysis"}},
+			{jobID: "integration-test", name: "integration-test", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"prep-jdk", "code-analysis"}},
+
+			{jobID: "build-image", name: "build-image", status: actions_model.StatusSuccess, duration: "3s", needs: []string{
+				"unit-test",
+				"arch-test",
+				"integration-test",
+				"matrix-e2e-1-chromium",
+				"matrix-e2e-1-firefox",
+				"matrix-e2e-2-chromium",
+				"matrix-e2e-3-chromium",
+				"matrix-e2e-3-firefox",
+				"matrix-e2e-99-webkit",
+			}},
 		}
 
 		resp.State.Run.Jobs = nil
