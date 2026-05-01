@@ -221,6 +221,7 @@ const directNeedsByJobId = computed(() => buildDirectNeedsMap(props.jobs));
 const edges = computed<Edge[]>(() => {
   const edgesList: Edge[] = [];
   const jobsByJobId = new Map<string, ActionsJob[]>();
+  const seen = new Set<string>();
 
   for (const job of props.jobs) {
     if (!jobsByJobId.has(job.jobId)) {
@@ -233,6 +234,9 @@ const edges = computed<Edge[]>(() => {
     for (const need of directNeedsByJobId.value.get(job.jobId) || []) {
       const upstreamJobs = jobsByJobId.get(need) || [];
       for (const upstreamJob of upstreamJobs) {
+        const dedupeKey = `${upstreamJob.id}->${job.id}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
         edgesList.push({
           fromId: upstreamJob.id,
           toId: job.id,
@@ -292,6 +296,26 @@ const routedEdges = computed<RoutedEdge[]>(() => {
     });
   }
 
+  // Bundle incoming edges: if a node has multiple parents, draw one shared
+  // short "trunk" into the node and route each edge into the trunk point.
+  const bundleXByTargetId = new Map<number, number>();
+  for (const [toId, inc] of incomingEdges.entries()) {
+    if (inc.length <= 1) continue;
+    const toNode = nodesById.get(toId);
+    if (!toNode) continue;
+    bundleXByTargetId.set(toId, toNode.x - 18);
+  }
+
+  // Bundle outgoing edges: if a node has multiple children, route each edge from a
+  // shared "trunk" point leaving the node.
+  const bundleXBySourceId = new Map<number, number>();
+  for (const [fromId, out] of outgoingEdges.entries()) {
+    if (out.length <= 1) continue;
+    const fromNode = nodesById.get(fromId);
+    if (!fromNode) continue;
+    bundleXBySourceId.set(fromId, fromNode.x + nodeWidth.value + 18);
+  }
+
   const edgePaths: RoutedEdge[] = [];
 
   for (const edge of edges.value) {
@@ -299,9 +323,9 @@ const routedEdges = computed<RoutedEdge[]>(() => {
     const toNode = nodesById.get(edge.toId);
     if (!fromNode || !toNode) continue;
 
-    const startX = fromNode.x + nodeWidth.value;
+    const startX = bundleXBySourceId.get(edge.fromId) ?? (fromNode.x + nodeWidth.value);
     const startY = fromNode.y + nodeHeight / 2;
-    const endX = toNode.x;
+    const endX = bundleXByTargetId.get(edge.toId) ?? toNode.x;
     const endY = toNode.y + nodeHeight / 2;
     const sourceEdges = outgoingEdges.get(edge.fromId) || [];
     const targetEdges = incomingEdges.get(edge.toId) || [];
@@ -311,11 +335,18 @@ const routedEdges = computed<RoutedEdge[]>(() => {
     const targetTurnX = endX - turnOffset;
 
     let turnX = startX + horizontalGap / 2;
+    // Spread parallel edges so they diverge earlier/later instead of stacking and creating
+    // unnecessary crossings/ambiguity.
+    const sourceIndex = sourceEdges.findIndex((e) => e.key === edge.key);
+    const targetIndex = targetEdges.findIndex((e) => e.key === edge.key);
+    const spread = 7;
     if (sourceEdges.length > 1) {
-      turnX = sourceTurnX;
+      turnX = sourceTurnX + Math.max(0, sourceIndex) * spread;
     } else if (targetEdges.length > 1) {
-      turnX = targetTurnX;
+      turnX = targetTurnX - Math.max(0, targetIndex) * spread;
     }
+    // Avoid over-shooting which can create strange loops for very tight layouts.
+    turnX = Math.min(Math.max(turnX, startX + 10), endX - 10);
 
     const path = buildRoundedConnectorPath(startX, startY, endX, endY, turnX);
 
@@ -328,6 +359,74 @@ const routedEdges = computed<RoutedEdge[]>(() => {
   }
 
   return edgePaths;
+});
+
+type IncomingBundle = {
+  key: string;
+  toId: number;
+  fromIds: number[];
+  path: string;
+};
+
+type OutgoingBundle = {
+  key: string;
+  fromId: number;
+  toIds: number[];
+  path: string;
+};
+
+const incomingBundles = computed<IncomingBundle[]>(() => {
+  const nodesById = new Map(jobsWithLayout.value.map((job) => [job.id, job]));
+
+  const fromIdsByTarget = new Map<number, number[]>();
+  for (const e of edges.value) {
+    if (!fromIdsByTarget.has(e.toId)) fromIdsByTarget.set(e.toId, []);
+    fromIdsByTarget.get(e.toId)!.push(e.fromId);
+  }
+
+  const bundles: IncomingBundle[] = [];
+  for (const [toId, fromIds] of fromIdsByTarget.entries()) {
+    if (fromIds.length <= 1) continue;
+    const toNode = nodesById.get(toId);
+    if (!toNode) continue;
+    const x0 = toNode.x - 18;
+    const x1 = toNode.x;
+    const y = toNode.y + nodeHeight / 2;
+    bundles.push({
+      key: `inbundle-${toId}`,
+      toId,
+      fromIds,
+      path: `M ${x0} ${y} H ${x1}`,
+    });
+  }
+  return bundles;
+});
+
+const outgoingBundles = computed<OutgoingBundle[]>(() => {
+  const nodesById = new Map(jobsWithLayout.value.map((job) => [job.id, job]));
+
+  const toIdsBySource = new Map<number, number[]>();
+  for (const e of edges.value) {
+    if (!toIdsBySource.has(e.fromId)) toIdsBySource.set(e.fromId, []);
+    toIdsBySource.get(e.fromId)!.push(e.toId);
+  }
+
+  const bundles: OutgoingBundle[] = [];
+  for (const [fromId, toIds] of toIdsBySource.entries()) {
+    if (toIds.length <= 1) continue;
+    const fromNode = nodesById.get(fromId);
+    if (!fromNode) continue;
+    const x0 = fromNode.x + nodeWidth.value;
+    const x1 = x0 + 18;
+    const y = fromNode.y + nodeHeight / 2;
+    bundles.push({
+      key: `outbundle-${fromId}`,
+      fromId,
+      toIds,
+      path: `M ${x0} ${y} H ${x1}`,
+    });
+  }
+  return bundles;
 });
 
 const graphMetrics = computed(() => {
@@ -447,6 +546,16 @@ function isEdgeHighlighted(edge: RoutedEdge): boolean {
     return false;
   }
   return edge.fromId === hoveredJobId.value || edge.toId === hoveredJobId.value;
+}
+
+function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
+  if (!hoveredJobId.value) return false;
+  return bundle.toId === hoveredJobId.value || bundle.fromIds.includes(hoveredJobId.value);
+}
+
+function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
+  if (!hoveredJobId.value) return false;
+  return bundle.fromId === hoveredJobId.value || bundle.toIds.includes(hoveredJobId.value);
 }
 
 const nodesWithIncomingEdge = computed(() => {
@@ -587,15 +696,52 @@ function onNodeClick(job: JobNode, event: MouseEvent) {
           transformOrigin: '0 0',
         }"
       >
-        <path
-          v-for="edge in routedEdges"
-          :key="edge.key"
-          :d="edge.path"
-          fill="none"
-          stroke="var(--color-secondary-alpha-50)"
-          stroke-width="1.5"
-          :class="['node-edge', { 'highlighted-edge': isEdgeHighlighted(edge) }]"
-        />
+        <defs>
+          <!-- Prevent edge strokes from showing through node cards -->
+          <mask :id="`workflow-graph-edge-mask-${workflowId}`">
+            <rect :width="graphWidth" :height="graphHeight" fill="white"/>
+            <rect
+              v-for="job in jobsWithLayout"
+              :key="`mask-${job.id}`"
+              :x="job.x"
+              :y="job.y"
+              :width="nodeWidth"
+              :height="nodeHeight"
+              rx="8"
+              fill="black"
+            />
+          </mask>
+        </defs>
+
+        <g :mask="`url(#workflow-graph-edge-mask-${workflowId})`">
+          <path
+            v-for="bundle in outgoingBundles"
+            :key="bundle.key"
+            :d="bundle.path"
+            fill="none"
+            stroke="var(--color-secondary-alpha-50)"
+            stroke-width="1.5"
+            :class="['node-edge', { 'highlighted-edge': isOutgoingBundleHighlighted(bundle) }]"
+          />
+          <path
+            v-for="edge in routedEdges"
+            :key="edge.key"
+            :d="edge.path"
+            fill="none"
+            stroke="var(--color-secondary-alpha-50)"
+            stroke-width="1.5"
+            :class="['node-edge', { 'highlighted-edge': isEdgeHighlighted(edge) }]"
+          />
+          <path
+            v-for="bundle in incomingBundles"
+            :key="bundle.key"
+            :d="bundle.path"
+            fill="none"
+            stroke="var(--color-secondary-alpha-50)"
+            stroke-width="1.5"
+            :class="['node-edge', { 'highlighted-edge': isIncomingBundleHighlighted(bundle) }]"
+          />
+        </g>
 
         <g
           v-for="job in jobsWithLayout"

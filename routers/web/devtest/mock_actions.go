@@ -214,6 +214,56 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		return fmt.Sprintf("%s/jobs/%d", resp.State.Run.Link, jobID)
 	}
 
+	// Keep devtest mock runs minimal: use run 10 as a "complex graph" repro.
+	// This combines long durations, parallel roots, and a multi-dependency downstream job
+	// to validate the workflow graph rendering.
+	if runID == 10 {
+		resp.State.Run.WorkflowID = "workflow-devtest-complex"
+		resp.State.Run.Duration = "7h 12m 34s"
+
+		type mj struct {
+			jobID    string
+			name     string
+			status   actions_model.Status
+			duration string
+			needs    []string
+		}
+		mockJobs := []mj{
+			{jobID: "job-100", name: "job 100 (testsubname)", status: actions_model.StatusRunning, duration: "1h23m45s", needs: nil},
+			{jobID: "job-101", name: "job 101", status: actions_model.StatusWaiting, duration: "2h", needs: []string{"job-100"}},
+			{jobID: "job-102", name: "ULTRA LOOOOOOOOOOOONG job name 102 that exceeds the limit", status: actions_model.StatusFailure, duration: "3h35m10s", needs: []string{"job-100", "job-101"}},
+			{jobID: "job-103", name: "job 103", status: actions_model.StatusCancelled, duration: "2m", needs: []string{"job-100"}},
+
+			{jobID: "prep-jdk", name: "置备JDK", status: actions_model.StatusSuccess, duration: "2m", needs: nil},
+			{jobID: "code-analysis", name: "代码分析", status: actions_model.StatusSuccess, duration: "5m", needs: nil},
+
+			{jobID: "unit-test", name: "单元测试", status: actions_model.StatusSuccess, duration: "8m", needs: []string{"prep-jdk"}},
+			{jobID: "arch-test", name: "架构测试", status: actions_model.StatusSuccess, duration: "11m", needs: []string{"prep-jdk"}},
+			{jobID: "integration-test", name: "集成测试", status: actions_model.StatusSuccess, duration: "14m", needs: []string{"prep-jdk"}},
+
+			{jobID: "build-image", name: "构建镜像", status: actions_model.StatusSuccess, duration: "9m", needs: []string{"unit-test", "arch-test", "integration-test", "code-analysis"}},
+		}
+
+		resp.State.Run.Jobs = nil
+		for i, j := range mockJobs {
+			id := runID*1000 + int64(i)
+			resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
+				ID:       id,
+				Link:     jobLink(id),
+				JobID:    j.jobID,
+				Name:     j.name,
+				Status:   j.status.String(),
+				CanRerun: j.jobID == "job-100",
+				Duration: j.duration,
+				Needs:    j.needs,
+			})
+		}
+
+		fillViewRunResponseCurrentJob(ctx, resp)
+		ctx.JSON(http.StatusOK, resp)
+		return
+	}
+
 	resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
 		ID:       runID * 10,
 		Link:     jobLink(runID * 10),
@@ -267,51 +317,6 @@ func MockActionsRunsJobs(ctx *context.Context) {
 				CanRerun: false,
 				Duration: "2m",
 				Needs:    []string{"job-103", "job-101", "job-100"},
-			})
-		}
-	}
-
-	// A wide DAG to reproduce graph overflow and long-duration layout issues.
-	// It creates multiple dependency levels horizontally so the SVG exceeds the container width.
-	if runID == 40 {
-		resp.State.Run.WorkflowID = "workflow-wide-dag"
-		resp.State.Run.Duration = "7h 12m 34s"
-
-		type mockJob struct {
-			jobID    string
-			name     string
-			duration string
-			needs    []string
-		}
-
-		mockJobs := []mockJob{
-			{jobID: "wide-00", name: "Bootstrap", duration: "2m", needs: nil},
-			{jobID: "wide-01", name: "Fetch dependencies", duration: "4m", needs: nil},
-			{jobID: "wide-10", name: "Lint (JS)", duration: "12m", needs: []string{"wide-00", "wide-01"}},
-			{jobID: "wide-11", name: "Lint (Go)", duration: "9m", needs: []string{"wide-00", "wide-01"}},
-			{jobID: "wide-12", name: "Typecheck", duration: "18m", needs: []string{"wide-00", "wide-01"}},
-			{jobID: "wide-20", name: "Unit tests (fast)", duration: "1h2m3s", needs: []string{"wide-10"}},
-			{jobID: "wide-21", name: "Unit tests (slow)", duration: "3h35m10s", needs: []string{"wide-11"}},
-			{jobID: "wide-22", name: "Integration tests", duration: "47m", needs: []string{"wide-12"}},
-			{jobID: "wide-30", name: "Build linux/amd64", duration: "22m", needs: []string{"wide-20", "wide-21"}},
-			{jobID: "wide-31", name: "Build windows/amd64", duration: "25m", needs: []string{"wide-20", "wide-22"}},
-			{jobID: "wide-40", name: "E2E (chromium)", duration: "33m", needs: []string{"wide-30"}},
-			{jobID: "wide-41", name: "E2E (firefox)", duration: "31m", needs: []string{"wide-31"}},
-			{jobID: "wide-50", name: "Package artifacts", duration: "6m", needs: []string{"wide-40", "wide-41"}},
-			{jobID: "wide-60", name: "Deploy preview environment with an extremely long job name that used to get squeezed by the duration label", duration: "14m", needs: []string{"wide-50"}},
-		}
-
-		for i, mj := range mockJobs {
-			id := runID*1000 + int64(i)
-			resp.State.Run.Jobs = append(resp.State.Run.Jobs, &actions.ViewJob{
-				ID:       id,
-				Link:     jobLink(id),
-				JobID:    mj.jobID,
-				Name:     mj.name,
-				Status:   actions_model.StatusSuccess.String(),
-				CanRerun: false,
-				Duration: mj.duration,
-				Needs:    mj.needs,
 			})
 		}
 	}
