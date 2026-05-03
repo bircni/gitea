@@ -1,4 +1,4 @@
-import {createWorkflowGraphModel, computeJobLevels, matrixKeyFromJobName} from './WorkflowGraph.utils.ts';
+import {computeGraphHighlightState, createWorkflowGraphModel, computeJobLevels, matrixKeyFromJobName} from './WorkflowGraph.utils.ts';
 import type {ActionsJob} from '../modules/gitea-actions.ts';
 
 const mockJobs: ActionsJob[] = [
@@ -99,9 +99,14 @@ test('bundled routes stay orthogonal and include bundle stubs', () => {
   const groupIncomingEdges = graph.edges.filter((edge) => edge.toId.includes('group:')).map((edge) => edge.fromId);
 
   expect(lowerClusterOutgoingBundle?.toIds.sort()).toEqual(['group:1:code-analysis\u0001prep-jdk:build-image', 'matrix:matrix-e2e']);
+  expect(lowerClusterOutgoingBundle?.edgeKeys.sort()).toEqual([
+    'job:5->group:1:code-analysis\u0001prep-jdk:build-image',
+    'job:5->matrix:matrix-e2e',
+  ]);
   expect(matrixIncomingEdges).toEqual(['job:5', 'job:6']);
   expect(groupIncomingEdges).toEqual(['job:5']);
   expect(matrixIncomingBundle?.fromIds).toEqual(['job:5', 'job:6']);
+  expect(matrixIncomingBundle?.edgeKeys.sort()).toEqual(['job:5->matrix:matrix-e2e', 'job:6->matrix:matrix-e2e']);
   expect(buildImageIncomingBundle?.fromIds).toHaveLength(2);
   expect(buildImageEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
 });
@@ -123,4 +128,40 @@ test('verify-deploy graph keeps direct edges flat and deploy merge local', () =>
   expect(deploy).toBeDefined();
   expect(verifyDev).toBeDefined();
   expect(deploy!.y).toBe(verifyDev!.y);
+});
+
+test('directed highlight state excludes siblings that only share descendants', () => {
+  const graph = createWorkflowGraphModel(mockJobs);
+
+  const prepHighlight = computeGraphHighlightState('job:5', graph.edges);
+  expect(prepHighlight.nodeIds.has('job:5')).toBe(true);
+  expect(prepHighlight.nodeIds.has('matrix:matrix-e2e')).toBe(true);
+  expect(prepHighlight.nodeIds.has('group:1:code-analysis\u0001prep-jdk:build-image')).toBe(true);
+  expect(prepHighlight.nodeIds.has('job:16')).toBe(true);
+  expect(prepHighlight.nodeIds.has('job:6')).toBe(false);
+  expect(prepHighlight.edgeKeys.has('job:5->matrix:matrix-e2e')).toBe(true);
+  expect(prepHighlight.edgeKeys.has('job:5->group:1:code-analysis\u0001prep-jdk:build-image')).toBe(true);
+  expect(prepHighlight.edgeKeys.has('job:6->matrix:matrix-e2e')).toBe(false);
+
+  const codeHighlight = computeGraphHighlightState('job:6', graph.edges);
+  expect(codeHighlight.nodeIds.has('job:5')).toBe(false);
+  expect(codeHighlight.edgeKeys.has('job:5->matrix:matrix-e2e')).toBe(false);
+  expect(codeHighlight.edgeKeys.has('job:6->matrix:matrix-e2e')).toBe(true);
+});
+
+test('directed highlight state for converging graph excludes sibling branch when hovering parent', () => {
+  const graph = createWorkflowGraphModel(verifyDeployJobs);
+
+  const parentHighlight = computeGraphHighlightState('job:103', graph.edges);
+  expect(parentHighlight.nodeIds.has('job:101')).toBe(true);
+  expect(parentHighlight.nodeIds.has('job:105')).toBe(true);
+  expect(parentHighlight.nodeIds.has('job:104')).toBe(false);
+  expect(parentHighlight.edgeKeys.has('job:103->job:105')).toBe(true);
+  expect(parentHighlight.edgeKeys.has('job:104->job:105')).toBe(false);
+
+  const sinkHighlight = computeGraphHighlightState('job:105', graph.edges);
+  expect(sinkHighlight.nodeIds.has('job:103')).toBe(true);
+  expect(sinkHighlight.nodeIds.has('job:104')).toBe(true);
+  expect(sinkHighlight.edgeKeys.has('job:103->job:105')).toBe(true);
+  expect(sinkHighlight.edgeKeys.has('job:104->job:105')).toBe(true);
 });

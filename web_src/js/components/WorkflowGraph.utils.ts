@@ -32,6 +32,7 @@ export type IncomingBundle = {
   key: string;
   toId: string;
   fromIds: string[];
+  edgeKeys: string[];
   path: string;
 };
 
@@ -39,7 +40,13 @@ export type OutgoingBundle = {
   key: string;
   fromId: string;
   toIds: string[];
+  edgeKeys: string[];
   path: string;
+};
+
+export type GraphHighlightState = {
+  nodeIds: Set<string>;
+  edgeKeys: Set<string>;
 };
 
 export type WorkflowGraphLayoutOptions = {
@@ -260,6 +267,48 @@ export function computeJobLevels(jobs: ActionsJob[]): Map<string, number> {
   }
 
   return levels;
+}
+
+export function computeGraphHighlightState(hoveredId: string | null, edges: Edge[]): GraphHighlightState {
+  if (!hoveredId) {
+    return {
+      nodeIds: new Set<string>(),
+      edgeKeys: new Set<string>(),
+    };
+  }
+
+  const incoming = new Map<string, Edge[]>();
+  const outgoing = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    if (!incoming.has(edge.toId)) incoming.set(edge.toId, []);
+    incoming.get(edge.toId)!.push(edge);
+    if (!outgoing.has(edge.fromId)) outgoing.set(edge.fromId, []);
+    outgoing.get(edge.fromId)!.push(edge);
+  }
+
+  const edgeKeys = new Set<string>();
+
+  const collect = (startId: string, adjacency: Map<string, Edge[]>, nextId: (edge: Edge) => string): Set<string> => {
+    const visited = new Set<string>();
+    const queue = [startId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) continue;
+      visited.add(current);
+      for (const edge of adjacency.get(current) || []) {
+        edgeKeys.add(edge.key);
+        const next = nextId(edge);
+        if (!visited.has(next)) queue.push(next);
+      }
+    }
+    return visited;
+  };
+
+  const ancestors = collect(hoveredId, incoming, (edge) => edge.fromId);
+  const descendants = collect(hoveredId, outgoing, (edge) => edge.toId);
+  const nodeIds = new Set([...ancestors, ...descendants]);
+
+  return {nodeIds, edgeKeys};
 }
 
 function roundedElbowPath(startX: number, startY: number, turnX: number, endY: number, endX: number, forceElbow = false): string {
@@ -793,6 +842,7 @@ function buildBundles(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphL
       key: `outbundle-${fromId}`,
       fromId,
       toIds: sourceEdges.map((edge) => edge.toId),
+      edgeKeys: sourceEdges.map((edge) => edge.key),
       path: `M ${x0} ${boxCenterY(fromNode)} H ${x1}`,
     });
   }
@@ -811,6 +861,7 @@ function buildBundles(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphL
       key: `inbundle-${toId}`,
       toId,
       fromIds: targetEdges.map((edge) => edge.fromId),
+      edgeKeys: targetEdges.map((edge) => edge.key),
       path: `M ${x0} ${boxCenterY(toNode)} H ${x1}`,
     });
   }
@@ -892,6 +943,7 @@ function buildRoutedEdges(
         key: `outbundle-${sourceId}`,
         fromId: sourceId,
         toIds: [collapsedMatrixNode.id, groupedNode.id],
+        edgeKeys: [`${sourceId}->${collapsedMatrixNode.id}`, `${sourceId}->${groupedNode.id}`],
         path: roundedHVPath(sourceX, sourceY, lowerClusterTrunkX, splitY),
       });
       sourceStubXByNodeId.set(sourceId, lowerClusterTrunkX);

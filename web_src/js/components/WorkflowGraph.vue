@@ -10,6 +10,7 @@ import type {ActionRunViewStore} from './ActionRunView.ts';
 import {
   boxBottom,
   boxCenterY,
+  computeGraphHighlightState,
   createWorkflowGraphModel,
   getWorkflowGraphLayoutOptions,
   type GraphNode,
@@ -203,52 +204,24 @@ function handleMatrixMouseEnter(groupId: string) {
   hoveredGraphId.value = groupId;
 }
 
-const relatedGraphIds = computed(() => {
-  const hoveredId = hoveredGraphId.value;
-  if (!hoveredId) return new Set<string>();
-
-  const outgoing = new Map<string, Set<string>>();
-  const incoming = new Map<string, Set<string>>();
-  for (const edge of edges.value) {
-    if (!outgoing.has(edge.fromId)) outgoing.set(edge.fromId, new Set());
-    if (!incoming.has(edge.toId)) incoming.set(edge.toId, new Set());
-    outgoing.get(edge.fromId)!.add(edge.toId);
-    incoming.get(edge.toId)!.add(edge.fromId);
-  }
-
-  const collectReachable = (startId: string, adjacency: Map<string, Set<string>>): Set<string> => {
-    const visited = new Set<string>();
-    const queue = [startId];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || visited.has(current)) continue;
-      visited.add(current);
-      for (const next of adjacency.get(current) || []) {
-        if (!visited.has(next)) queue.push(next);
-      }
-    }
-    return visited;
-  };
-
-  const ancestors = collectReachable(hoveredId, incoming);
-  const descendants = collectReachable(hoveredId, outgoing);
-  return new Set([...ancestors, ...descendants]);
-});
+const graphHighlightState = computed(() => computeGraphHighlightState(hoveredGraphId.value, edges.value));
+const relatedGraphIds = computed(() => graphHighlightState.value.nodeIds);
+const highlightedEdgeKeys = computed(() => graphHighlightState.value.edgeKeys);
 
 function isNodeHighlighted(nodeId: string): boolean {
   return relatedGraphIds.value.has(nodeId);
 }
 
 function isEdgeHighlighted(edge: RoutedEdge): boolean {
-  return relatedGraphIds.value.has(edge.fromId) && relatedGraphIds.value.has(edge.toId);
+  return highlightedEdgeKeys.value.has(edge.key);
 }
 
 function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
-  return relatedGraphIds.value.has(bundle.toId) && bundle.fromIds.some((fromId) => relatedGraphIds.value.has(fromId));
+  return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
 }
 
 function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
-  return relatedGraphIds.value.has(bundle.fromId) && bundle.toIds.some((toId) => relatedGraphIds.value.has(toId));
+  return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
 }
 
 const nodesWithIncomingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.toId)));
