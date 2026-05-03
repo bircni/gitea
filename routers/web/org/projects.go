@@ -34,9 +34,9 @@ const (
 	tplProjectsView templates.TplName = "org/projects/view"
 )
 
-// MustEnableProjects checks whether owner-level projects are enabled in settings.
+// MustEnableProjects checks whether user/org projects are enabled in settings.
 func MustEnableProjects(ctx *context.Context) {
-	if !setting.Project.Enabled {
+	if !setting.Project.EnableUserOrgProjects {
 		ctx.NotFound(nil)
 		return
 	}

@@ -61,7 +61,7 @@ func TestAddColumnToProjectPostRejectsForeignProjects(t *testing.T) {
 
 func TestMustEnableProjectsDisabled(t *testing.T) {
 	unittest.PrepareTestEnv(t)
-	defer test.MockVariableValue(&setting.Project.Enabled, false)()
+	defer test.MockVariableValue(&setting.Project.EnableUserOrgProjects, false)()
 
 	ctx, _ := contexttest.MockContext(t, "user2/-/projects")
 
