@@ -587,7 +587,7 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
       return parentMean * 0.55 + childMean * 0.45;
     }
     if (parentCenters.length > 0) {
-      if (parentCenters.length === 2 && childCenters.length === 0) {
+      if (parentCenters.length === 2) {
         return Math.min(...parentCenters);
       }
       return parentCenters.reduce((sum, y) => sum + y, 0) / parentCenters.length;
@@ -690,9 +690,8 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
     const parents = incoming.map((id) => nodesById.get(id)).filter(Boolean);
     if (parents.length !== 2) continue;
 
-    const parentCenters = parents.map((parent) => boxCenterY(parent!)).sort((a, b) => a - b);
-    const desiredCenter = parentCenters[0];
-    node.y = desiredCenter - node.displayHeight / 2;
+    const parentCenters = parents.map((parent) => boxCenterY(parent!));
+    node.y = Math.min(...parentCenters) - node.displayHeight / 2;
   }
 }
 
@@ -853,8 +852,8 @@ function buildRoutedEdges(
       (groupedNode !== undefined && edge.toId === groupedNode.id && fromSharedLowerClusterSource)
     );
 
-    if (inCollapsedLowerCluster) {
-      routeX = lowerClusterTrunkX!;
+    if (inCollapsedLowerCluster && lowerClusterTrunkX !== undefined) {
+      routeX = lowerClusterTrunkX;
     } else if (toCollapsedMatrix) {
       routeX = fromSharedLowerClusterSource ? sourceTurnX : defaultTurnX;
     } else if (sourceEdges.length === 1 && targetEdges.length === 1) {
@@ -877,9 +876,7 @@ function buildRoutedEdges(
       path = groupedNode !== undefined && edge.toId === groupedNode.id ?
         roundedVHPath(startX, lowerClusterSplitY, endY, endX) :
         `M ${startX} ${lowerClusterSplitY} H ${endX}`;
-    } else if (useNearStraightCollapsedMatrixEdge) {
-      path = `M ${startX} ${startY} H ${endX}`;
-    } else if (useFlatDirectEdge) {
+    } else if (useNearStraightCollapsedMatrixEdge || useFlatDirectEdge) {
       path = `M ${startX} ${startY} H ${endX}`;
     } else if (useSimpleDirectEdge) {
       path = roundedElbowPath(startX, startY, routeX, endY, endX, true);

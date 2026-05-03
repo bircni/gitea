@@ -120,5 +120,7 @@ test('verify-deploy graph keeps direct edges flat and deploy merge local', () =>
   expect(verifyQaEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
   expect(deployUpperEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
   expect(deployLowerEdge?.path).toContain('V');
-  expect(deploy?.y).toBe(verifyDev?.y);
+  expect(deploy).toBeDefined();
+  expect(verifyDev).toBeDefined();
+  expect(deploy!.y).toBe(verifyDev!.y);
 });
