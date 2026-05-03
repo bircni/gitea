@@ -549,12 +549,12 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   align-items: center;
   min-height: 24px;
   padding: 0 12px;
-  border: 1px solid #d0d7e2;
+  border: 1px solid var(--color-secondary);
   border-bottom: none;
   border-radius: 8px 8px 0 0;
-  background: #fff;
+  background: var(--color-box-body);
   z-index: 1;
-  box-shadow: 0 1px 0 #fff;
+  box-shadow: 0 1px 0 var(--color-box-body);
 }
 
 .matrix-panel-tab-value {
@@ -566,19 +566,16 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 
 .matrix-panel-body {
   position: absolute;
-  top: 23px;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 23px 0 0;
   padding: 22px 18px 16px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
-  border: 1px solid #d0d7e2;
-  border-top: 1px solid #d0d7e2;
-  border-radius: 0 8px 8px 8px;
-  background: #fff;
+  border: 1px solid var(--color-secondary);
+  border-top: 1px solid var(--color-secondary);
+  border-radius: 0 8px 8px;
+  background: var(--color-box-body);
 }
 
 .matrix-panel-summary-row {
