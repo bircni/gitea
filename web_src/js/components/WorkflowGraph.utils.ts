@@ -44,6 +44,12 @@ export type OutgoingBundle = {
   path: string;
 };
 
+export type SharedSegment = {
+  key: string;
+  edgeKeys: string[];
+  path: string;
+};
+
 export type GraphHighlightState = {
   nodeIds: Set<string>;
   edgeKeys: Set<string>;
@@ -70,6 +76,7 @@ export type WorkflowGraphModel = {
   routedEdges: RoutedEdge[];
   incomingBundles: IncomingBundle[];
   outgoingBundles: OutgoingBundle[];
+  sharedSegments: SharedSegment[];
 };
 
 const defaultLayoutOptions: WorkflowGraphLayoutOptions = {
@@ -388,6 +395,22 @@ function roundedVHPath(startX: number, startY: number, endY: number, endX: numbe
   ].join(' ');
 }
 
+function gentleFanoutPath(startX: number, startY: number, endY: number, endX: number): string {
+  if (Math.abs(endY - startY) < 12) {
+    return `M ${startX} ${startY} H ${endX}`;
+  }
+
+  const horizontalGap = endX - startX;
+  const curveLead = Math.min(28, Math.max(14, horizontalGap * 0.22));
+  const curveEndX = Math.min(endX, startX + curveLead * 2);
+
+  return [
+    `M ${startX} ${startY}`,
+    `C ${startX + curveLead} ${startY} ${startX + curveLead} ${endY} ${curveEndX} ${endY}`,
+    `H ${endX}`,
+  ].join(' ');
+}
+
 type VisualGraphBuild = {
   nodes: GraphNode[];
   edges: Edge[];
@@ -420,14 +443,10 @@ function simplifyClusterEdges(nodes: GraphNode[], edges: Edge[], jobIndexById: M
   const groupIncoming = incomingByNodeId.get(groupNode.id) || [];
   const sharedIncoming = sortNodeIdsByInputOrder(matrixIncoming.filter((fromId) => groupIncoming.includes(fromId)));
   if (sharedIncoming.length < 2) return edges;
-
-  const groupKeep = sharedIncoming[0];
   const matrixUnique = matrixIncoming.filter((fromId) => !sharedIncoming.includes(fromId));
-  const groupDrop = groupIncoming.filter((fromId) => sharedIncoming.includes(fromId) && fromId !== groupKeep);
 
   return edges.filter((edge) => {
     if (edge.toId === matrixNode.id && matrixUnique.includes(edge.fromId)) return false;
-    if (edge.toId === groupNode.id && groupDrop.includes(edge.fromId)) return false;
     return true;
   });
 }
@@ -702,7 +721,7 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
     }
   }
 
-  // Tighten the lower cluster to the GitHub shape: matrix above grouped tests,
+  // Tighten the lower cluster to the GitHub shape: grouped tests above matrix,
   // both closer together, with the downstream merge sink job aligned higher.
   const matrixNode = nodes.find((node) => node.type === 'matrix');
   const groupNode = nodes.find((node) => node.type === 'group');
@@ -770,11 +789,11 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
       }
       parentCenter = sumCenters / lowerParentNodes.length;
     }
-    matrixNode.y = Math.max(
+    groupNode.y = Math.max(
       upperSiblingBottom + lowerClusterVerticalTune.matrixTopGap,
-      parentCenter - Math.round(matrixNode.displayHeight * lowerClusterVerticalTune.matrixParentBlend),
+      parentCenter - Math.round(groupNode.displayHeight * lowerClusterVerticalTune.matrixParentBlend),
     );
-    groupNode.y = matrixNode.y + matrixNode.displayHeight + lowerClusterVerticalTune.groupGapBelowMatrix;
+    matrixNode.y = groupNode.y + groupNode.displayHeight + lowerClusterVerticalTune.groupGapBelowMatrix;
   }
 
   if (buildNode && matrixNode && groupNode) {
@@ -914,7 +933,7 @@ function buildRoutedEdges(
   nodes: GraphNode[],
   edges: Edge[],
   options: WorkflowGraphLayoutOptions,
-): Pick<WorkflowGraphModel, 'routedEdges' | 'incomingBundles' | 'outgoingBundles'> {
+): Pick<WorkflowGraphModel, 'routedEdges' | 'incomingBundles' | 'outgoingBundles' | 'sharedSegments'> {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const {
     outgoingBundles,
@@ -928,37 +947,160 @@ function buildRoutedEdges(
   const sourceEdgeIndexByNodeId = edgeKeyIndexByNodeId(outgoingEdges);
   const targetEdgeIndexByNodeId = edgeKeyIndexByNodeId(incomingEdges);
 
-  const collapsedMatrixNode = nodes.find((node) => node.type === 'matrix' && node.displayHeight <= options.matrixCollapsedHeight);
   const matrixNodeFull = nodes.find((node) => node.type === 'matrix');
   const groupedNode = nodes.find((node) => node.type === 'group');
+  const matrixSharedTargetNode = matrixNodeFull;
   const lowerClusterTrunkX = groupedNode ? groupedNode.x - edgeRouteLayout.lowerClusterTrunkOffset : undefined;
-  const collapsedMatrixIncoming = collapsedMatrixNode ? new Set((incomingEdges.get(collapsedMatrixNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
+  const collapsedMatrixIncoming = matrixSharedTargetNode ? new Set((incomingEdges.get(matrixSharedTargetNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
   const groupedIncoming = groupedNode ? new Set((incomingEdges.get(groupedNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
   const lowerClusterSharedSources = new Set<string>(
     Array.from(collapsedMatrixIncoming).filter((fromId) => groupedIncoming.has(fromId)),
   );
+  const lowerClusterSharedSourceIds = Array.from(lowerClusterSharedSources).sort((a, b) => {
+    const nodeA = nodesById.get(a);
+    const nodeB = nodesById.get(b);
+    const rankA = Math.min(...(nodeA?.jobs.map((job) => job.id) || [0]));
+    const rankB = Math.min(...(nodeB?.jobs.map((job) => job.id) || [0]));
+    return rankA - rankB || a.localeCompare(b);
+  });
+  const sharedSegments: SharedSegment[] = [];
   const routedOutgoingBundles: OutgoingBundle[] = outgoingBundles.filter((bundle) => !lowerClusterSharedSources.has(bundle.fromId));
+  const lowerClusterSharedTargetIds = new Set<string>();
+  if (lowerClusterSharedSourceIds.length >= 2 && groupedNode && matrixSharedTargetNode) {
+    lowerClusterSharedTargetIds.add(groupedNode.id);
+    lowerClusterSharedTargetIds.add(matrixSharedTargetNode.id);
+  } else if (matrixSharedTargetNode) {
+    lowerClusterSharedTargetIds.add(matrixSharedTargetNode.id);
+  }
+  const routedIncomingBundles: IncomingBundle[] = incomingBundles.filter((bundle) => !lowerClusterSharedTargetIds.has(bundle.toId));
+  const customLowerClusterEdgeKeys = new Set<string>();
 
-  if (lowerClusterTrunkX !== undefined && collapsedMatrixNode && groupedNode) {
-    for (const sourceId of lowerClusterSharedSources) {
-      const sourceNode = nodesById.get(sourceId);
-      if (!sourceNode) continue;
-      const sourceX = sourceNode.x + options.nodeWidth;
-      const sourceY = boxCenterY(sourceNode);
-      const splitY = boxCenterY(collapsedMatrixNode);
-      routedOutgoingBundles.push({
-        key: `outbundle-${sourceId}`,
-        fromId: sourceId,
-        toIds: [collapsedMatrixNode.id, groupedNode.id],
-        edgeKeys: [`${sourceId}->${collapsedMatrixNode.id}`, `${sourceId}->${groupedNode.id}`],
-        path: roundedHVPath(sourceX, sourceY, lowerClusterTrunkX, splitY),
+  if (lowerClusterTrunkX !== undefined && matrixSharedTargetNode && groupedNode && lowerClusterSharedSourceIds.length >= 2) {
+    const upperSharedSourceId = lowerClusterSharedSourceIds[0];
+    const lowerSharedSourceId = lowerClusterSharedSourceIds[1];
+    const upperSharedSourceNode = nodesById.get(upperSharedSourceId);
+    const lowerSharedSourceNode = nodesById.get(lowerSharedSourceId);
+
+    if (upperSharedSourceNode && lowerSharedSourceNode) {
+      const upperSourceX = upperSharedSourceNode.x + options.nodeWidth;
+      const upperSourceY = boxCenterY(upperSharedSourceNode);
+      const lowerSourceX = lowerSharedSourceNode.x + options.nodeWidth;
+      const lowerSourceY = boxCenterY(lowerSharedSourceNode);
+      const groupedY = boxCenterY(groupedNode);
+      const matrixY = boxCenterY(matrixSharedTargetNode);
+      const upperSourceEdgeKeys = [
+        `${upperSharedSourceId}->${groupedNode.id}`,
+        `${upperSharedSourceId}->${matrixSharedTargetNode.id}`,
+      ];
+      const lowerSourceEdgeKeys = [
+        `${lowerSharedSourceId}->${groupedNode.id}`,
+        `${lowerSharedSourceId}->${matrixSharedTargetNode.id}`,
+      ];
+      const groupEdgeKeys = [
+        `${upperSharedSourceId}->${groupedNode.id}`,
+        `${lowerSharedSourceId}->${groupedNode.id}`,
+      ];
+      const matrixEdgeKeys = [
+        `${upperSharedSourceId}->${matrixSharedTargetNode.id}`,
+        `${lowerSharedSourceId}->${matrixSharedTargetNode.id}`,
+      ];
+
+      for (const edgeKey of [...groupEdgeKeys, ...matrixEdgeKeys]) {
+        customLowerClusterEdgeKeys.add(edgeKey);
+      }
+
+      sharedSegments.push({
+        key: 'lower-cluster-upper-join',
+        edgeKeys: upperSourceEdgeKeys,
+        path: roundedHVPath(upperSourceX, upperSourceY, lowerClusterTrunkX, groupedY),
       });
-      sourceStubXByNodeId.set(sourceId, lowerClusterTrunkX);
+      sharedSegments.push({
+        key: 'lower-cluster-lower-join',
+        edgeKeys: lowerSourceEdgeKeys,
+        path: roundedHVPath(lowerSourceX, lowerSourceY, lowerClusterTrunkX, groupedY),
+      });
+      sharedSegments.push({
+        key: 'lower-cluster-shared-trunk',
+        edgeKeys: matrixEdgeKeys,
+        path: `M ${lowerClusterTrunkX} ${groupedY} V ${matrixY}`,
+      });
+      sharedSegments.push({
+        key: 'lower-cluster-group-final',
+        edgeKeys: groupEdgeKeys,
+        path: `M ${lowerClusterTrunkX} ${groupedY} H ${groupedNode.x}`,
+      });
+      sharedSegments.push({
+        key: 'lower-cluster-matrix-final',
+        edgeKeys: matrixEdgeKeys,
+        path: `M ${lowerClusterTrunkX} ${matrixY} H ${matrixSharedTargetNode.x}`,
+      });
+    }
+  } else if (lowerClusterTrunkX !== undefined && matrixSharedTargetNode && groupedNode) {
+    const sharedSourceId = lowerClusterSharedSourceIds[0];
+    const sharedSourceNode = sharedSourceId ? nodesById.get(sharedSourceId) : undefined;
+    const matrixOnlySourceId = Array.from(collapsedMatrixIncoming).find((fromId) => !lowerClusterSharedSources.has(fromId));
+    const matrixOnlySourceNode = matrixOnlySourceId ? nodesById.get(matrixOnlySourceId) : undefined;
+
+    if (sharedSourceNode) {
+      const sharedSourceX = sharedSourceNode.x + options.nodeWidth;
+      const sharedSourceY = boxCenterY(sharedSourceNode);
+      const groupedY = boxCenterY(groupedNode);
+      const matrixJoinY = matrixOnlySourceNode ? boxCenterY(matrixOnlySourceNode) : boxCenterY(matrixSharedTargetNode);
+      const matrixY = boxCenterY(matrixSharedTargetNode);
+
+      const prepToGroupKey = `${sharedSourceId}->${groupedNode.id}`;
+      const prepToMatrixKey = `${sharedSourceId}->${matrixSharedTargetNode.id}`;
+      customLowerClusterEdgeKeys.add(prepToGroupKey);
+      customLowerClusterEdgeKeys.add(prepToMatrixKey);
+      if (matrixOnlySourceId) customLowerClusterEdgeKeys.add(`${matrixOnlySourceId}->${matrixSharedTargetNode.id}`);
+
+      sharedSegments.push({
+        key: 'lower-cluster-shared-upper',
+        edgeKeys: [prepToGroupKey, prepToMatrixKey],
+        path: roundedHVPath(sharedSourceX, sharedSourceY, lowerClusterTrunkX, groupedY),
+      });
+      sharedSegments.push({
+        key: 'lower-cluster-group-final',
+        edgeKeys: [prepToGroupKey],
+        path: `M ${lowerClusterTrunkX} ${groupedY} H ${groupedNode.x}`,
+      });
+      sharedSegments.push({
+        key: 'lower-cluster-shared-mid',
+        edgeKeys: [prepToMatrixKey],
+        path: `M ${lowerClusterTrunkX} ${groupedY} V ${matrixJoinY}`,
+      });
+      if (matrixOnlySourceNode && matrixOnlySourceId) {
+        const matrixOnlySourceX = matrixOnlySourceNode.x + options.nodeWidth;
+        const matrixOnlySourceY = boxCenterY(matrixOnlySourceNode);
+        const matrixOnlyKey = `${matrixOnlySourceId}->${matrixSharedTargetNode.id}`;
+        sharedSegments.push({
+          key: 'lower-cluster-matrix-join',
+          edgeKeys: [matrixOnlyKey],
+          path: `M ${matrixOnlySourceX} ${matrixOnlySourceY} H ${lowerClusterTrunkX}`,
+        });
+        sharedSegments.push({
+          key: 'lower-cluster-shared-lower',
+          edgeKeys: [prepToMatrixKey, matrixOnlyKey],
+          path: `M ${lowerClusterTrunkX} ${matrixOnlySourceY} V ${matrixY}`,
+        });
+        sharedSegments.push({
+          key: 'lower-cluster-matrix-final',
+          edgeKeys: [prepToMatrixKey, matrixOnlyKey],
+          path: `M ${lowerClusterTrunkX} ${matrixY} H ${matrixSharedTargetNode.x}`,
+        });
+      } else {
+        sharedSegments.push({
+          key: 'lower-cluster-matrix-final',
+          edgeKeys: [prepToMatrixKey],
+          path: `M ${lowerClusterTrunkX} ${matrixY} H ${matrixSharedTargetNode.x}`,
+        });
+      }
     }
   }
 
   const routedEdges: RoutedEdge[] = [];
   for (const edge of edges) {
+    if (customLowerClusterEdgeKeys.has(edge.key)) continue;
     const fromNode = nodesById.get(edge.fromId);
     const toNode = nodesById.get(edge.toId);
     if (!fromNode || !toNode) continue;
@@ -1017,7 +1159,7 @@ function buildRoutedEdges(
     const useNearStraightCollapsedMatrixEdge =
       toCollapsedMatrix && !fromSharedLowerClusterSource && Math.abs(endY - startY) < edgeRouteLayout.nearlyStraightDy;
     const useOutgoingLowerClusterBundle = inCollapsedLowerCluster;
-    const lowerClusterSplitY = collapsedMatrixNode ? boxCenterY(collapsedMatrixNode) : endY;
+    const lowerClusterSplitY = groupedNode ? boxCenterY(groupedNode) : endY;
     const useSimpleDirectEdge = sourceEdges.length === 1 && targetEdges.length === 1 && !toCollapsedMatrix;
     const useFlatDirectEdge = useSimpleDirectEdge && Math.abs(endY - startY) < edgeRouteLayout.nearlyStraightDy;
     const useSourceFanoutBranch =
@@ -1026,15 +1168,22 @@ function buildRoutedEdges(
       !toCollapsedMatrix &&
       !toMatrixGroupMergeSink &&
       Math.abs(endY - startY) >= edgeRouteLayout.nearlyStraightDy;
+    const useMatrixTrunkJoin =
+      toCollapsedMatrix &&
+      !fromSharedLowerClusterSource &&
+      lowerClusterTrunkX !== undefined &&
+      groupedNode !== undefined;
     let path: string;
     if (useOutgoingLowerClusterBundle) {
       path = groupedNode !== undefined && edge.toId === groupedNode.id ?
-        roundedVHPath(startX, lowerClusterSplitY, endY, endX) :
-        `M ${startX} ${lowerClusterSplitY} H ${endX}`;
+        `M ${startX} ${lowerClusterSplitY} H ${endX}` :
+        roundedVHPath(startX, lowerClusterSplitY, endY, endX);
     } else if (useNearStraightCollapsedMatrixEdge || useFlatDirectEdge) {
       path = `M ${startX} ${startY} H ${endX}`;
     } else if (useSourceFanoutBranch) {
-      path = roundedVHPath(startX, startY, endY, endX);
+      path = gentleFanoutPath(startX, startY, endY, endX);
+    } else if (useMatrixTrunkJoin) {
+      path = roundedElbowPath(startX, startY, lowerClusterTrunkX, endY, endX, true);
     } else if (useSimpleDirectEdge) {
       path = roundedElbowPath(startX, startY, routeX, endY, endX, true);
     } else if (toCollapsedMatrix) {
@@ -1051,7 +1200,7 @@ function buildRoutedEdges(
     });
   }
 
-  return {routedEdges, incomingBundles, outgoingBundles: routedOutgoingBundles};
+  return {routedEdges, incomingBundles: routedIncomingBundles, outgoingBundles: routedOutgoingBundles, sharedSegments};
 }
 
 export function createWorkflowGraphModel(

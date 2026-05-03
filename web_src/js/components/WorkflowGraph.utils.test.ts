@@ -91,31 +91,44 @@ test('lane placement keeps main chain on top and grouped work below', () => {
 
   expect(job101?.y).toBeLessThan(job103?.y ?? 0);
   expect(job101?.y).toBeLessThan(matrix?.y ?? 0);
-  expect(matrix?.y).toBeLessThan(group?.y ?? 0);
+  expect(group?.y).toBeLessThan(matrix?.y ?? 0);
   expect(job102?.y).toBeLessThan(buildImage?.y ?? 0);
   expect(nodes.get('job:5')?.y).toBeLessThan(nodes.get('job:6')?.y ?? 0);
 });
 
 test('bundled routes stay orthogonal and include bundle stubs', () => {
   const graph = createWorkflowGraphModel(mockJobs);
-  const matrixIncomingBundle = graph.incomingBundles.find((bundle) => bundle.toId === 'matrix:matrix-e2e');
   const buildImageIncomingBundle = graph.incomingBundles.find((bundle) => bundle.toId === 'job:16');
-  const lowerClusterOutgoingBundle = graph.outgoingBundles.find((bundle) => bundle.fromId === 'job:5');
+  const lowerClusterUpperJoin = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-upper-join');
+  const lowerClusterLowerJoin = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-lower-join');
+  const lowerClusterSharedTrunk = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-shared-trunk');
+  const lowerClusterGroupFinal = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-group-final');
+  const lowerClusterMatrixFinal = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-matrix-final');
   const buildImageEdge = graph.routedEdges.find((edge) => edge.fromId === 'matrix:matrix-e2e' && edge.toId === 'job:16');
   const matrixIncomingEdges = graph.edges.filter((edge) => edge.toId === 'matrix:matrix-e2e').map((edge) => edge.fromId).sort();
-  const groupIncomingEdges = graph.edges.filter((edge) => edge.toId.includes('group:')).map((edge) => edge.fromId);
+  const groupIncomingEdges = graph.edges.filter((edge) => edge.toId.includes('group:')).map((edge) => edge.fromId).sort();
 
-  expect(lowerClusterOutgoingBundle?.toIds.sort()).toEqual(['group:1:code-analysis\u0001prep-jdk:build-image', 'matrix:matrix-e2e']);
-  expect(lowerClusterOutgoingBundle?.edgeKeys.sort()).toEqual([
+  expect(lowerClusterUpperJoin?.edgeKeys.sort()).toEqual([
     'job:5->group:1:code-analysis\u0001prep-jdk:build-image',
     'job:5->matrix:matrix-e2e',
   ]);
+  expect(lowerClusterLowerJoin?.edgeKeys.sort()).toEqual([
+    'job:6->group:1:code-analysis\u0001prep-jdk:build-image',
+    'job:6->matrix:matrix-e2e',
+  ]);
+  expect(lowerClusterSharedTrunk?.edgeKeys.sort()).toEqual([
+    'job:5->matrix:matrix-e2e',
+    'job:6->matrix:matrix-e2e',
+  ]);
+  expect(lowerClusterGroupFinal?.edgeKeys.sort()).toEqual([
+    'job:5->group:1:code-analysis\u0001prep-jdk:build-image',
+    'job:6->group:1:code-analysis\u0001prep-jdk:build-image',
+  ]);
+  expect(lowerClusterMatrixFinal?.edgeKeys.sort()).toEqual(['job:5->matrix:matrix-e2e', 'job:6->matrix:matrix-e2e']);
   expect(matrixIncomingEdges).toEqual(['job:5', 'job:6']);
-  expect(groupIncomingEdges).toEqual(['job:5']);
-  expect(matrixIncomingBundle?.fromIds.slice().sort()).toEqual(['job:5', 'job:6']);
-  expect(matrixIncomingBundle?.edgeKeys.sort()).toEqual(['job:5->matrix:matrix-e2e', 'job:6->matrix:matrix-e2e']);
+  expect(groupIncomingEdges).toEqual(['job:5', 'job:6']);
   expect(buildImageIncomingBundle?.fromIds).toHaveLength(2);
-  expect(buildImageEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(buildImageEdge?.path).toContain('V');
 });
 
 test('verify-deploy graph keeps direct edges flat and deploy merge local', () => {
@@ -143,7 +156,7 @@ test('fanout branch peels off directly from the source stub', () => {
   const branchEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:201' && edge.toId === 'job:203');
 
   expect(straightEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
-  expect(branchEdge?.path).toMatch(/^M [\d.]+ [\d.]+ V [\d.]+ Q [\d.]+ [\d.]+ [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(branchEdge?.path).toMatch(/^M [\d.]+ [\d.]+ C [\d.]+ [\d.]+ [\d.]+ [\d.]+ [\d.]+ [\d.]+ H [\d.]+$/);
 });
 
 test('directed highlight state excludes siblings that only share descendants', () => {

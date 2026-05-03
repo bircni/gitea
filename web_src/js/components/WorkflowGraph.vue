@@ -17,6 +17,7 @@ import {
   type IncomingBundle,
   type OutgoingBundle,
   type RoutedEdge,
+  type SharedSegment,
 } from './WorkflowGraph.utils.ts';
 
 interface StoredState {
@@ -93,6 +94,7 @@ const edges = computed(() => graphModel.value.edges);
 const routedEdges = computed<RoutedEdge[]>(() => graphModel.value.routedEdges);
 const incomingBundles = computed<IncomingBundle[]>(() => graphModel.value.incomingBundles);
 const outgoingBundles = computed<OutgoingBundle[]>(() => graphModel.value.outgoingBundles);
+const sharedSegments = computed<SharedSegment[]>(() => graphModel.value.sharedSegments);
 
 const nodeWidth = computed(() => layout.nodeWidth);
 const graphWidth = computed(() => {
@@ -225,15 +227,21 @@ function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
   return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
 }
 
+function isSharedSegmentHighlighted(segment: SharedSegment): boolean {
+  return segment.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
+}
+
 const nonHighlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => !isEdgeHighlighted(edge)));
 const highlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => isEdgeHighlighted(edge)));
 const nonHighlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => !isIncomingBundleHighlighted(bundle)));
 const highlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => isIncomingBundleHighlighted(bundle)));
 const nonHighlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => !isOutgoingBundleHighlighted(bundle)));
 const highlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => isOutgoingBundleHighlighted(bundle)));
+const nonHighlightedSharedSegments = computed(() => sharedSegments.value.filter((segment) => !isSharedSegmentHighlighted(segment)));
+const highlightedSharedSegments = computed(() => sharedSegments.value.filter((segment) => isSharedSegmentHighlighted(segment)));
 
-const nodesWithIncomingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.toId)));
-const nodesWithOutgoingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.fromId)));
+const nodesWithIncomingEdge = computed(() => new Set(edges.value.map((edge) => edge.toId)));
+const nodesWithOutgoingEdge = computed(() => new Set(edges.value.map((edge) => edge.fromId)));
 
 function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   const jobId = 'jobs' in job ? job.jobs[0]!.id : job.id;
@@ -323,6 +331,14 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
             :class="{ 'dimmed-edge': hasHoveredGraphId }"
           />
           <path
+            v-for="segment in nonHighlightedSharedSegments"
+            :key="segment.key"
+            :d="segment.path"
+            fill="none"
+            class="node-edge"
+            :class="{ 'dimmed-edge': hasHoveredGraphId }"
+          />
+          <path
             v-for="edge in nonHighlightedRoutedEdges"
             :key="edge.key"
             :d="edge.path"
@@ -341,6 +357,13 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
             v-for="bundle in highlightedOutgoingBundles"
             :key="`highlight-${bundle.key}`"
             :d="bundle.path"
+            fill="none"
+            class="node-edge highlighted-edge"
+          />
+          <path
+            v-for="segment in highlightedSharedSegments"
+            :key="`highlight-${segment.key}`"
+            :d="segment.path"
             fill="none"
             class="node-edge highlighted-edge"
           />
