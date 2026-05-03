@@ -587,6 +587,9 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
       return parentMean * 0.55 + childMean * 0.45;
     }
     if (parentCenters.length > 0) {
+      if (parentCenters.length === 2 && childCenters.length === 0) {
+        return Math.min(...parentCenters);
+      }
       return parentCenters.reduce((sum, y) => sum + y, 0) / parentCenters.length;
     }
     if (childCenters.length > 0) {
@@ -628,6 +631,30 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
     packLevel(level);
   }
 
+  for (const level of orderedLevels) {
+    if (level === 0) continue;
+    const levelNodes = nodesByLevel.get(level) || [];
+    for (let index = 0; index < levelNodes.length; index++) {
+      const node = levelNodes[index];
+      const incoming = incomingByNodeId.get(node.id) || [];
+      if (incoming.length !== 1) continue;
+
+      const parent = nodesById.get(incoming[0]);
+      if (!parent) continue;
+
+      const parentOutgoing = outgoingByNodeId.get(parent.id) || [];
+      if (parentOutgoing.length !== 1) continue;
+
+      const desiredY = boxCenterY(parent) - node.displayHeight / 2;
+      const minY = index === 0 ? options.margin : boxBottom(levelNodes[index - 1]) + options.laneGap;
+      const maxY = index === levelNodes.length - 1 ?
+        Number.POSITIVE_INFINITY :
+        levelNodes[index + 1].y - options.laneGap - node.displayHeight;
+
+      node.y = Math.min(Math.max(desiredY, minY), maxY);
+    }
+  }
+
   // Tighten the lower cluster to the GitHub shape: matrix above grouped tests,
   // both closer together, with the downstream build job aligned higher.
   const matrixNode = nodes.find((node) => node.type === 'matrix');
@@ -653,6 +680,19 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
   if (buildNode && matrixNode && groupNode) {
     const clusterCenter = (boxCenterY(matrixNode) + boxCenterY(groupNode)) / 2;
     buildNode.y = Math.round(clusterCenter - buildNode.displayHeight / 2 - 12);
+  }
+
+  for (const node of nodes) {
+    const incoming = incomingByNodeId.get(node.id) || [];
+    const outgoing = outgoingByNodeId.get(node.id) || [];
+    if (incoming.length !== 2 || outgoing.length !== 0) continue;
+
+    const parents = incoming.map((id) => nodesById.get(id)).filter(Boolean);
+    if (parents.length !== 2) continue;
+
+    const parentCenters = parents.map((parent) => boxCenterY(parent!)).sort((a, b) => a - b);
+    const desiredCenter = parentCenters[0];
+    node.y = desiredCenter - node.displayHeight / 2;
   }
 }
 
@@ -801,8 +841,9 @@ function buildRoutedEdges(
     const targetIndex = Math.max(targetEdges.findIndex((candidate) => candidate.key === edge.key), 0);
 
     const sourceTurnX = startX + 18 + sourceIndex * 16;
-    const targetTurnX = endX - 14 - targetIndex * 8;
+    const targetTurnX = endX - 8 - targetIndex * 4;
     const defaultTurnX = startX + horizontalGap * 0.58;
+    const directTurnX = endX - Math.min(24, Math.max(12, horizontalGap * 0.22));
     const toBuildImage = toNode.jobs[0]?.jobId === 'build-image';
     const toCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
     let routeX = targetEdges.length > 1 || toBuildImage ? targetTurnX : defaultTurnX;
@@ -816,6 +857,8 @@ function buildRoutedEdges(
       routeX = lowerClusterTrunkX!;
     } else if (toCollapsedMatrix) {
       routeX = fromSharedLowerClusterSource ? sourceTurnX : defaultTurnX;
+    } else if (sourceEdges.length === 1 && targetEdges.length === 1) {
+      routeX = directTurnX;
     } else if (toNode.type === 'matrix') {
       routeX = sourceTurnX;
     } else if (sourceEdges.length > 1 && !toBuildImage) {
@@ -827,15 +870,24 @@ function buildRoutedEdges(
     const useNearStraightCollapsedMatrixEdge = toCollapsedMatrix && !fromSharedLowerClusterSource && Math.abs(endY - startY) < 12;
     const useOutgoingLowerClusterBundle = inCollapsedLowerCluster;
     const lowerClusterSplitY = collapsedMatrixNode ? boxCenterY(collapsedMatrixNode) : endY;
-    const path = useOutgoingLowerClusterBundle ?
-      groupedNode !== undefined && edge.toId === groupedNode.id ?
+    const useSimpleDirectEdge = sourceEdges.length === 1 && targetEdges.length === 1 && !toCollapsedMatrix;
+    const useFlatDirectEdge = useSimpleDirectEdge && Math.abs(endY - startY) < 12;
+    let path: string;
+    if (useOutgoingLowerClusterBundle) {
+      path = groupedNode !== undefined && edge.toId === groupedNode.id ?
         roundedVHPath(startX, lowerClusterSplitY, endY, endX) :
-        `M ${startX} ${lowerClusterSplitY} H ${endX}` :
-      useNearStraightCollapsedMatrixEdge ?
-        `M ${startX} ${startY} H ${endX}` :
-        toCollapsedMatrix ?
-          orthogonalMergePath(startX, startY, routeX, endY, endX) :
-          roundedElbowPath(startX, startY, routeX, endY, endX, false);
+        `M ${startX} ${lowerClusterSplitY} H ${endX}`;
+    } else if (useNearStraightCollapsedMatrixEdge) {
+      path = `M ${startX} ${startY} H ${endX}`;
+    } else if (useFlatDirectEdge) {
+      path = `M ${startX} ${startY} H ${endX}`;
+    } else if (useSimpleDirectEdge) {
+      path = roundedElbowPath(startX, startY, routeX, endY, endX, true);
+    } else if (toCollapsedMatrix) {
+      path = orthogonalMergePath(startX, startY, routeX, endY, endX);
+    } else {
+      path = roundedElbowPath(startX, startY, routeX, endY, endX, false);
+    }
 
     routedEdges.push({
       ...edge,

@@ -30,6 +30,14 @@ const mockJobs: ActionsJob[] = [
   ]},
 ];
 
+const verifyDeployJobs: ActionsJob[] = [
+  {id: 101, link: '', jobId: 'seed-dev', name: 'seed-dev', status: 'success', canRerun: false, duration: '2s'},
+  {id: 102, link: '', jobId: 'seed-qa', name: 'seed-qa', status: 'success', canRerun: false, duration: '3s'},
+  {id: 103, link: '', jobId: 'verify-dev', name: 'Verify Dev', status: 'success', canRerun: false, duration: '3s', needs: ['seed-dev']},
+  {id: 104, link: '', jobId: 'verify-qa', name: 'Verify QA', status: 'success', canRerun: false, duration: '4s', needs: ['seed-qa']},
+  {id: 105, link: '', jobId: 'deploy', name: 'Deploy', status: 'blocked', canRerun: false, duration: '', needs: ['verify-dev', 'verify-qa']},
+];
+
 test('matrix key heuristic keeps GitHub-style prefix', () => {
   expect(matrixKeyFromJobName('matrix-e2e (1, chromium)')).toBe('matrix-e2e');
   expect(matrixKeyFromJobName('plain-job')).toBeNull();
@@ -95,6 +103,22 @@ test('bundled routes stay orthogonal and include bundle stubs', () => {
   expect(groupIncomingEdges).toEqual(['job:5']);
   expect(matrixIncomingBundle?.fromIds).toEqual(['job:5', 'job:6']);
   expect(buildImageIncomingBundle?.fromIds).toHaveLength(2);
-  expect(buildImageEdge?.path).toContain('H');
-  expect(buildImageEdge?.path).toContain('V');
+  expect(buildImageEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+});
+
+test('verify-deploy graph keeps direct edges flat and deploy merge local', () => {
+  const graph = createWorkflowGraphModel(verifyDeployJobs);
+  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  const verifyDevEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:101' && edge.toId === 'job:103');
+  const verifyQaEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:102' && edge.toId === 'job:104');
+  const deployUpperEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:103' && edge.toId === 'job:105');
+  const deployLowerEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:104' && edge.toId === 'job:105');
+  const verifyDev = nodes.get('job:103');
+  const deploy = nodes.get('job:105');
+
+  expect(verifyDevEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(verifyQaEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(deployUpperEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(deployLowerEdge?.path).toContain('V');
+  expect(deploy?.y).toBe(verifyDev?.y);
 });
