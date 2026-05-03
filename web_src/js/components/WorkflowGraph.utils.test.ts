@@ -38,6 +38,12 @@ const verifyDeployJobs: ActionsJob[] = [
   {id: 105, link: '', jobId: 'deploy', name: 'Deploy', status: 'blocked', canRerun: false, duration: '', needs: ['verify-dev', 'verify-qa']},
 ];
 
+const simpleFanoutJobs: ActionsJob[] = [
+  {id: 201, link: '', jobId: 'job-100', name: 'job-100', status: 'success', canRerun: false, duration: '3s'},
+  {id: 202, link: '', jobId: 'job-101', name: 'job-101', status: 'success', canRerun: false, duration: '3s', needs: ['job-100']},
+  {id: 203, link: '', jobId: 'job-103', name: 'job-103', status: 'success', canRerun: false, duration: '2s', needs: ['job-100']},
+];
+
 test('matrix key heuristic keeps GitHub-style prefix', () => {
   expect(matrixKeyFromJobName('matrix-e2e (1, chromium)')).toBe('matrix-e2e');
   expect(matrixKeyFromJobName('plain-job')).toBeNull();
@@ -129,6 +135,15 @@ test('verify-deploy graph keeps direct edges flat and deploy merge local', () =>
   expect(deploy).toBeDefined();
   expect(verifyDev).toBeDefined();
   expect(deploy!.y).toBe(verifyDev!.y);
+});
+
+test('fanout branch peels off directly from the source stub', () => {
+  const graph = createWorkflowGraphModel(simpleFanoutJobs);
+  const straightEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:201' && edge.toId === 'job:202');
+  const branchEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:201' && edge.toId === 'job:203');
+
+  expect(straightEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
+  expect(branchEdge?.path).toMatch(/^M [\d.]+ [\d.]+ V [\d.]+ Q [\d.]+ [\d.]+ [\d.]+ [\d.]+ H [\d.]+$/);
 });
 
 test('directed highlight state excludes siblings that only share descendants', () => {

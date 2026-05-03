@@ -1020,6 +1020,12 @@ function buildRoutedEdges(
     const lowerClusterSplitY = collapsedMatrixNode ? boxCenterY(collapsedMatrixNode) : endY;
     const useSimpleDirectEdge = sourceEdges.length === 1 && targetEdges.length === 1 && !toCollapsedMatrix;
     const useFlatDirectEdge = useSimpleDirectEdge && Math.abs(endY - startY) < edgeRouteLayout.nearlyStraightDy;
+    const useSourceFanoutBranch =
+      sourceEdges.length > 1 &&
+      targetEdges.length === 1 &&
+      !toCollapsedMatrix &&
+      !toMatrixGroupMergeSink &&
+      Math.abs(endY - startY) >= edgeRouteLayout.nearlyStraightDy;
     let path: string;
     if (useOutgoingLowerClusterBundle) {
       path = groupedNode !== undefined && edge.toId === groupedNode.id ?
@@ -1027,6 +1033,8 @@ function buildRoutedEdges(
         `M ${startX} ${lowerClusterSplitY} H ${endX}`;
     } else if (useNearStraightCollapsedMatrixEdge || useFlatDirectEdge) {
       path = `M ${startX} ${startY} H ${endX}`;
+    } else if (useSourceFanoutBranch) {
+      path = roundedVHPath(startX, startY, endY, endX);
     } else if (useSimpleDirectEdge) {
       path = roundedElbowPath(startX, startY, routeX, endY, endX, true);
     } else if (toCollapsedMatrix) {
