@@ -103,6 +103,30 @@ export function boxCenterY(node: GraphNode): number {
   return node.y + node.displayHeight / 2;
 }
 
+function nodesFromIds(nodesById: Map<string, GraphNode>, ids: string[]): GraphNode[] {
+  const resolved: GraphNode[] = [];
+  for (const id of ids) {
+    const node = nodesById.get(id);
+    if (node) resolved.push(node);
+  }
+  return resolved;
+}
+
+function buildIncomingOutgoingIdMaps(edges: Edge[]): {
+  incomingByNodeId: Map<string, string[]>;
+  outgoingByNodeId: Map<string, string[]>;
+} {
+  const incomingByNodeId = new Map<string, string[]>();
+  const outgoingByNodeId = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
+    incomingByNodeId.get(edge.toId)!.push(edge.fromId);
+    if (!outgoingByNodeId.has(edge.fromId)) outgoingByNodeId.set(edge.fromId, []);
+    outgoingByNodeId.get(edge.fromId)!.push(edge.toId);
+  }
+  return {incomingByNodeId, outgoingByNodeId};
+}
+
 function matrixPanelHeight(rowCount: number, expanded: boolean, options: WorkflowGraphLayoutOptions): number {
   if (rowCount <= 0) return options.nodeHeight;
   if (!expanded) return options.matrixCollapsedHeight;
@@ -322,15 +346,7 @@ type VisualGraphBuild = {
 
 function simplifyClusterEdges(nodes: GraphNode[], edges: Edge[], jobIndexById: Map<number, number>): Edge[] {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const incomingByNodeId = new Map<string, string[]>();
-  const outgoingByNodeId = new Map<string, string[]>();
-
-  for (const edge of edges) {
-    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
-    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
-    if (!outgoingByNodeId.has(edge.fromId)) outgoingByNodeId.set(edge.fromId, []);
-    outgoingByNodeId.get(edge.fromId)?.push(edge.toId);
-  }
+  const {incomingByNodeId, outgoingByNodeId} = buildIncomingOutgoingIdMaps(edges);
 
   const sortNodeIdsByInputOrder = (nodeIds: string[]): string[] => {
     return Array.from(nodeIds).sort((a, b) => {
@@ -516,11 +532,7 @@ function buildVisualGraph(
 }
 
 function assignNodeLevels(nodes: GraphNode[], edges: Edge[]): void {
-  const incomingByNodeId = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
-    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
-  }
+  const {incomingByNodeId} = buildIncomingOutgoingIdMaps(edges);
 
   const levelCache = new Map<string, number>();
   function levelForNode(id: string, visiting = new Set<string>()): number {
@@ -543,14 +555,14 @@ function assignNodeLevels(nodes: GraphNode[], edges: Edge[]): void {
 
 function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphLayoutOptions): void {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const incomingByNodeId = new Map<string, string[]>();
-  const outgoingByNodeId = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (!incomingByNodeId.has(edge.toId)) incomingByNodeId.set(edge.toId, []);
-    incomingByNodeId.get(edge.toId)?.push(edge.fromId);
-    if (!outgoingByNodeId.has(edge.fromId)) outgoingByNodeId.set(edge.fromId, []);
-    outgoingByNodeId.get(edge.fromId)?.push(edge.toId);
-  }
+  const {incomingByNodeId, outgoingByNodeId} = buildIncomingOutgoingIdMaps(edges);
+
+  const lowerClusterVerticalTune = {
+    matrixTopGap: 18,
+    matrixParentBlend: 0.45,
+    groupGapBelowMatrix: 18,
+    mergeSinkAboveCenter: 12,
+  } as const;
 
   const nodesByLevel = new Map<number, GraphNode[]>();
   for (const node of nodes) {
@@ -572,14 +584,8 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
   const orderedLevelsDesc = Array.from(orderedLevels).reverse();
 
   function targetCenterForNode(node: GraphNode): number {
-    const parentCenters = (incomingByNodeId.get(node.id) || [])
-      .map((id) => nodesById.get(id))
-      .filter(Boolean)
-      .map((parent) => boxCenterY(parent!));
-    const childCenters = (outgoingByNodeId.get(node.id) || [])
-      .map((id) => nodesById.get(id))
-      .filter(Boolean)
-      .map((child) => boxCenterY(child!));
+    const parentCenters = nodesFromIds(nodesById, incomingByNodeId.get(node.id) || []).map((parent) => boxCenterY(parent));
+    const childCenters = nodesFromIds(nodesById, outgoingByNodeId.get(node.id) || []).map((child) => boxCenterY(child));
 
     if (parentCenters.length > 0 && childCenters.length > 0) {
       const parentMean = parentCenters.reduce((sum, y) => sum + y, 0) / parentCenters.length;
@@ -656,30 +662,69 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
   }
 
   // Tighten the lower cluster to the GitHub shape: matrix above grouped tests,
-  // both closer together, with the downstream build job aligned higher.
+  // both closer together, with the downstream merge sink job aligned higher.
   const matrixNode = nodes.find((node) => node.type === 'matrix');
   const groupNode = nodes.find((node) => node.type === 'group');
-  const buildNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'build-image');
-  const codeAnalysisNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'code-analysis');
-  const prepNode = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'prep-jdk');
-  const job103Node = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'job-103');
+  const mergeSinkCandidates = matrixNode && groupNode ?
+    nodes.filter((node) => {
+      if (node.type !== 'job') return false;
+      const inc = incomingByNodeId.get(node.id) || [];
+      return inc.includes(matrixNode.id) && inc.includes(groupNode.id);
+    }) :
+    [];
+  let buildNode: GraphNode | undefined;
+  for (const node of mergeSinkCandidates) {
+    if (
+      buildNode === undefined ||
+      node.level > buildNode.level ||
+      (node.level === buildNode.level && node.id > buildNode.id)
+    ) {
+      buildNode = node;
+    }
+  }
 
   if (matrixNode && groupNode) {
-    const lowerParents = [codeAnalysisNode, prepNode].filter(Boolean).map((node) => boxCenterY(node!));
-    const upperSiblingBottom = job103Node ? boxBottom(job103Node) : options.margin;
-    const parentCenter = lowerParents.length > 0 ?
-      lowerParents.reduce((sum, value) => sum + value, 0) / lowerParents.length :
-      boxCenterY(matrixNode);
-    matrixNode.y = Math.max(
-      upperSiblingBottom + 18,
-      parentCenter - Math.round(matrixNode.displayHeight * 0.45),
+    const matrixIncomingIds = new Set(incomingByNodeId.get(matrixNode.id) || []);
+    const groupIncomingIds = incomingByNodeId.get(groupNode.id) || [];
+    const lowerParentNodes = nodesFromIds(
+      nodesById,
+      groupIncomingIds.filter((id) => matrixIncomingIds.has(id)),
     );
-    groupNode.y = matrixNode.y + matrixNode.displayHeight + 18;
+    const directMatrixParentIds = new Set(incomingByNodeId.get(matrixNode.id) || []);
+    // Prefer a dedicated branch job when present (GitHub-style “main chain” beside the matrix
+    // column). A level-based fallback is only a rough default: matrix parents can sit at the
+    // same or lower level than unrelated roots, so maxing their bottoms would pin the matrix too
+    // low and collapse orthogonal edge separation after bundle sort-by-y.
+    const matrixLaneAnchorJob = nodes.find((node) => node.type === 'job' && node.jobs[0]?.jobId === 'job-103');
+    let upperSiblingBottom = options.margin;
+    if (matrixLaneAnchorJob) {
+      upperSiblingBottom = boxBottom(matrixLaneAnchorJob);
+    } else {
+      for (const node of nodes) {
+        if (node.type !== 'job' || node.level !== matrixNode.level - 1 || directMatrixParentIds.has(node.id)) {
+          continue;
+        }
+        upperSiblingBottom = Math.max(upperSiblingBottom, boxBottom(node));
+      }
+    }
+    let parentCenter = boxCenterY(matrixNode);
+    if (lowerParentNodes.length > 0) {
+      let sumCenters = 0;
+      for (const node of lowerParentNodes) {
+        sumCenters += boxCenterY(node);
+      }
+      parentCenter = sumCenters / lowerParentNodes.length;
+    }
+    matrixNode.y = Math.max(
+      upperSiblingBottom + lowerClusterVerticalTune.matrixTopGap,
+      parentCenter - Math.round(matrixNode.displayHeight * lowerClusterVerticalTune.matrixParentBlend),
+    );
+    groupNode.y = matrixNode.y + matrixNode.displayHeight + lowerClusterVerticalTune.groupGapBelowMatrix;
   }
 
   if (buildNode && matrixNode && groupNode) {
     const clusterCenter = (boxCenterY(matrixNode) + boxCenterY(groupNode)) / 2;
-    buildNode.y = Math.round(clusterCenter - buildNode.displayHeight / 2 - 12);
+    buildNode.y = Math.round(clusterCenter - buildNode.displayHeight / 2 - lowerClusterVerticalTune.mergeSinkAboveCenter);
   }
 
   for (const node of nodes) {
@@ -687,10 +732,10 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
     const outgoing = outgoingByNodeId.get(node.id) || [];
     if (incoming.length !== 2 || outgoing.length !== 0) continue;
 
-    const parents = incoming.map((id) => nodesById.get(id)).filter(Boolean);
+    const parents = nodesFromIds(nodesById, incoming);
     if (parents.length !== 2) continue;
 
-    const parentCenters = parents.map((parent) => boxCenterY(parent!));
+    const parentCenters = parents.map((parent) => boxCenterY(parent));
     node.y = Math.min(...parentCenters) - node.displayHeight / 2;
   }
 }
@@ -780,6 +825,33 @@ function buildBundles(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphL
   };
 }
 
+function edgeKeyIndexByNodeId(edgeLists: Map<string, Edge[]>): Map<string, Map<string, number>> {
+  const byNodeId = new Map<string, Map<string, number>>();
+  for (const [nodeId, list] of edgeLists.entries()) {
+    const byKey = new Map<string, number>();
+    for (let i = 0; i < list.length; i++) {
+      const key = list[i].key;
+      if (!byKey.has(key)) byKey.set(key, i);
+    }
+    byNodeId.set(nodeId, byKey);
+  }
+  return byNodeId;
+}
+
+const edgeRouteLayout = {
+  sourceTurnBase: 18,
+  sourceTurnStep: 16,
+  targetTurnEndPad: 8,
+  targetTurnStep: 4,
+  defaultTurnGapRatio: 0.58,
+  directTurnMin: 12,
+  directTurnMax: 24,
+  directTurnGapRatio: 0.22,
+  routeXClampInner: 8,
+  lowerClusterTrunkOffset: 72,
+  nearlyStraightDy: 12,
+} as const;
+
 function buildRoutedEdges(
   nodes: GraphNode[],
   edges: Edge[],
@@ -795,9 +867,13 @@ function buildRoutedEdges(
     incomingEdges,
   } = buildBundles(nodes, edges, options);
 
+  const sourceEdgeIndexByNodeId = edgeKeyIndexByNodeId(outgoingEdges);
+  const targetEdgeIndexByNodeId = edgeKeyIndexByNodeId(incomingEdges);
+
   const collapsedMatrixNode = nodes.find((node) => node.type === 'matrix' && node.displayHeight <= options.matrixCollapsedHeight);
+  const matrixNodeFull = nodes.find((node) => node.type === 'matrix');
   const groupedNode = nodes.find((node) => node.type === 'group');
-  const lowerClusterTrunkX = groupedNode ? groupedNode.x - 72 : undefined;
+  const lowerClusterTrunkX = groupedNode ? groupedNode.x - edgeRouteLayout.lowerClusterTrunkOffset : undefined;
   const collapsedMatrixIncoming = collapsedMatrixNode ? new Set((incomingEdges.get(collapsedMatrixNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
   const groupedIncoming = groupedNode ? new Set((incomingEdges.get(groupedNode.id) || []).map((edge) => edge.fromId)) : new Set<string>();
   const lowerClusterSharedSources = new Set<string>(
@@ -836,16 +912,25 @@ function buildRoutedEdges(
     const horizontalGap = endX - startX;
     const sourceEdges = outgoingEdges.get(edge.fromId) || [];
     const targetEdges = incomingEdges.get(edge.toId) || [];
-    const sourceIndex = Math.max(sourceEdges.findIndex((candidate) => candidate.key === edge.key), 0);
-    const targetIndex = Math.max(targetEdges.findIndex((candidate) => candidate.key === edge.key), 0);
+    const sourceIndex = sourceEdgeIndexByNodeId.get(edge.fromId)?.get(edge.key) ?? 0;
+    const targetIndex = targetEdgeIndexByNodeId.get(edge.toId)?.get(edge.key) ?? 0;
 
-    const sourceTurnX = startX + 18 + sourceIndex * 16;
-    const targetTurnX = endX - 8 - targetIndex * 4;
-    const defaultTurnX = startX + horizontalGap * 0.58;
-    const directTurnX = endX - Math.min(24, Math.max(12, horizontalGap * 0.22));
-    const toBuildImage = toNode.jobs[0]?.jobId === 'build-image';
+    const sourceTurnX = startX + edgeRouteLayout.sourceTurnBase + sourceIndex * edgeRouteLayout.sourceTurnStep;
+    const targetTurnX = endX - edgeRouteLayout.targetTurnEndPad - targetIndex * edgeRouteLayout.targetTurnStep;
+    const defaultTurnX = startX + horizontalGap * edgeRouteLayout.defaultTurnGapRatio;
+    const directTurnX = endX - Math.min(
+      edgeRouteLayout.directTurnMax,
+      Math.max(edgeRouteLayout.directTurnMin, horizontalGap * edgeRouteLayout.directTurnGapRatio),
+    );
+    const toMatrixGroupMergeSink = Boolean(
+      matrixNodeFull &&
+      groupedNode &&
+      toNode.type === 'job' &&
+      targetEdges.some((candidate) => candidate.fromId === matrixNodeFull.id) &&
+      targetEdges.some((candidate) => candidate.fromId === groupedNode.id),
+    );
     const toCollapsedMatrix = toNode.type === 'matrix' && toNode.displayHeight <= options.matrixCollapsedHeight;
-    let routeX = targetEdges.length > 1 || toBuildImage ? targetTurnX : defaultTurnX;
+    let routeX = targetEdges.length > 1 || toMatrixGroupMergeSink ? targetTurnX : defaultTurnX;
     const fromSharedLowerClusterSource = lowerClusterSharedSources.has(edge.fromId);
     const inCollapsedLowerCluster = lowerClusterTrunkX !== undefined && (
       (toCollapsedMatrix && fromSharedLowerClusterSource) ||
@@ -860,17 +945,21 @@ function buildRoutedEdges(
       routeX = directTurnX;
     } else if (toNode.type === 'matrix') {
       routeX = sourceTurnX;
-    } else if (sourceEdges.length > 1 && !toBuildImage) {
+    } else if (sourceEdges.length > 1 && !toMatrixGroupMergeSink) {
       routeX = sourceTurnX;
     }
 
-    routeX = Math.min(Math.max(routeX, startX + 8), endX - 8);
+    routeX = Math.min(
+      Math.max(routeX, startX + edgeRouteLayout.routeXClampInner),
+      endX - edgeRouteLayout.routeXClampInner,
+    );
 
-    const useNearStraightCollapsedMatrixEdge = toCollapsedMatrix && !fromSharedLowerClusterSource && Math.abs(endY - startY) < 12;
+    const useNearStraightCollapsedMatrixEdge =
+      toCollapsedMatrix && !fromSharedLowerClusterSource && Math.abs(endY - startY) < edgeRouteLayout.nearlyStraightDy;
     const useOutgoingLowerClusterBundle = inCollapsedLowerCluster;
     const lowerClusterSplitY = collapsedMatrixNode ? boxCenterY(collapsedMatrixNode) : endY;
     const useSimpleDirectEdge = sourceEdges.length === 1 && targetEdges.length === 1 && !toCollapsedMatrix;
-    const useFlatDirectEdge = useSimpleDirectEdge && Math.abs(endY - startY) < 12;
+    const useFlatDirectEdge = useSimpleDirectEdge && Math.abs(endY - startY) < edgeRouteLayout.nearlyStraightDy;
     let path: string;
     if (useOutgoingLowerClusterBundle) {
       path = groupedNode !== undefined && edge.toId === groupedNode.id ?
