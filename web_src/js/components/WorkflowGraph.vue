@@ -203,16 +203,52 @@ function handleMatrixMouseEnter(groupId: string) {
   hoveredGraphId.value = groupId;
 }
 
+const relatedGraphIds = computed(() => {
+  const hoveredId = hoveredGraphId.value;
+  if (!hoveredId) return new Set<string>();
+
+  const outgoing = new Map<string, Set<string>>();
+  const incoming = new Map<string, Set<string>>();
+  for (const edge of edges.value) {
+    if (!outgoing.has(edge.fromId)) outgoing.set(edge.fromId, new Set());
+    if (!incoming.has(edge.toId)) incoming.set(edge.toId, new Set());
+    outgoing.get(edge.fromId)!.add(edge.toId);
+    incoming.get(edge.toId)!.add(edge.fromId);
+  }
+
+  const collectReachable = (startId: string, adjacency: Map<string, Set<string>>): Set<string> => {
+    const visited = new Set<string>();
+    const queue = [startId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) continue;
+      visited.add(current);
+      for (const next of adjacency.get(current) || []) {
+        if (!visited.has(next)) queue.push(next);
+      }
+    }
+    return visited;
+  };
+
+  const ancestors = collectReachable(hoveredId, incoming);
+  const descendants = collectReachable(hoveredId, outgoing);
+  return new Set([...ancestors, ...descendants]);
+});
+
+function isNodeHighlighted(nodeId: string): boolean {
+  return relatedGraphIds.value.has(nodeId);
+}
+
 function isEdgeHighlighted(edge: RoutedEdge): boolean {
-  return !!hoveredGraphId.value && (edge.fromId === hoveredGraphId.value || edge.toId === hoveredGraphId.value);
+  return relatedGraphIds.value.has(edge.fromId) && relatedGraphIds.value.has(edge.toId);
 }
 
 function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
-  return !!hoveredGraphId.value && (bundle.toId === hoveredGraphId.value || bundle.fromIds.includes(hoveredGraphId.value));
+  return relatedGraphIds.value.has(bundle.toId) && bundle.fromIds.some((fromId) => relatedGraphIds.value.has(fromId));
 }
 
 function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
-  return !!hoveredGraphId.value && (bundle.fromId === hoveredGraphId.value || bundle.toIds.includes(hoveredGraphId.value));
+  return relatedGraphIds.value.has(bundle.fromId) && bundle.toIds.some((toId) => relatedGraphIds.value.has(toId));
 }
 
 const nodesWithIncomingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.toId)));
@@ -319,6 +355,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
           <g
             v-if="job.type === 'matrix'"
             class="job-node-group matrix-job-group"
+            :class="{ 'related-node': isNodeHighlighted(job.id) }"
             @mouseenter="handleMatrixMouseEnter(job.id)"
             @mouseleave="handleNodeMouseLeave"
           >
@@ -367,6 +404,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
           <g
             v-else-if="job.type === 'group'"
             class="job-node-group grouped-job-group"
+            :class="{ 'related-node': isNodeHighlighted(job.id) }"
             @mouseenter="handleNodeMouseEnter(job)"
             @mouseleave="handleNodeMouseLeave"
           >
@@ -397,6 +435,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
           <g
             v-else
             class="job-node-group"
+            :class="{ 'related-node': isNodeHighlighted(job.id) }"
             @click="onNodeClick(job, $event)"
             @mouseenter="handleNodeMouseEnter(job)"
             @mouseleave="handleNodeMouseLeave"
@@ -507,6 +546,11 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   fill: var(--color-hover);
 }
 
+.job-node-group.related-node .job-rect {
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+}
+
 .job-rect {
   fill: var(--color-box-body);
   stroke: #d0d7e2;
@@ -576,6 +620,11 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   border-top: 1px solid var(--color-secondary);
   border-radius: 0 8px 8px;
   background: var(--color-box-body);
+}
+
+.job-node-group.related-node .matrix-panel-tab,
+.job-node-group.related-node .matrix-panel-body {
+  border-color: var(--color-primary);
 }
 
 .matrix-panel-summary-row {
@@ -687,5 +736,9 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   stroke-width: 1.25;
   opacity: 0.9;
   pointer-events: none;
+}
+
+.job-node-group.related-node .node-port {
+  fill: var(--color-primary);
 }
 </style>
