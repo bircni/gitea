@@ -91,7 +91,7 @@ const defaultLayoutOptions: WorkflowGraphLayoutOptions = {
   matrixHeaderHeight: 24,
   matrixRowHeight: 28,
   matrixPadY: 8,
-  bundleStub: 18,
+  bundleStub: 14,
 };
 
 function canonicalNeedsKey(needs: string[] | undefined): string {
@@ -627,10 +627,10 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
   const inputRankForNode = (node: GraphNode): number => Math.min(...node.jobs.map((job) => job.id));
 
   const lowerClusterVerticalTune = {
-    matrixTopGap: 18,
+    matrixTopGap: 14,
     matrixParentBlend: 0.45,
-    groupGapBelowMatrix: 18,
-    mergeSinkAboveCenter: 12,
+    groupGapBelowMatrix: 14,
+    mergeSinkAboveCenter: 16,
   } as const;
 
   const nodesByLevel = new Map<number, GraphNode[]>();
@@ -925,7 +925,7 @@ const edgeRouteLayout = {
   directTurnMax: 18,
   directTurnGapRatio: 0.22,
   routeXClampInner: 8,
-  lowerClusterTrunkOffset: 40,
+  lowerClusterTrunkOffset: 28,
   nearlyStraightDy: 12,
 } as const;
 
