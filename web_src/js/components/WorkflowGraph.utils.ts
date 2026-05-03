@@ -316,7 +316,7 @@ function roundedElbowPath(startX: number, startY: number, turnX: number, endY: n
     return `M ${startX} ${startY} H ${endX}`;
   }
 
-  const radius = Math.min(16, Math.abs(turnX - startX), Math.abs(endY - startY), Math.abs(endX - turnX));
+  const radius = Math.min(20, Math.abs(turnX - startX), Math.abs(endY - startY), Math.abs(endX - turnX));
   if (radius <= 0.5) {
     return `M ${startX} ${startY} H ${turnX} V ${endY} H ${endX}`;
   }
@@ -337,7 +337,7 @@ function roundedElbowPath(startX: number, startY: number, turnX: number, endY: n
 }
 
 function orthogonalMergePath(startX: number, startY: number, mergeX: number, mergeY: number, endX: number): string {
-  const radius = Math.min(12, Math.abs(mergeX - startX), Math.abs(mergeY - startY), Math.abs(endX - mergeX));
+  const radius = Math.min(16, Math.abs(mergeX - startX), Math.abs(mergeY - startY), Math.abs(endX - mergeX));
   if (radius <= 0.5) {
     return `M ${startX} ${startY} H ${mergeX} V ${mergeY} H ${endX}`;
   }
@@ -357,7 +357,7 @@ function orthogonalMergePath(startX: number, startY: number, mergeX: number, mer
 }
 
 function roundedHVPath(startX: number, startY: number, turnX: number, endY: number): string {
-  const radius = Math.min(12, Math.abs(turnX - startX), Math.abs(endY - startY));
+  const radius = Math.min(16, Math.abs(turnX - startX), Math.abs(endY - startY));
   if (radius <= 0.5) {
     return `M ${startX} ${startY} H ${turnX} V ${endY}`;
   }
@@ -373,7 +373,7 @@ function roundedHVPath(startX: number, startY: number, turnX: number, endY: numb
 }
 
 function roundedVHPath(startX: number, startY: number, endY: number, endX: number): string {
-  const radius = Math.min(12, Math.abs(endY - startY), Math.abs(endX - startX));
+  const radius = Math.min(16, Math.abs(endY - startY), Math.abs(endX - startX));
   if (radius <= 0.5) {
     return `M ${startX} ${startY} V ${endY} H ${endX}`;
   }
@@ -605,6 +605,7 @@ function assignNodeLevels(nodes: GraphNode[], edges: Edge[]): void {
 function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: WorkflowGraphLayoutOptions): void {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const {incomingByNodeId, outgoingByNodeId} = buildIncomingOutgoingIdMaps(edges);
+  const inputRankForNode = (node: GraphNode): number => Math.min(...node.jobs.map((job) => job.id));
 
   const lowerClusterVerticalTune = {
     matrixTopGap: 18,
@@ -671,20 +672,11 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
     }
   }
 
-  for (const level of orderedLevels) {
-    if (level === 0) continue;
-    packLevel(level);
-  }
+  for (const level of orderedLevels) packLevel(level);
 
-  for (const level of orderedLevelsDesc) {
-    if (level === 0) continue;
-    packLevel(level);
-  }
+  for (const level of orderedLevelsDesc) packLevel(level);
 
-  for (const level of orderedLevels) {
-    if (level === 0) continue;
-    packLevel(level);
-  }
+  for (const level of orderedLevels) packLevel(level);
 
   for (const level of orderedLevels) {
     if (level === 0) continue;
@@ -733,6 +725,20 @@ function assignNodeCoordinates(nodes: GraphNode[], edges: Edge[], options: Workf
   }
 
   if (matrixNode && groupNode) {
+    const sharedLowerParents = nodesFromIds(nodesById, incomingByNodeId.get(groupNode.id) || [])
+      .filter((node) => (incomingByNodeId.get(matrixNode.id) || []).includes(node.id))
+      .sort((a, b) => inputRankForNode(a) - inputRankForNode(b));
+    const matrixOnlyParents = nodesFromIds(nodesById, incomingByNodeId.get(matrixNode.id) || [])
+      .filter((node) => !(incomingByNodeId.get(groupNode.id) || []).includes(node.id))
+      .sort((a, b) => inputRankForNode(a) - inputRankForNode(b));
+    const preferredLowerOrder = [...sharedLowerParents, ...matrixOnlyParents];
+    for (let i = 0; i < preferredLowerOrder.length; i++) {
+      const node = preferredLowerOrder[i];
+      const prev = preferredLowerOrder[i - 1];
+      const minY = prev ? boxBottom(prev) + options.laneGap : options.margin;
+      node.y = Math.max(node.y, minY);
+    }
+
     const matrixIncomingIds = new Set(incomingByNodeId.get(matrixNode.id) || []);
     const groupIncomingIds = incomingByNodeId.get(groupNode.id) || [];
     const lowerParentNodes = nodesFromIds(
@@ -890,16 +896,17 @@ function edgeKeyIndexByNodeId(edgeLists: Map<string, Edge[]>): Map<string, Map<s
 }
 
 const edgeRouteLayout = {
-  sourceTurnBase: 18,
-  sourceTurnStep: 16,
-  targetTurnEndPad: 8,
-  targetTurnStep: 4,
+  sourceTurnBase: 14,
+  sourceTurnStep: 0,
+  targetTurnEndPad: 4,
+  targetTurnStep: 0,
   defaultTurnGapRatio: 0.58,
+  fanoutTurnGapRatio: 0.28,
   directTurnMin: 12,
-  directTurnMax: 24,
+  directTurnMax: 18,
   directTurnGapRatio: 0.22,
   routeXClampInner: 8,
-  lowerClusterTrunkOffset: 72,
+  lowerClusterTrunkOffset: 40,
   nearlyStraightDy: 12,
 } as const;
 
@@ -970,6 +977,7 @@ function buildRoutedEdges(
     const sourceTurnX = startX + edgeRouteLayout.sourceTurnBase + sourceIndex * edgeRouteLayout.sourceTurnStep;
     const targetTurnX = endX - edgeRouteLayout.targetTurnEndPad - targetIndex * edgeRouteLayout.targetTurnStep;
     const defaultTurnX = startX + horizontalGap * edgeRouteLayout.defaultTurnGapRatio;
+    const fanoutTurnX = startX + horizontalGap * edgeRouteLayout.fanoutTurnGapRatio;
     const directTurnX = endX - Math.min(
       edgeRouteLayout.directTurnMax,
       Math.max(edgeRouteLayout.directTurnMin, horizontalGap * edgeRouteLayout.directTurnGapRatio),
@@ -998,7 +1006,7 @@ function buildRoutedEdges(
     } else if (toNode.type === 'matrix') {
       routeX = sourceTurnX;
     } else if (sourceEdges.length > 1 && !toMatrixGroupMergeSink) {
-      routeX = sourceTurnX;
+      routeX = fanoutTurnX;
     }
 
     routeX = Math.min(

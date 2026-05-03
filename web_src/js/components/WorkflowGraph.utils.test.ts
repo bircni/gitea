@@ -87,6 +87,7 @@ test('lane placement keeps main chain on top and grouped work below', () => {
   expect(job101?.y).toBeLessThan(matrix?.y ?? 0);
   expect(matrix?.y).toBeLessThan(group?.y ?? 0);
   expect(job102?.y).toBeLessThan(buildImage?.y ?? 0);
+  expect(nodes.get('job:5')?.y).toBeLessThan(nodes.get('job:6')?.y ?? 0);
 });
 
 test('bundled routes stay orthogonal and include bundle stubs', () => {
@@ -105,7 +106,7 @@ test('bundled routes stay orthogonal and include bundle stubs', () => {
   ]);
   expect(matrixIncomingEdges).toEqual(['job:5', 'job:6']);
   expect(groupIncomingEdges).toEqual(['job:5']);
-  expect(matrixIncomingBundle?.fromIds).toEqual(['job:5', 'job:6']);
+  expect(matrixIncomingBundle?.fromIds.slice().sort()).toEqual(['job:5', 'job:6']);
   expect(matrixIncomingBundle?.edgeKeys.sort()).toEqual(['job:5->matrix:matrix-e2e', 'job:6->matrix:matrix-e2e']);
   expect(buildImageIncomingBundle?.fromIds).toHaveLength(2);
   expect(buildImageEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);

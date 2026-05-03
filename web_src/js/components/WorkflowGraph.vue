@@ -207,6 +207,7 @@ function handleMatrixMouseEnter(groupId: string) {
 const graphHighlightState = computed(() => computeGraphHighlightState(hoveredGraphId.value, edges.value));
 const relatedGraphIds = computed(() => graphHighlightState.value.nodeIds);
 const highlightedEdgeKeys = computed(() => graphHighlightState.value.edgeKeys);
+const hasHoveredGraphId = computed(() => hoveredGraphId.value !== null);
 
 function isNodeHighlighted(nodeId: string): boolean {
   return relatedGraphIds.value.has(nodeId);
@@ -223,6 +224,13 @@ function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
 function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
   return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
 }
+
+const nonHighlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => !isEdgeHighlighted(edge)));
+const highlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => isEdgeHighlighted(edge)));
+const nonHighlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => !isIncomingBundleHighlighted(bundle)));
+const highlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => isIncomingBundleHighlighted(bundle)));
+const nonHighlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => !isOutgoingBundleHighlighted(bundle)));
+const highlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => isOutgoingBundleHighlighted(bundle)));
 
 const nodesWithIncomingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.toId)));
 const nodesWithOutgoingEdge = computed(() => new Set(routedEdges.value.map((edge) => edge.fromId)));
@@ -299,28 +307,49 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 
         <g :mask="`url(#workflow-graph-edge-mask-${workflowId})`">
           <path
-            v-for="edge in routedEdges"
+            v-for="bundle in nonHighlightedIncomingBundles"
+            :key="bundle.key"
+            :d="bundle.path"
+            fill="none"
+            class="node-edge"
+            :class="{ 'dimmed-edge': hasHoveredGraphId }"
+          />
+          <path
+            v-for="bundle in nonHighlightedOutgoingBundles"
+            :key="bundle.key"
+            :d="bundle.path"
+            fill="none"
+            class="node-edge"
+            :class="{ 'dimmed-edge': hasHoveredGraphId }"
+          />
+          <path
+            v-for="edge in nonHighlightedRoutedEdges"
             :key="edge.key"
             :d="edge.path"
             fill="none"
             class="node-edge"
-            :class="{ 'highlighted-edge': isEdgeHighlighted(edge) }"
+            :class="{ 'dimmed-edge': hasHoveredGraphId }"
           />
           <path
-            v-for="bundle in incomingBundles"
-            :key="bundle.key"
+            v-for="bundle in highlightedIncomingBundles"
+            :key="`highlight-${bundle.key}`"
             :d="bundle.path"
             fill="none"
-            class="node-edge"
-            :class="{ 'highlighted-edge': isIncomingBundleHighlighted(bundle) }"
+            class="node-edge highlighted-edge"
           />
           <path
-            v-for="bundle in outgoingBundles"
-            :key="bundle.key"
+            v-for="bundle in highlightedOutgoingBundles"
+            :key="`highlight-${bundle.key}`"
             :d="bundle.path"
             fill="none"
-            class="node-edge"
-            :class="{ 'highlighted-edge': isOutgoingBundleHighlighted(bundle) }"
+            class="node-edge highlighted-edge"
+          />
+          <path
+            v-for="edge in highlightedRoutedEdges"
+            :key="`highlight-${edge.key}`"
+            :d="edge.path"
+            fill="none"
+            class="node-edge highlighted-edge"
           />
         </g>
 
@@ -509,6 +538,10 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 .highlighted-edge {
   stroke: var(--color-primary);
   stroke-width: 2;
+}
+
+.dimmed-edge {
+  opacity: 0.45;
 }
 
 .job-node-group {
