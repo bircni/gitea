@@ -14,10 +14,7 @@ import {
   createWorkflowGraphModel,
   getWorkflowGraphLayoutOptions,
   type GraphNode,
-  type IncomingBundle,
-  type OutgoingBundle,
   type RoutedEdge,
-  type SharedSegment,
 } from './WorkflowGraph.utils.ts';
 
 interface StoredState {
@@ -85,21 +82,15 @@ const saveState = () => {
   localUserSettings.setJsonObject(settingKeyStates, Object.fromEntries(sortedStates));
 };
 
-const graphModel = computed(() => createWorkflowGraphModel(props.jobs, expandedMatrixKeys.value, {
-  nodeWidth: 220,
-}));
-
+const graphModel = computed(() => createWorkflowGraphModel(props.jobs, expandedMatrixKeys.value));
 const jobsWithLayout = computed(() => graphModel.value.nodes);
 const edges = computed(() => graphModel.value.edges);
 const routedEdges = computed<RoutedEdge[]>(() => graphModel.value.routedEdges);
-const incomingBundles = computed<IncomingBundle[]>(() => graphModel.value.incomingBundles);
-const outgoingBundles = computed<OutgoingBundle[]>(() => graphModel.value.outgoingBundles);
-const sharedSegments = computed<SharedSegment[]>(() => graphModel.value.sharedSegments);
 
-const nodeWidth = computed(() => layout.nodeWidth);
+const nodeWidth = layout.nodeWidth;
 const graphWidth = computed(() => {
   if (jobsWithLayout.value.length === 0) return 800;
-  const maxX = Math.max(...jobsWithLayout.value.map((job) => job.x + nodeWidth.value));
+  const maxX = Math.max(...jobsWithLayout.value.map((job) => job.x + nodeWidth));
   return maxX + layout.margin * 2;
 });
 
@@ -109,16 +100,10 @@ const graphHeight = computed(() => {
   return maxY + layout.margin * 2;
 });
 
-const graphMetrics = computed(() => {
+const successRateLabel = computed(() => {
+  if (props.jobs.length === 0) return '0%';
   const successCount = props.jobs.filter((job) => job.status === 'success').length;
-  const levels = new Map<number, number>();
-  for (const job of jobsWithLayout.value) {
-    levels.set(job.level, (levels.get(job.level) || 0) + 1);
-  }
-  return {
-    successRate: `${((successCount / props.jobs.length) * 100).toFixed(0)}%`,
-    parallelism: Math.max(...Array.from(levels.values()), 0),
-  };
+  return `${((successCount / props.jobs.length) * 100).toFixed(0)}%`;
 });
 
 const minScale = 0.3;
@@ -184,7 +169,6 @@ function handleWheel(event: WheelEvent) {
 onMounted(() => {
   loadSavedState();
   watch([translateX, translateY, scale], debounce(500, saveState));
-  watch([scale], debounce(100, saveState));
   document.addEventListener('mousemove', handleMouseMoveOnDocument);
   document.addEventListener('mouseup', handleMouseUpOnDocument);
 });
@@ -194,54 +178,33 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', handleMouseUpOnDocument);
 });
 
-function handleNodeMouseEnter(job: GraphNode) {
-  hoveredGraphId.value = job.id;
+function handleNodeMouseEnter(id: string) {
+  hoveredGraphId.value = id;
 }
 
 function handleNodeMouseLeave() {
   hoveredGraphId.value = null;
 }
 
-function handleMatrixMouseEnter(groupId: string) {
-  hoveredGraphId.value = groupId;
-}
-
-const graphHighlightState = computed(() => computeGraphHighlightState(hoveredGraphId.value, edges.value));
-const relatedGraphIds = computed(() => graphHighlightState.value.nodeIds);
-const highlightedEdgeKeys = computed(() => graphHighlightState.value.edgeKeys);
-const hasHoveredGraphId = computed(() => hoveredGraphId.value !== null);
+const highlightState = computed(() => computeGraphHighlightState(hoveredGraphId.value, graphModel.value.adjacency));
 
 function isNodeHighlighted(nodeId: string): boolean {
-  return relatedGraphIds.value.has(nodeId);
+  return highlightState.value.nodeIds.has(nodeId);
 }
 
 function isEdgeHighlighted(edge: RoutedEdge): boolean {
-  return highlightedEdgeKeys.value.has(edge.key);
+  return highlightState.value.edgeKeys.has(edge.key);
 }
 
-function isIncomingBundleHighlighted(bundle: IncomingBundle): boolean {
-  return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
-}
+const splitRoutedEdges = computed(() => {
+  const highlighted: RoutedEdge[] = [];
+  const dimmed: RoutedEdge[] = [];
+  for (const edge of routedEdges.value) (isEdgeHighlighted(edge) ? highlighted : dimmed).push(edge);
+  return {highlighted, dimmed};
+});
 
-function isOutgoingBundleHighlighted(bundle: OutgoingBundle): boolean {
-  return bundle.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
-}
-
-function isSharedSegmentHighlighted(segment: SharedSegment): boolean {
-  return segment.edgeKeys.some((edgeKey) => highlightedEdgeKeys.value.has(edgeKey));
-}
-
-const nonHighlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => !isEdgeHighlighted(edge)));
-const highlightedRoutedEdges = computed(() => routedEdges.value.filter((edge) => isEdgeHighlighted(edge)));
-const nonHighlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => !isIncomingBundleHighlighted(bundle)));
-const highlightedIncomingBundles = computed(() => incomingBundles.value.filter((bundle) => isIncomingBundleHighlighted(bundle)));
-const nonHighlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => !isOutgoingBundleHighlighted(bundle)));
-const highlightedOutgoingBundles = computed(() => outgoingBundles.value.filter((bundle) => isOutgoingBundleHighlighted(bundle)));
-const nonHighlightedSharedSegments = computed(() => sharedSegments.value.filter((segment) => !isSharedSegmentHighlighted(segment)));
-const highlightedSharedSegments = computed(() => sharedSegments.value.filter((segment) => isSharedSegmentHighlighted(segment)));
-
-const nodesWithIncomingEdge = computed(() => new Set(edges.value.map((edge) => edge.toId)));
-const nodesWithOutgoingEdge = computed(() => new Set(edges.value.map((edge) => edge.fromId)));
+const nodesWithIncomingEdge = computed(() => new Set(graphModel.value.adjacency.incomingByNodeId.keys()));
+const nodesWithOutgoingEdge = computed(() => new Set(graphModel.value.adjacency.outgoingByNodeId.keys()));
 
 function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   const jobId = 'jobs' in job ? job.jobs[0]!.id : job.id;
@@ -260,7 +223,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
       <h4 class="graph-title">Workflow Dependencies</h4>
       <div class="graph-stats">
         {{ jobs.length }} jobs • {{ edges.length }} dependencies
-        <span v-if="graphMetrics">• <span class="graph-metrics">{{ graphMetrics.successRate }} success</span></span>
+        • <span class="graph-metrics">{{ successRateLabel }} success</span>
       </div>
       <div class="flex-text-block">
         <button
@@ -307,7 +270,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
               :y="job.y"
               :width="nodeWidth"
               :height="job.displayHeight"
-              :rx="job.type === 'job' ? 8 : 10"
+              rx="6"
               fill="black"
             />
           </mask>
@@ -315,60 +278,14 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 
         <g :mask="`url(#workflow-graph-edge-mask-${workflowId})`">
           <path
-            v-for="bundle in nonHighlightedIncomingBundles"
-            :key="bundle.key"
-            :d="bundle.path"
-            fill="none"
-            class="node-edge"
-            :class="{ 'dimmed-edge': hasHoveredGraphId }"
-          />
-          <path
-            v-for="bundle in nonHighlightedOutgoingBundles"
-            :key="bundle.key"
-            :d="bundle.path"
-            fill="none"
-            class="node-edge"
-            :class="{ 'dimmed-edge': hasHoveredGraphId }"
-          />
-          <path
-            v-for="segment in nonHighlightedSharedSegments"
-            :key="segment.key"
-            :d="segment.path"
-            fill="none"
-            class="node-edge"
-            :class="{ 'dimmed-edge': hasHoveredGraphId }"
-          />
-          <path
-            v-for="edge in nonHighlightedRoutedEdges"
+            v-for="edge in splitRoutedEdges.dimmed"
             :key="edge.key"
             :d="edge.path"
             fill="none"
             class="node-edge"
-            :class="{ 'dimmed-edge': hasHoveredGraphId }"
           />
           <path
-            v-for="bundle in highlightedIncomingBundles"
-            :key="`highlight-${bundle.key}`"
-            :d="bundle.path"
-            fill="none"
-            class="node-edge highlighted-edge"
-          />
-          <path
-            v-for="bundle in highlightedOutgoingBundles"
-            :key="`highlight-${bundle.key}`"
-            :d="bundle.path"
-            fill="none"
-            class="node-edge highlighted-edge"
-          />
-          <path
-            v-for="segment in highlightedSharedSegments"
-            :key="`highlight-${segment.key}`"
-            :d="segment.path"
-            fill="none"
-            class="node-edge highlighted-edge"
-          />
-          <path
-            v-for="edge in highlightedRoutedEdges"
+            v-for="edge in splitRoutedEdges.highlighted"
             :key="`highlight-${edge.key}`"
             :d="edge.path"
             fill="none"
@@ -381,70 +298,55 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
             v-if="job.type === 'matrix'"
             class="job-node-group matrix-job-group"
             :class="{ 'related-node': isNodeHighlighted(job.id) }"
-            @mouseenter="handleMatrixMouseEnter(job.id)"
+            @mouseenter="handleNodeMouseEnter(job.id)"
             @mouseleave="handleNodeMouseLeave"
           >
             <title>Matrix: {{ job.matrixKey }}</title>
-            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-
+            <rect :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" rx="6" class="job-rect"/>
             <foreignObject :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" class="matrix-foreign-object">
-              <div class="matrix-panel" xmlns="http://www.w3.org/1999/xhtml" @click.stop>
-                <div class="matrix-panel-tab">
-                  <span class="matrix-panel-tab-value">Matrix: {{ job.matrixKey }}</span>
+              <div class="matrix-panel" xmlns="http://www.w3.org/1999/xhtml">
+                <div class="matrix-panel-header" :class="{ expanded: isMatrixExpanded(job.matrixKey!) }" @click.stop="toggleMatrixExpanded(job.matrixKey!)">
+                  <ActionRunStatus :status="job.status"/>
+                  <span class="matrix-panel-summary">Matrix: {{ job.matrixKey }} - {{ job.jobs.length }} jobs</span>
+                  <SvgIcon name="octicon-chevron-right" :size="12" class="matrix-panel-chevron"/>
                 </div>
-                <div class="matrix-panel-body">
-                  <div class="matrix-panel-header">
-                    <div class="matrix-panel-summary-row">
-                      <ActionRunStatus :status="job.status"/>
-                      <span class="matrix-panel-summary">{{ job.jobs.length }} jobs completed</span>
+                <div v-if="isMatrixExpanded(job.matrixKey!)" class="matrix-panel-jobs">
+                  <div
+                    v-for="ch in job.jobs"
+                    :key="ch.id"
+                    class="graph-list-row"
+                    @mouseenter="handleNodeMouseEnter(job.id)"
+                    @click.stop="onNodeClick(ch, $event)"
+                  >
+                    <div class="graph-list-row-main">
+                      <ActionRunStatus :status="ch.status"/>
+                      <span class="graph-list-row-name">{{ ch.name }}</span>
                     </div>
-                    <button type="button" class="matrix-panel-toggle" @click.stop="toggleMatrixExpanded(job.matrixKey!)">
-                      {{ isMatrixExpanded(job.matrixKey!) ? 'Hide jobs' : 'Show all jobs' }}
-                    </button>
+                    <span class="graph-list-row-duration">{{ ch.duration }}</span>
                   </div>
-
-                  <template v-if="isMatrixExpanded(job.matrixKey!)">
-                    <div class="matrix-panel-jobs">
-                      <div
-                        v-for="ch in job.jobs"
-                        :key="ch.id"
-                        class="graph-list-row"
-                        @mouseenter="handleMatrixMouseEnter(job.id)"
-                        @click="onNodeClick(ch, $event)"
-                      >
-                        <div class="graph-list-row-main">
-                          <ActionRunStatus :status="ch.status"/>
-                          <span class="graph-list-row-name">{{ ch.name }}</span>
-                        </div>
-                        <span class="graph-list-row-duration">{{ ch.duration }}</span>
-                      </div>
-                    </div>
-                  </template>
                 </div>
               </div>
             </foreignObject>
+            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
+            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
           </g>
 
           <g
             v-else-if="job.type === 'group'"
             class="job-node-group grouped-job-group"
             :class="{ 'related-node': isNodeHighlighted(job.id) }"
-            @mouseenter="handleNodeMouseEnter(job)"
+            @mouseenter="handleNodeMouseEnter(job.id)"
             @mouseleave="handleNodeMouseLeave"
           >
             <title>{{ job.name }}</title>
-            <rect :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" rx="10" class="job-rect grouped-job-rect"/>
-            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-
+            <rect :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" rx="6" class="job-rect"/>
             <foreignObject :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" class="matrix-foreign-object">
               <div class="grouped-panel" xmlns="http://www.w3.org/1999/xhtml" @click.stop>
                 <div
                   v-for="ch in job.jobs"
                   :key="ch.id"
                   class="graph-list-row"
-                  @mouseenter="handleMatrixMouseEnter(job.id)"
+                  @mouseenter="handleNodeMouseEnter(job.id)"
                   @click="onNodeClick(ch, $event)"
                 >
                   <div class="graph-list-row-main">
@@ -455,6 +357,8 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
                 </div>
               </div>
             </foreignObject>
+            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
+            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
           </g>
 
           <g
@@ -462,14 +366,11 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
             class="job-node-group"
             :class="{ 'related-node': isNodeHighlighted(job.id) }"
             @click="onNodeClick(job, $event)"
-            @mouseenter="handleNodeMouseEnter(job)"
+            @mouseenter="handleNodeMouseEnter(job.id)"
             @mouseleave="handleNodeMouseLeave"
           >
             <title>{{ job.name }}</title>
-            <rect :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" rx="8" class="job-rect build-job-rect"/>
-            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
-
+            <rect :x="job.x" :y="job.y" :width="nodeWidth" :height="job.displayHeight" rx="6" class="job-rect"/>
             <foreignObject :x="job.x + 10" :y="job.y + 6" :width="nodeWidth - 20" :height="job.displayHeight - 12">
               <div class="job-row job-card" xmlns="http://www.w3.org/1999/xhtml">
                 <div class="job-row-main">
@@ -479,6 +380,8 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
                 <span class="job-duration">{{ job.duration }}</span>
               </div>
             </foreignObject>
+            <circle v-if="nodesWithIncomingEdge.has(job.id)" :cx="job.x" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
+            <circle v-if="nodesWithOutgoingEdge.has(job.id)" :cx="job.x + nodeWidth" :cy="boxCenterY(job)" r="3.5" class="node-port"/>
           </g>
         </template>
       </svg>
@@ -553,46 +456,36 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 }
 
 .node-edge {
-  stroke: #cfd8e3;
+  stroke: var(--color-secondary-dark-2);
   stroke-width: 1.5;
   opacity: 0.9;
 }
 
 .highlighted-edge {
   stroke: var(--color-primary);
-  stroke-width: 2;
-}
-
-.dimmed-edge {
-  opacity: 0.45;
+  stroke-width: 1.5;
 }
 
 .job-node-group {
   cursor: pointer;
 }
 
-.job-node-group:hover .job-rect {
-  fill: var(--color-hover);
-}
-
+.job-node-group:hover .job-rect,
 .job-node-group.related-node .job-rect {
   stroke: var(--color-primary);
   stroke-width: 1.5;
+  fill: var(--color-hover);
 }
 
 .job-rect {
   fill: var(--color-box-body);
-  stroke: #d0d7e2;
+  stroke: var(--color-secondary);
   stroke-width: 1;
-}
-
-.build-job-rect,
-.grouped-job-rect {
-  fill: #fff;
 }
 
 .matrix-foreign-object {
   pointer-events: auto;
+  overflow: visible;
 }
 
 .matrix-panel,
@@ -600,108 +493,67 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  overflow: hidden;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   pointer-events: auto;
   user-select: none;
 }
 
 .matrix-panel {
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-  padding: 0;
-}
-
-.matrix-panel-tab {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 12px;
-  border: 1px solid var(--color-secondary);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--color-box-body);
-  z-index: 1;
-  box-shadow: 0 1px 0 var(--color-box-body);
-}
-
-.matrix-panel-tab-value {
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
-  line-height: 24px;
-}
-
-.matrix-panel-body {
-  position: absolute;
-  inset: 23px 0 0;
-  padding: 22px 18px 16px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-  border: 1px solid var(--color-secondary);
-  border-top: 1px solid var(--color-secondary);
-  border-radius: 0 8px 8px;
-  background: var(--color-box-body);
 }
 
-.job-node-group.related-node .matrix-panel-tab,
-.job-node-group.related-node .matrix-panel-body {
-  border-color: var(--color-primary);
-}
-
-.matrix-panel-summary-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  justify-content: flex-start;
-  color: var(--color-text);
+.matrix-panel:not(:has(.matrix-panel-jobs)) {
+  justify-content: center;
 }
 
 .matrix-panel-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.matrix-panel-header.expanded {
+  border-bottom: 1px solid var(--color-secondary);
 }
 
 .matrix-panel-summary {
+  flex: 1;
   font-size: 12px;
   font-weight: var(--font-weight-semibold);
   line-height: 1.3;
-}
-
-.matrix-panel-toggle {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--color-text-light-1);
-  font-size: 11px;
-  font-weight: var(--font-weight-normal);
-  cursor: pointer;
-  align-self: flex-start;
-}
-
-.matrix-panel-toggle:hover {
   color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-panel-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-light-2);
+  transition: transform 0.15s ease;
+}
+
+.matrix-panel-header.expanded .matrix-panel-chevron {
+  transform: rotate(90deg);
 }
 
 .matrix-panel-jobs {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
 }
 
 .grouped-panel {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 6px 10px;
+  padding: 6px;
   gap: 2px;
 }
 
@@ -760,7 +612,7 @@ function onNodeClick(job: GraphNode | ActionsJob, event: MouseEvent) {
 }
 
 .node-port {
-  fill: #57606a;
+  fill: var(--color-secondary-dark-2);
   stroke: var(--color-box-body);
   stroke-width: 1.25;
   opacity: 0.9;

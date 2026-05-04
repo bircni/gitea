@@ -1,4 +1,4 @@
-import {computeGraphHighlightState, createWorkflowGraphModel, computeJobLevels, matrixKeyFromJobName} from './WorkflowGraph.utils.ts';
+import {computeGraphHighlightState, computeJobLevels, createWorkflowGraphModel, matrixKeyFromJobName} from './WorkflowGraph.utils.ts';
 import type {ActionsJob} from '../modules/gitea-actions.ts';
 
 const mockJobs: ActionsJob[] = [
@@ -38,13 +38,30 @@ const verifyDeployJobs: ActionsJob[] = [
   {id: 105, link: '', jobId: 'deploy', name: 'Deploy', status: 'blocked', canRerun: false, duration: '', needs: ['verify-dev', 'verify-qa']},
 ];
 
-const simpleFanoutJobs: ActionsJob[] = [
-  {id: 201, link: '', jobId: 'job-100', name: 'job-100', status: 'success', canRerun: false, duration: '3s'},
-  {id: 202, link: '', jobId: 'job-101', name: 'job-101', status: 'success', canRerun: false, duration: '3s', needs: ['job-100']},
-  {id: 203, link: '', jobId: 'job-103', name: 'job-103', status: 'success', canRerun: false, duration: '2s', needs: ['job-100']},
+// Multi-level pipeline with two matrices and a leaf with two parents.
+const wfTest1Jobs: ActionsJob[] = [
+  {id: 1, link: '', jobId: 'init', name: 'Initialize Pipeline', status: 'success', canRerun: false, duration: '1s'},
+  {id: 2, link: '', jobId: 'lint-frontend', name: 'Lint Frontend', status: 'success', canRerun: false, duration: '3s', needs: ['init']},
+  {id: 3, link: '', jobId: 'lint-backend', name: 'Lint Backend', status: 'success', canRerun: false, duration: '3s', needs: ['init']},
+  {id: 4, link: '', jobId: 'build-frontend', name: 'Build Frontend', status: 'success', canRerun: false, duration: '4s', needs: ['lint-frontend']},
+  {id: 5, link: '', jobId: 'build-backend', name: 'Build Backend', status: 'success', canRerun: false, duration: '5s', needs: ['lint-backend']},
+  {id: 6, link: '', jobId: 'tu-api-t', name: 'Unit Tests (api, true)', status: 'success', canRerun: false, duration: '3s', needs: ['build-frontend', 'build-backend']},
+  {id: 7, link: '', jobId: 'tu-api-f', name: 'Unit Tests (api, false)', status: 'success', canRerun: false, duration: '3s', needs: ['build-frontend', 'build-backend']},
+  {id: 8, link: '', jobId: 'tu-svc-t', name: 'Unit Tests (service, true)', status: 'success', canRerun: false, duration: '3s', needs: ['build-frontend', 'build-backend']},
+  {id: 9, link: '', jobId: 'test-integration', name: 'Integration Tests', status: 'success', canRerun: false, duration: '6s', needs: ['build-backend']},
+  {id: 10, link: '', jobId: 'te-c-d', name: 'E2E Tests (chrome, desktop)', status: 'success', canRerun: false, duration: '4s', needs: ['build-frontend', 'tu-api-t', 'tu-api-f', 'tu-svc-t']},
+  {id: 11, link: '', jobId: 'te-c-m', name: 'E2E Tests (chrome, mobile)', status: 'success', canRerun: false, duration: '4s', needs: ['build-frontend', 'tu-api-t', 'tu-api-f', 'tu-svc-t']},
+  {id: 12, link: '', jobId: 'te-f-d', name: 'E2E Tests (firefox, desktop)', status: 'success', canRerun: false, duration: '4s', needs: ['build-frontend', 'tu-api-t', 'tu-api-f', 'tu-svc-t']},
+  {id: 13, link: '', jobId: 'bundle-app', name: 'Bundle Application', status: 'success', canRerun: false, duration: '3s', needs: ['tu-api-t', 'tu-api-f', 'tu-svc-t', 'test-integration', 'te-c-d', 'te-c-m', 'te-f-d']},
+  {id: 14, link: '', jobId: 'deploy-dev', name: 'Deploy to Dev', status: 'success', canRerun: false, duration: '3s', needs: ['bundle-app']},
+  {id: 15, link: '', jobId: 'deploy-qa', name: 'Deploy to QA', status: 'success', canRerun: false, duration: '3s', needs: ['bundle-app']},
+  {id: 16, link: '', jobId: 'verify-dev', name: 'Verify Dev', status: 'success', canRerun: false, duration: '2s', needs: ['deploy-dev']},
+  {id: 17, link: '', jobId: 'verify-qa', name: 'Verify QA', status: 'success', canRerun: false, duration: '2s', needs: ['deploy-qa']},
+  {id: 18, link: '', jobId: 'deploy-prod', name: 'Deploy to Production', status: 'success', canRerun: false, duration: '5s', needs: ['verify-dev', 'verify-qa']},
+  {id: 19, link: '', jobId: 'post-deploy-checks', name: 'Post-Deploy Checks', status: 'success', canRerun: false, duration: '2s', needs: ['deploy-prod']},
 ];
 
-test('matrix key heuristic keeps GitHub-style prefix', () => {
+test('matrix key heuristic strips trailing parameter list', () => {
   expect(matrixKeyFromJobName('matrix-e2e (1, chromium)')).toBe('matrix-e2e');
   expect(matrixKeyFromJobName('plain-job')).toBeNull();
 });
@@ -57,138 +74,97 @@ test('computeJobLevels keeps stable topological levels', () => {
   expect(levels.get('build-image')).toBe(2);
 });
 
-test('graph model collapses matrix and groups parallel test jobs', () => {
+test('graph model collapses matrix and groups jobs that share parents and children', () => {
   const graph = createWorkflowGraphModel(mockJobs);
 
-  expect(graph.nodes.find((node) => node.type === 'matrix')?.jobs).toHaveLength(6);
-  expect(graph.nodes.find((node) => node.type === 'group')?.jobs.map((job) => job.jobId)).toEqual([
-    'unit-test',
-    'arch-test',
-    'integration-test',
-  ]);
+  expect(graph.nodes.find((n) => n.type === 'matrix')?.jobs).toHaveLength(6);
+  const groupJobIds = graph.nodes.filter((n) => n.type === 'group').map((g) => g.jobs.map((j) => j.jobId));
+  expect(groupJobIds).toEqual(expect.arrayContaining([
+    ['prep-jdk', 'code-analysis'],
+    ['unit-test', 'arch-test', 'integration-test'],
+  ]));
 });
 
 test('expanded matrix height includes summary and toggle rows', () => {
   const collapsed = createWorkflowGraphModel(mockJobs);
   const expanded = createWorkflowGraphModel(mockJobs, new Set(['matrix-e2e']));
-  const collapsedMatrix = collapsed.nodes.find((node) => node.id === 'matrix:matrix-e2e');
-  const expandedMatrix = expanded.nodes.find((node) => node.id === 'matrix:matrix-e2e');
+  const collapsedMatrix = collapsed.nodes.find((n) => n.id === 'matrix:matrix-e2e');
+  const expandedMatrix = expanded.nodes.find((n) => n.id === 'matrix:matrix-e2e');
 
   expect(collapsedMatrix?.displayHeight).toBeLessThan(expandedMatrix?.displayHeight ?? 0);
-  expect(expandedMatrix?.displayHeight).toBe(264);
+  // 6 jobs * 26 row height + 40 header + 6 pad * 2 = 208
+  expect(expandedMatrix?.displayHeight).toBe(208);
 });
 
-test('lane placement keeps main chain on top and grouped work below', () => {
+test('every dependency is rendered as one routed edge', () => {
   const graph = createWorkflowGraphModel(mockJobs);
-  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
-
-  const job101 = nodes.get('job:2');
-  const job102 = nodes.get('job:3');
-  const job103 = nodes.get('job:4');
-  const matrix = nodes.get('matrix:matrix-e2e');
-  const group = Array.from(nodes.values()).find((node) => node.type === 'group');
-  const buildImage = nodes.get('job:16');
-
-  expect(job101?.y).toBeLessThan(job103?.y ?? 0);
-  expect(job101?.y).toBeLessThan(matrix?.y ?? 0);
-  expect(group?.y).toBeLessThan(matrix?.y ?? 0);
-  expect(job102?.y).toBeLessThan(buildImage?.y ?? 0);
-  expect(nodes.get('job:5')?.y).toBeLessThan(nodes.get('job:6')?.y ?? 0);
+  const rootGroup = graph.nodes.find((n) => n.type === 'group' && n.jobs.some((j) => j.jobId === 'prep-jdk'))!;
+  const testGroup = graph.nodes.find((n) => n.type === 'group' && n.jobs.some((j) => j.jobId === 'unit-test'))!;
+  const expectedKeys = [
+    `${rootGroup.id}->matrix:matrix-e2e`,
+    `${rootGroup.id}->${testGroup.id}`,
+  ];
+  const keys = new Set(graph.routedEdges.map((e) => e.key));
+  for (const k of expectedKeys) expect(keys.has(k)).toBe(true);
 });
 
-test('bundled routes stay orthogonal and include bundle stubs', () => {
-  const graph = createWorkflowGraphModel(mockJobs);
-  const buildImageIncomingBundle = graph.incomingBundles.find((bundle) => bundle.toId === 'job:16');
-  const lowerClusterUpperJoin = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-upper-join');
-  const lowerClusterLowerJoin = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-lower-join');
-  const lowerClusterSharedTrunk = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-shared-trunk');
-  const lowerClusterGroupFinal = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-group-final');
-  const lowerClusterMatrixFinal = graph.sharedSegments.find((segment) => segment.key === 'lower-cluster-matrix-final');
-  const buildImageEdge = graph.routedEdges.find((edge) => edge.fromId === 'matrix:matrix-e2e' && edge.toId === 'job:16');
-  const matrixIncomingEdges = graph.edges.filter((edge) => edge.toId === 'matrix:matrix-e2e').map((edge) => edge.fromId).sort();
-  const groupIncomingEdges = graph.edges.filter((edge) => edge.toId.includes('group:')).map((edge) => edge.fromId).sort();
-
-  expect(lowerClusterUpperJoin?.edgeKeys.sort()).toEqual([
-    'job:5->group:1:code-analysis\u0001prep-jdk:build-image',
-    'job:5->matrix:matrix-e2e',
-  ]);
-  expect(lowerClusterLowerJoin?.edgeKeys.sort()).toEqual([
-    'job:6->group:1:code-analysis\u0001prep-jdk:build-image',
-    'job:6->matrix:matrix-e2e',
-  ]);
-  expect(lowerClusterSharedTrunk?.edgeKeys.sort()).toEqual([
-    'job:5->matrix:matrix-e2e',
-    'job:6->matrix:matrix-e2e',
-  ]);
-  expect(lowerClusterGroupFinal?.edgeKeys.sort()).toEqual([
-    'job:5->group:1:code-analysis\u0001prep-jdk:build-image',
-    'job:6->group:1:code-analysis\u0001prep-jdk:build-image',
-  ]);
-  expect(lowerClusterMatrixFinal?.edgeKeys.sort()).toEqual(['job:5->matrix:matrix-e2e', 'job:6->matrix:matrix-e2e']);
-  expect(matrixIncomingEdges).toEqual(['job:5', 'job:6']);
-  expect(groupIncomingEdges).toEqual(['job:5', 'job:6']);
-  expect(buildImageIncomingBundle?.fromIds).toHaveLength(2);
-  expect(buildImageEdge?.path).toContain('V');
-});
-
-test('verify-deploy graph keeps direct edges flat and deploy merge local', () => {
+test('same-row edge collapses to a single horizontal line', () => {
   const graph = createWorkflowGraphModel(verifyDeployJobs);
-  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
-  const verifyDevEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:101' && edge.toId === 'job:103');
-  const verifyQaEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:102' && edge.toId === 'job:104');
-  const deployUpperEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:103' && edge.toId === 'job:105');
-  const deployLowerEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:104' && edge.toId === 'job:105');
-  const verifyDev = nodes.get('job:103');
-  const deploy = nodes.get('job:105');
-
+  const verifyDevEdge = graph.routedEdges.find((e) => e.fromId === 'job:101' && e.toId === 'job:103');
+  const verifyQaEdge = graph.routedEdges.find((e) => e.fromId === 'job:102' && e.toId === 'job:104');
   expect(verifyDevEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
   expect(verifyQaEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
-  expect(deployUpperEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
-  expect(deployLowerEdge?.path).toContain('V');
-  expect(deploy).toBeDefined();
-  expect(verifyDev).toBeDefined();
-  expect(deploy!.y).toBe(verifyDev!.y);
 });
 
-test('fanout branch peels off directly from the source stub', () => {
-  const graph = createWorkflowGraphModel(simpleFanoutJobs);
-  const straightEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:201' && edge.toId === 'job:202');
-  const branchEdge = graph.routedEdges.find((edge) => edge.fromId === 'job:201' && edge.toId === 'job:203');
-
-  expect(straightEdge?.path).toMatch(/^M [\d.]+ [\d.]+ H [\d.]+$/);
-  expect(branchEdge?.path).toMatch(/^M [\d.]+ [\d.]+ C [\d.]+ [\d.]+ [\d.]+ [\d.]+ [\d.]+ [\d.]+ H [\d.]+$/);
+test('different-row edge uses cubic bezier curve', () => {
+  const graph = createWorkflowGraphModel(verifyDeployJobs);
+  const deployLowerEdge = graph.routedEdges.find((e) => e.fromId === 'job:104' && e.toId === 'job:105');
+  expect(deployLowerEdge?.path).toContain(' C ');
 });
 
-test('directed highlight state excludes siblings that only share descendants', () => {
+test('multi-level pipeline with two matrices and a converging leaf renders without errors', () => {
+  const graph = createWorkflowGraphModel(wfTest1Jobs);
+  const matrices = graph.nodes.filter((n) => n.type === 'matrix');
+  expect(matrices.map((n) => n.matrixKey).sort()).toEqual(['E2E Tests', 'Unit Tests']);
+
+  const deployProd = graph.nodes.find((n) => n.id === 'job:18');
+  const verifyDev = graph.nodes.find((n) => n.id === 'job:16');
+  const verifyQa = graph.nodes.find((n) => n.id === 'job:17');
+  expect(verifyDev?.level).toBe(verifyQa?.level);
+  expect(deployProd?.level).toBe((verifyDev?.level ?? 0) + 1);
+
+  for (const node of graph.nodes) {
+    expect(Number.isFinite(node.x)).toBe(true);
+    expect(Number.isFinite(node.y)).toBe(true);
+    expect(node.x).toBeGreaterThanOrEqual(0);
+    expect(node.y).toBeGreaterThanOrEqual(0);
+  }
+  for (const edge of graph.routedEdges) {
+    expect(edge.path).not.toMatch(/NaN|undefined|Infinity/);
+  }
+});
+
+test('directed highlight state covers ancestors and descendants of the hovered node', () => {
   const graph = createWorkflowGraphModel(mockJobs);
+  const rootGroup = graph.nodes.find((n) => n.type === 'group' && n.jobs.some((j) => j.jobId === 'prep-jdk'))!;
 
-  const prepHighlight = computeGraphHighlightState('job:5', graph.edges);
-  expect(prepHighlight.nodeIds.has('job:5')).toBe(true);
-  expect(prepHighlight.nodeIds.has('matrix:matrix-e2e')).toBe(true);
-  expect(prepHighlight.nodeIds.has('group:1:code-analysis\u0001prep-jdk:build-image')).toBe(true);
-  expect(prepHighlight.nodeIds.has('job:16')).toBe(true);
-  expect(prepHighlight.nodeIds.has('job:6')).toBe(false);
-  expect(prepHighlight.edgeKeys.has('job:5->matrix:matrix-e2e')).toBe(true);
-  expect(prepHighlight.edgeKeys.has('job:5->group:1:code-analysis\u0001prep-jdk:build-image')).toBe(true);
-  expect(prepHighlight.edgeKeys.has('job:6->matrix:matrix-e2e')).toBe(false);
-
-  const codeHighlight = computeGraphHighlightState('job:6', graph.edges);
-  expect(codeHighlight.nodeIds.has('job:5')).toBe(false);
-  expect(codeHighlight.edgeKeys.has('job:5->matrix:matrix-e2e')).toBe(false);
-  expect(codeHighlight.edgeKeys.has('job:6->matrix:matrix-e2e')).toBe(true);
+  const highlight = computeGraphHighlightState(rootGroup.id, graph.adjacency);
+  expect(highlight.nodeIds.has('matrix:matrix-e2e')).toBe(true);
+  expect(highlight.nodeIds.has('job:16')).toBe(true);
+  expect(highlight.edgeKeys.has(`${rootGroup.id}->matrix:matrix-e2e`)).toBe(true);
 });
 
 test('directed highlight state for converging graph excludes sibling branch when hovering parent', () => {
   const graph = createWorkflowGraphModel(verifyDeployJobs);
 
-  const parentHighlight = computeGraphHighlightState('job:103', graph.edges);
+  const parentHighlight = computeGraphHighlightState('job:103', graph.adjacency);
   expect(parentHighlight.nodeIds.has('job:101')).toBe(true);
   expect(parentHighlight.nodeIds.has('job:105')).toBe(true);
   expect(parentHighlight.nodeIds.has('job:104')).toBe(false);
   expect(parentHighlight.edgeKeys.has('job:103->job:105')).toBe(true);
   expect(parentHighlight.edgeKeys.has('job:104->job:105')).toBe(false);
 
-  const sinkHighlight = computeGraphHighlightState('job:105', graph.edges);
+  const sinkHighlight = computeGraphHighlightState('job:105', graph.adjacency);
   expect(sinkHighlight.nodeIds.has('job:103')).toBe(true);
   expect(sinkHighlight.nodeIds.has('job:104')).toBe(true);
   expect(sinkHighlight.edgeKeys.has('job:103->job:105')).toBe(true);

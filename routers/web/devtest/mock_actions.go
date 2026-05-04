@@ -237,7 +237,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 			{jobID: "prep-jdk", name: "prep-jdk", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
 			{jobID: "code-analysis", name: "code-analysis", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
 
-			// Matrix expansion (names intentionally match GitHub's common rendering pattern)
+			// Matrix expansion (the " (...)" suffix is the heuristic the frontend uses to group rows)
 			{jobID: "matrix-e2e-1-chromium", name: "matrix-e2e (1, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
 			{jobID: "matrix-e2e-1-firefox", name: "matrix-e2e (1, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
 			{jobID: "matrix-e2e-2-chromium", name: "matrix-e2e (2, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
