@@ -159,6 +159,14 @@ ISO-8859-1`, commitFromReader.Signature.Payload)
 	assert.Equal(t, commitFromReader, commitFromReader2)
 }
 
+func TestCommitMessageSanitizesInvalidUTF8(t *testing.T) {
+	commit := &Commit{
+		CommitMessage: "invalid \xff message",
+	}
+
+	assert.Equal(t, "invalid ? message", commit.Message())
+}
+
 func TestHasPreviousCommit(t *testing.T) {
 	bareRepo1Path := filepath.Join(testReposDir, "repo1_bare")
 

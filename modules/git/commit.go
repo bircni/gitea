@@ -41,7 +41,7 @@ func (c *Commit) Message() string {
 	// * When need to use commit message in templates/database, it should be valid UTF-8
 	// * When need to get the original commit message, it should just use "c.CommitMessage"
 	// It's not easy to refactor at the moment, many templates need to be updated and tested
-	return c.CommitMessage
+	return strings.ToValidUTF8(c.CommitMessage, "?")
 }
 
 // Summary returns first line of commit message.
