@@ -139,8 +139,6 @@ func TestCanCreateOrganization(t *testing.T) {
 }
 
 func TestGetUserOrOrgIDByNameMixedCaseOrganization(t *testing.T) {
-	assert.NoError(t, unittest.PrepareTestDatabase())
-
 	org := &user_model.User{
 		Name:               "OrganizationA",
 		LowerName:          "organizationa",
