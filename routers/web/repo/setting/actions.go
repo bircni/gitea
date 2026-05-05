@@ -6,7 +6,6 @@ package setting
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"code.gitea.io/gitea/models/actions"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -94,7 +93,7 @@ func ActionsUnitPost(ctx *context.Context) {
 }
 
 func AddCollaborativeOwner(ctx *context.Context) {
-	name := strings.ToLower(ctx.FormString("collaborative_owner"))
+	name := ctx.FormString("collaborative_owner")
 
 	ownerID, err := user_model.GetUserOrOrgIDByName(ctx, name)
 	if err != nil {
