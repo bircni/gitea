@@ -234,16 +234,16 @@ func MockActionsRunsJobs(ctx *context.Context) {
 			{jobID: "job-102", name: "job-102", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"job-101"}},
 			{jobID: "job-103", name: "job-103", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100"}},
 
-			{jobID: "prep-jdk", name: "prep-jdk", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
 			{jobID: "code-analysis", name: "code-analysis", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
+			{jobID: "prep-jdk", name: "prep-jdk", status: actions_model.StatusSuccess, duration: "3s", needs: nil},
 
 			// Matrix expansion (the " (...)" suffix is the heuristic the frontend uses to group rows)
-			{jobID: "matrix-e2e-1-chromium", name: "matrix-e2e (1, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
-			{jobID: "matrix-e2e-1-firefox", name: "matrix-e2e (1, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
-			{jobID: "matrix-e2e-2-chromium", name: "matrix-e2e (2, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
-			{jobID: "matrix-e2e-3-chromium", name: "matrix-e2e (3, chromium)", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
-			{jobID: "matrix-e2e-3-firefox", name: "matrix-e2e (3, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
-			{jobID: "matrix-e2e-99-webkit", name: "matrix-e2e (99, webkit)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk", "code-analysis"}},
+			{jobID: "matrix-e2e-1-chromium", name: "matrix-e2e (1, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk"}},
+			{jobID: "matrix-e2e-1-firefox", name: "matrix-e2e (1, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk"}},
+			{jobID: "matrix-e2e-2-chromium", name: "matrix-e2e (2, chromium)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk"}},
+			{jobID: "matrix-e2e-3-chromium", name: "matrix-e2e (3, chromium)", status: actions_model.StatusSuccess, duration: "4s", needs: []string{"job-100", "prep-jdk"}},
+			{jobID: "matrix-e2e-3-firefox", name: "matrix-e2e (3, firefox)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk"}},
+			{jobID: "matrix-e2e-99-webkit", name: "matrix-e2e (99, webkit)", status: actions_model.StatusSuccess, duration: "2s", needs: []string{"job-100", "prep-jdk"}},
 
 			{jobID: "unit-test", name: "unit-test", status: actions_model.StatusSuccess, duration: "3s", needs: []string{"prep-jdk", "code-analysis"}},
 			{jobID: "arch-test", name: "arch-test", status: actions_model.StatusSuccess, duration: "3s", needs: []string{"prep-jdk", "code-analysis"}},
