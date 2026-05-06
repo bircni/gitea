@@ -151,7 +151,11 @@ func TestGetUserOrOrgIDByNameMixedCaseOrganization(t *testing.T) {
 	}
 	require.NoError(t, user_model.CreateUser(t.Context(), org, &user_model.Meta{}))
 
-	orgID, err := user_model.GetUserOrOrgIDByName(t.Context(), strings.ToLower(org.Name))
+	orgID, err := user_model.GetUserOrOrgIDByName(t.Context(), "OrganizationA")
+	require.NoError(t, err)
+	assert.Equal(t, org.ID, orgID)
+
+	orgID, err = user_model.GetUserOrOrgIDByName(t.Context(), "oRGanizationa")
 	require.NoError(t, err)
 	assert.Equal(t, org.ID, orgID)
 }
