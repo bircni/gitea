@@ -992,11 +992,12 @@ func (g *GiteaLocalUploader) remapLocalUser(ctx context.Context, source user_mod
 	if !ok {
 		user, err := user_model.GetUserByID(ctx, source.GetExternalID())
 		if errors.Is(err, util.ErrNotExist) {
+			g.userMap[source.GetExternalID()] = userid
 			return 0, nil
 		} else if err != nil {
 			return 0, err
 		}
-		// let's not reuse an ID when the user was deleted or has a different user name
+		// let's not reuse an ID when the user was deleted or has a different username
 		if !util.AsciiEqualFold(user.Name, source.GetExternalName()) {
 			userid = 0
 		} else {

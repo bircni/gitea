@@ -1324,7 +1324,7 @@ func GetUserByEmail(ctx context.Context, email string) (*User, error) {
 }
 
 func GetIndividualUser(ctx context.Context, user *User) (bool, error) {
-	// FIXME: the design is wrong, empty User fields won't apply, this function should be remove in the future
+	// FIXME: the design is wrong, empty User fields won't apply, this function should be removed in the future
 	has, err := db.GetEngine(ctx).Get(user)
 	if has && user.Type != UserTypeIndividual {
 		has = false
