@@ -138,28 +138,6 @@ func TestCanCreateOrganization(t *testing.T) {
 	assert.False(t, user.CanCreateOrganization())
 }
 
-func TestGetUserOrOrgIDByNameMixedCaseOrganization(t *testing.T) {
-	org := &user_model.User{
-		Name:               "OrganizationA",
-		LowerName:          "organizationa",
-		Email:              "organizationa@example.com",
-		Passwd:             "organizationa-password",
-		Type:               user_model.UserTypeOrganization,
-		IsActive:           true,
-		Theme:              setting.UI.DefaultTheme,
-		MustChangePassword: false,
-	}
-	require.NoError(t, user_model.CreateUser(t.Context(), org, &user_model.Meta{}))
-
-	orgID, err := user_model.GetUserOrOrgIDByName(t.Context(), "OrganizationA")
-	require.NoError(t, err)
-	assert.Equal(t, org.ID, orgID)
-
-	orgID, err = user_model.GetUserOrOrgIDByName(t.Context(), "oRGanizationa")
-	require.NoError(t, err)
-	assert.Equal(t, org.ID, orgID)
-}
-
 func TestSearchUsers(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	testSuccess := func(opts user_model.SearchUserOptions, expectedUserOrOrgIDs []int64) {

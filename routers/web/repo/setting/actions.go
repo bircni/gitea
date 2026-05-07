@@ -93,15 +93,12 @@ func ActionsUnitPost(ctx *context.Context) {
 }
 
 func AddCollaborativeOwner(ctx *context.Context) {
-	name := ctx.FormString("collaborative_owner")
-
-	ownerID, err := user_model.GetUserOrOrgIDByName(ctx, name)
+	collUser, err := user_model.GetUserByName(ctx, ctx.FormString("collaborative_owner"))
 	if err != nil {
 		if errors.Is(err, util.ErrNotExist) {
-			ctx.Flash.Error(ctx.Tr("form.user_not_exist"))
-			ctx.JSONErrorNotFound()
+			ctx.JSONError(ctx.Tr("form.user_not_exist"))
 		} else {
-			ctx.ServerError("GetUserOrOrgIDByName", err)
+			ctx.ServerError("GetUserByName", err)
 		}
 		return
 	}
@@ -112,7 +109,7 @@ func AddCollaborativeOwner(ctx *context.Context) {
 		return
 	}
 	actionsCfg := actionsUnit.ActionsConfig()
-	actionsCfg.AddCollaborativeOwner(ownerID)
+	actionsCfg.AddCollaborativeOwner(collUser.ID)
 	if err := repo_model.UpdateRepoUnitConfig(ctx, actionsUnit); err != nil {
 		ctx.ServerError("UpdateRepoUnitConfig", err)
 		return
