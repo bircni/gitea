@@ -365,6 +365,10 @@ const (
 	HookIssueEdited HookIssueAction = "edited"
 	// HookIssueDeleted is an issue action for deleting an issue
 	HookIssueDeleted HookIssueAction = "deleted"
+	// HookIssueLocked is an issue action for locking an issue conversation.
+	HookIssueLocked HookIssueAction = "locked"
+	// HookIssueUnlocked is an issue action for unlocking an issue conversation.
+	HookIssueUnlocked HookIssueAction = "unlocked"
 	// HookIssueAssigned assigned
 	HookIssueAssigned HookIssueAction = "assigned"
 	// HookIssueUnassigned unassigned
@@ -379,6 +383,10 @@ const (
 	HookIssueMilestoned HookIssueAction = "milestoned"
 	// HookIssueDemilestoned is an issue action for when a milestone is cleared on an issue.
 	HookIssueDemilestoned HookIssueAction = "demilestoned"
+	// HookIssueDependencyAdded is an issue action for when a dependency is added.
+	HookIssueDependencyAdded HookIssueAction = "dependency_added"
+	// HookIssueDependencyRemoved is an issue action for when a dependency is removed.
+	HookIssueDependencyRemoved HookIssueAction = "dependency_removed"
 	// HookIssueReviewed is an issue action for when a pull request is reviewed
 	HookIssueReviewed HookIssueAction = "reviewed"
 	// HookIssueReviewRequested is an issue action for when a reviewer is requested for a pull request.
@@ -397,6 +405,8 @@ type IssuePayload struct {
 	Changes *ChangesPayload `json:"changes,omitempty"`
 	// The issue that was acted upon
 	Issue *Issue `json:"issue"`
+	// The dependency issue that was added or removed
+	Dependency *Issue `json:"dependency,omitempty"`
 	// The repository containing the issue
 	Repository *Repository `json:"repository"`
 	// The user who performed the action
@@ -418,10 +428,14 @@ type ChangesFromPayload struct {
 
 // ChangesPayload represents the payload information of issue change
 type ChangesPayload struct {
+	// Changes made to the name
+	Name *ChangesFromPayload `json:"name,omitempty"`
 	// Changes made to the title
 	Title *ChangesFromPayload `json:"title,omitempty"`
 	// Changes made to the body/description
 	Body *ChangesFromPayload `json:"body,omitempty"`
+	// Changes made to the due date
+	Deadline *ChangesFromPayload `json:"due_date,omitempty"`
 	// Changes made to the reference
 	Ref *ChangesFromPayload `json:"ref,omitempty"`
 	// Changes made to the labels added
@@ -444,6 +458,8 @@ type PullRequestPayload struct {
 	Changes *ChangesPayload `json:"changes,omitempty"`
 	// The pull request that was acted upon
 	PullRequest *PullRequest `json:"pull_request"`
+	// The dependency issue that was added or removed
+	Dependency *Issue `json:"dependency,omitempty"`
 	// The reviewer that was requested (for review request actions)
 	RequestedReviewer *User `json:"requested_reviewer"`
 	// The repository containing the pull request
@@ -506,6 +522,8 @@ type HookRepoAction string
 const (
 	// HookRepoCreated created
 	HookRepoCreated HookRepoAction = "created"
+	// HookRepoRenamed renamed
+	HookRepoRenamed HookRepoAction = "renamed"
 	// HookRepoDeleted deleted
 	HookRepoDeleted HookRepoAction = "deleted"
 )
@@ -514,6 +532,8 @@ const (
 type RepositoryPayload struct {
 	// The action performed on the repository
 	Action HookRepoAction `json:"action"`
+	// Changes made to the repository
+	Changes *ChangesPayload `json:"changes,omitempty"`
 	// The repository that was acted upon
 	Repository *Repository `json:"repository"`
 	// The organization that owns the repository (if applicable)

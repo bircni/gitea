@@ -112,6 +112,10 @@ func getIssuesPayloadInfo(p *api.IssuePayload, linkFormatter linkFormatter, with
 		text = fmt.Sprintf("[%s] Issue re-opened: %s", repoLink, titleLink)
 	case api.HookIssueEdited:
 		text = fmt.Sprintf("[%s] Issue edited: %s", repoLink, titleLink)
+	case api.HookIssueLocked:
+		text = fmt.Sprintf("[%s] Issue locked: %s", repoLink, titleLink)
+	case api.HookIssueUnlocked:
+		text = fmt.Sprintf("[%s] Issue unlocked: %s", repoLink, titleLink)
 	case api.HookIssueAssigned:
 		list := make([]string, len(p.Issue.Assignees))
 		for i, user := range p.Issue.Assignees {
@@ -133,6 +137,10 @@ func getIssuesPayloadInfo(p *api.IssuePayload, linkFormatter linkFormatter, with
 			linkFormatter(mileStoneLink, p.Issue.Milestone.Title), titleLink)
 	case api.HookIssueDemilestoned:
 		text = fmt.Sprintf("[%s] Issue milestone cleared: %s", repoLink, titleLink)
+	case api.HookIssueDependencyAdded:
+		text = fmt.Sprintf("[%s] Issue dependency added: %s", repoLink, titleLink)
+	case api.HookIssueDependencyRemoved:
+		text = fmt.Sprintf("[%s] Issue dependency removed: %s", repoLink, titleLink)
 	}
 	if withSender {
 		text += " by " + linkFormatter(setting.AppURL+url.PathEscape(p.Sender.UserName), p.Sender.UserName)
@@ -169,6 +177,10 @@ func getPullRequestPayloadInfo(p *api.PullRequestPayload, linkFormatter linkForm
 	case api.HookIssueEdited:
 		text = fmt.Sprintf("[%s] Pull request edited: %s", repoLink, titleLink)
 		extraMarkdown = p.PullRequest.Body
+	case api.HookIssueLocked:
+		text = fmt.Sprintf("[%s] Pull request locked: %s", repoLink, titleLink)
+	case api.HookIssueUnlocked:
+		text = fmt.Sprintf("[%s] Pull request unlocked: %s", repoLink, titleLink)
 	case api.HookIssueAssigned:
 		list := make([]string, len(p.PullRequest.Assignees))
 		for i, user := range p.PullRequest.Assignees {
@@ -191,6 +203,10 @@ func getPullRequestPayloadInfo(p *api.PullRequestPayload, linkFormatter linkForm
 			linkFormatter(mileStoneLink, p.PullRequest.Milestone.Title), titleLink)
 	case api.HookIssueDemilestoned:
 		text = fmt.Sprintf("[%s] Pull request milestone cleared: %s", repoLink, titleLink)
+	case api.HookIssueDependencyAdded:
+		text = fmt.Sprintf("[%s] Pull request dependency added: %s", repoLink, titleLink)
+	case api.HookIssueDependencyRemoved:
+		text = fmt.Sprintf("[%s] Pull request dependency removed: %s", repoLink, titleLink)
 	case api.HookIssueReviewed:
 		text = fmt.Sprintf("[%s] Pull request reviewed: %s", repoLink, titleLink)
 		extraMarkdown = p.Review.Content
@@ -309,6 +325,20 @@ func getPackagePayloadInfo(p *api.PackagePayload, linkFormatter linkFormatter, w
 	}
 
 	return text, color
+}
+
+func getRepositoryOldName(p *api.RepositoryPayload) string {
+	if p.Changes != nil && p.Changes.Name != nil {
+		return p.Changes.Name.From
+	}
+	return ""
+}
+
+func formatRepositoryRenamed(fullName, oldName string) string {
+	if oldName == "" {
+		return fmt.Sprintf("[%s] Repository renamed", fullName)
+	}
+	return fmt.Sprintf("[%s] Repository renamed from %s", fullName, oldName)
 }
 
 func getStatusPayloadInfo(p *api.CommitStatusPayload, linkFormatter linkFormatter, withSender bool) (text string, color int) {

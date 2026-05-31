@@ -14,6 +14,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/repository"
+	"gitea.dev/modules/timeutil"
 )
 
 // NullNotifier implements a blank notifier
@@ -110,8 +111,16 @@ func (*NullNotifier) UpdateRelease(ctx context.Context, doer *user_model.User, r
 func (*NullNotifier) DeleteRelease(ctx context.Context, doer *user_model.User, rel *repo_model.Release) {
 }
 
+// IssueChangeLock places a place holder function
+func (*NullNotifier) IssueChangeLock(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, locked bool) {
+}
+
 // IssueChangeMilestone places a place holder function
 func (*NullNotifier) IssueChangeMilestone(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldMilestoneID int64) {
+}
+
+// IssueChangeDeadline places a place holder function
+func (*NullNotifier) IssueChangeDeadline(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldDeadlineUnix timeutil.TimeStamp) {
 }
 
 // IssueChangeContent places a place holder function
@@ -141,6 +150,10 @@ func (*NullNotifier) IssueChangeRef(ctx context.Context, doer *user_model.User, 
 // IssueChangeLabels places a place holder function
 func (*NullNotifier) IssueChangeLabels(ctx context.Context, doer *user_model.User, issue *issues_model.Issue,
 	addedLabels, removedLabels []*issues_model.Label) {
+}
+
+// IssueChangeDependency places a place holder function
+func (*NullNotifier) IssueChangeDependency(ctx context.Context, doer *user_model.User, issue, dependency *issues_model.Issue, added bool) {
 }
 
 // CreateRepository places a place holder function

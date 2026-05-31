@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	issues_model "gitea.dev/models/issues"
 	access_model "gitea.dev/models/perm/access"
@@ -18,8 +19,18 @@ import (
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
+	"gitea.dev/modules/timeutil"
 	"gitea.dev/modules/util"
 )
+
+// ToDeadlineChangeFromPayload builds the "changes from" payload for an issue
+// deadline change, used by webhook and action notifiers.
+func ToDeadlineChangeFromPayload(deadlineUnix timeutil.TimeStamp) *api.ChangesFromPayload {
+	if deadlineUnix.IsZero() {
+		return &api.ChangesFromPayload{}
+	}
+	return &api.ChangesFromPayload{From: deadlineUnix.Format(time.RFC3339)}
+}
 
 func ToIssue(ctx context.Context, doer *user_model.User, issue *issues_model.Issue) *api.Issue {
 	return toIssue(ctx, doer, issue, WebAssetDownloadURL)

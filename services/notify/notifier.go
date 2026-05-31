@@ -14,6 +14,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/repository"
+	"gitea.dev/modules/timeutil"
 )
 
 // Notifier defines an interface to notify receiver
@@ -32,7 +33,9 @@ type Notifier interface {
 	NewIssue(ctx context.Context, issue *issues_model.Issue, mentions []*user_model.User)
 	IssueChangeStatus(ctx context.Context, doer *user_model.User, commitID string, issue *issues_model.Issue, actionComment *issues_model.Comment, closeOrReopen bool)
 	DeleteIssue(ctx context.Context, doer *user_model.User, issue *issues_model.Issue)
+	IssueChangeLock(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, locked bool)
 	IssueChangeMilestone(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldMilestoneID int64)
+	IssueChangeDeadline(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldDeadlineUnix timeutil.TimeStamp)
 	IssueChangeAssignee(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, assignee *user_model.User, removed bool, comment *issues_model.Comment)
 	PullRequestReviewRequest(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, reviewer *user_model.User, isRequest bool, comment *issues_model.Comment)
 	IssueChangeContent(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldContent string)
@@ -41,6 +44,7 @@ type Notifier interface {
 	IssueChangeRef(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldRef string)
 	IssueChangeLabels(ctx context.Context, doer *user_model.User, issue *issues_model.Issue,
 		addedLabels, removedLabels []*issues_model.Label)
+	IssueChangeDependency(ctx context.Context, doer *user_model.User, issue, dependency *issues_model.Issue, added bool)
 
 	NewPullRequest(ctx context.Context, pr *issues_model.PullRequest, mentions []*user_model.User)
 	MergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest)

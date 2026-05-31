@@ -15,6 +15,7 @@ import (
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/repository"
+	"gitea.dev/modules/timeutil"
 )
 
 var notifiers []Notifier
@@ -88,6 +89,13 @@ func IssueChangeStatus(ctx context.Context, doer *user_model.User, commitID stri
 func DeleteIssue(ctx context.Context, doer *user_model.User, issue *issues_model.Issue) {
 	for _, notifier := range notifiers {
 		notifier.DeleteIssue(ctx, doer, issue)
+	}
+}
+
+// IssueChangeLock notifies issue conversation lock or unlock changes to notifiers
+func IssueChangeLock(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, locked bool) {
+	for _, notifier := range notifiers {
+		notifier.IssueChangeLock(ctx, doer, issue, locked)
 	}
 }
 
@@ -223,6 +231,13 @@ func IssueChangeMilestone(ctx context.Context, doer *user_model.User, issue *iss
 	}
 }
 
+// IssueChangeDeadline notifies change deadline to notifiers
+func IssueChangeDeadline(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldDeadlineUnix timeutil.TimeStamp) {
+	for _, notifier := range notifiers {
+		notifier.IssueChangeDeadline(ctx, doer, issue, oldDeadlineUnix)
+	}
+}
+
 // IssueChangeContent notifies change content to notifiers
 func IssueChangeContent(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, oldContent string) {
 	for _, notifier := range notifiers {
@@ -271,6 +286,13 @@ func IssueChangeLabels(ctx context.Context, doer *user_model.User, issue *issues
 ) {
 	for _, notifier := range notifiers {
 		notifier.IssueChangeLabels(ctx, doer, issue, addedLabels, removedLabels)
+	}
+}
+
+// IssueChangeDependency notifies when an issue dependency changes
+func IssueChangeDependency(ctx context.Context, doer *user_model.User, issue, dependency *issues_model.Issue, added bool) {
+	for _, notifier := range notifiers {
+		notifier.IssueChangeDependency(ctx, doer, issue, dependency, added)
 	}
 }
 
