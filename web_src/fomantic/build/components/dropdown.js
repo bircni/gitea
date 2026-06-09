@@ -1953,8 +1953,11 @@ $.fn.dropdown = function(parameters) {
                 $choice.find(selector.menu).remove();
                 $choice.find(selector.menuIcon).remove();
               }
-              return ($choice.data(metadata.text) !== undefined)
-                ? $choice.data(metadata.text)
+              // GITEA-PATCH: read the raw "data-text" attribute instead of jQuery's "data", which auto-converts
+              // values like "false"/"true"/"123" to boolean/number and breaks the displayed text (eg: a "false" choice option shows empty)
+              var dataText = $choice.attr('data-' + metadata.text);
+              return (dataText !== undefined)
+                ? dataText
                 : (preserveHTML)
                   ? $choice.html().trim()
                   : $choice.text().trim()
@@ -1966,8 +1969,10 @@ $.fn.dropdown = function(parameters) {
             if(!$choice) {
               return false;
             }
-            return ($choice.data(metadata.value) !== undefined)
-              ? String( $choice.data(metadata.value) )
+            // GITEA-PATCH: read the raw "data-value" attribute instead of jQuery's "data", which auto-converts values like "false"/"true"/"123" to boolean/number
+            var dataValue = $choice.attr('data-' + metadata.value);
+            return (dataValue !== undefined)
+              ? String( dataValue )
               : (typeof choiceText === 'string')
                 ? String(
                   settings.ignoreSearchCase
