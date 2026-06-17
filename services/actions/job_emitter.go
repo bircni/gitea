@@ -288,7 +288,7 @@ func checkJobsOfCurrentRunAttempt(ctx context.Context, run *actions_model.Action
 					expandedAnyCaller = true
 				case actions_model.StatusSkipped:
 					job.Status = actions_model.StatusSkipped
-					if _, err := actions_model.UpdateRunJob(ctx, job, nil, "status"); err != nil {
+					if _, err := actions_model.UpdateRunJob(ctx, job, nil, "status", "if_result"); err != nil {
 						return err
 					}
 				}
@@ -297,7 +297,7 @@ func checkJobsOfCurrentRunAttempt(ctx context.Context, run *actions_model.Action
 
 			// Non-caller: standard status update.
 			job.Status = status
-			if n, err := actions_model.UpdateRunJob(ctx, job, builder.Eq{"status": actions_model.StatusBlocked}, "status"); err != nil {
+			if n, err := actions_model.UpdateRunJob(ctx, job, builder.Eq{"status": actions_model.StatusBlocked}, "status", "if_result"); err != nil {
 				return err
 			} else if n != 1 {
 				return fmt.Errorf("no affected for updating blocked job %v", job.ID)
@@ -421,6 +421,8 @@ func (r *jobStatusResolver) resolve(ctx context.Context) map[int64]actions_model
 			log.Error("evaluateJobIf failed, job will stay blocked: job: %d, err: %v", id, err)
 			continue
 		}
+		// Record the `if:` outcome for display; it is persisted alongside the status update by the caller.
+		actionRunJob.IfResult = actions_model.IfResultFromBool(shouldStartJob)
 
 		newStatus := util.Iif(shouldStartJob, actions_model.StatusWaiting, actions_model.StatusSkipped)
 		if newStatus == actions_model.StatusWaiting {

@@ -10,6 +10,7 @@ import (
 	actions_model "gitea.dev/models/actions"
 	"gitea.dev/modules/actions/jobparser"
 	"gitea.dev/modules/json"
+	"gitea.dev/modules/log"
 	api "gitea.dev/modules/structs"
 )
 
@@ -48,6 +49,29 @@ func getInputsForJob(ctx context.Context, run *actions_model.ActionRun, job *act
 		return map[string]any{}, nil
 	}
 	return p.Inputs, nil
+}
+
+// EvaluateJobIfForDisplay evaluates a job's `if:` on demand for display purposes only (read-only).
+// It is used by the job view for jobs whose `if:` is not evaluated server-side at dispatch time
+// (jobs without `needs`), so it can show the result without changing any dispatch behavior.
+// It returns ok=false when the result cannot be determined yet (e.g. needs not finished, or expression error).
+func EvaluateJobIfForDisplay(ctx context.Context, job *actions_model.ActionRunJob) (result, ok bool) {
+	if err := job.LoadRun(ctx); err != nil {
+		log.Error("EvaluateJobIfForDisplay LoadRun failed: job: %d, err: %v", job.ID, err)
+		return false, false
+	}
+	vars, err := actions_model.GetVariablesOfRun(ctx, job.Run)
+	if err != nil {
+		log.Error("EvaluateJobIfForDisplay GetVariablesOfRun failed: job: %d, err: %v", job.ID, err)
+		return false, false
+	}
+	// allNeedsSucceed only matters for the implicit success() of an empty `if:`; a job reaching
+	// this display path while still pending is treated as if its needs (if any) have succeeded.
+	res, err := evaluateJobIf(ctx, job.Run, nil, job, vars, true)
+	if err != nil {
+		return false, false
+	}
+	return res, true
 }
 
 // evaluateJobIf evaluates a job's `if:`

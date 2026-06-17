@@ -384,14 +384,7 @@ func prepareWorkflowList(ctx *context.Context, workflows []WorkflowInfo, otherWo
 				}
 			}
 			if job.Status.IsWaiting() {
-				hasOnlineRunner := false
-				for _, runner := range runners {
-					if !runner.IsDisabled && runner.CanMatchLabels(job.RunsOn) {
-						hasOnlineRunner = true
-						break
-					}
-				}
-				if !hasOnlineRunner {
+				if !hasMatchingOnlineRunner(runners, job.RunsOn) {
 					runErrors[run.ID] = ctx.Locale.TrString("actions.runs.no_matching_online_runner_helper", strings.Join(job.RunsOn, ","))
 					break
 				}
@@ -430,6 +423,17 @@ func prepareWorkflowList(ctx *context.Context, workflows []WorkflowInfo, otherWo
 	ctx.Data["HasWorkflowsOrRuns"] = len(workflows) > 0 || len(otherWorkflows) > 0 || len(runs) > 0
 
 	ctx.Data["CanWriteRepoUnitActions"] = ctx.Repo.Permission.CanWrite(unit.TypeActions)
+}
+
+// hasMatchingOnlineRunner reports whether any of the given (online) runners can run a job
+// with the given "runs-on" labels.
+func hasMatchingOnlineRunner(runners []*actions_model.ActionRunner, runsOn []string) bool {
+	for _, runner := range runners {
+		if !runner.IsDisabled && runner.CanMatchLabels(runsOn) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadIsRefDeleted loads the IsRefDeleted field for each run in the list.

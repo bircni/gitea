@@ -178,6 +178,84 @@ jobs:
 	}
 }
 
+// Test_jobStatusResolver_Resolve_SetsIfResult verifies that resolving a blocked job records the
+// evaluated `if:` outcome on the job, so the job view can display it.
+func Test_jobStatusResolver_Resolve_SetsIfResult(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	stubRun := &actions_model.ActionRun{TriggerUser: &user_model.User{}, Repo: &repo_model.Repository{}}
+
+	tests := []struct {
+		name     string
+		jobs     actions_model.ActionJobList
+		wantByID map[int64]actions_model.IfResult
+	}{
+		{
+			name: "if true",
+			jobs: actions_model.ActionJobList{
+				{ID: 1, JobID: "job1", Status: actions_model.StatusSuccess, Needs: []string{}},
+				{ID: 2, JobID: "job2", Status: actions_model.StatusBlocked, Needs: []string{"job1"}, WorkflowPayload: []byte(`
+name: test
+on: push
+jobs:
+  job2:
+    runs-on: ubuntu-latest
+    needs: job1
+    if: ${{ always() && needs.job1.result == 'success' }}
+    steps:
+      - run: echo
+`)},
+			},
+			wantByID: map[int64]actions_model.IfResult{2: actions_model.IfResultTrue},
+		},
+		{
+			name: "if false (empty if, need failed)",
+			jobs: actions_model.ActionJobList{
+				{ID: 1, JobID: "job1", Status: actions_model.StatusFailure, Needs: []string{}},
+				{ID: 2, JobID: "job2", Status: actions_model.StatusBlocked, Needs: []string{"job1"}, WorkflowPayload: []byte(`
+name: test
+on: push
+jobs:
+  job2:
+    runs-on: ubuntu-latest
+    needs: job1
+    steps:
+      - run: echo
+`)},
+			},
+			wantByID: map[int64]actions_model.IfResult{2: actions_model.IfResultFalse},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runID := int64(9101 + i)
+			attemptID := int64(9101 + i)
+			idMap := make(map[int64]int64, len(tt.jobs))
+			for _, j := range tt.jobs {
+				origID := j.ID
+				j.ID = 0
+				j.RunID = runID
+				j.RunAttemptID = attemptID
+				j.Run = stubRun
+				assert.NoError(t, db.Insert(ctx, j))
+				idMap[origID] = j.ID
+			}
+
+			r := newJobStatusResolver(tt.jobs, nil)
+			r.Resolve(ctx)
+
+			byID := make(map[int64]*actions_model.ActionRunJob, len(tt.jobs))
+			for _, j := range tt.jobs {
+				byID[j.ID] = j
+			}
+			for origID, want := range tt.wantByID {
+				assert.Equal(t, want, byID[idMap[origID]].IfResult)
+			}
+		})
+	}
+}
+
 // Test_checkRunConcurrency_NoDuplicateConcurrencyGroupCheck verifies that when a run's
 // ConcurrencyGroup has already been checked at the run level, the same group is not
 // re-checked for individual jobs.

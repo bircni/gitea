@@ -108,10 +108,28 @@ type ActionRunJob struct {
 	// ParentJobID scopes `Needs` resolution: name lookups happen only among rows sharing the same ParentJobID. 0 for top-level rows.
 	ParentJobID int64 `xorm:"index NOT NULL DEFAULT 0"`
 
+	// IfResult records the outcome of evaluating the job's `if:` condition, for display in the job view.
+	// It is only set for jobs whose `if:` is evaluated server-side (jobs with `needs`); see IfResult* consts.
+	IfResult IfResult `xorm:"NOT NULL DEFAULT 0"`
+
 	Started timeutil.TimeStamp
 	Stopped timeutil.TimeStamp
 	Created timeutil.TimeStamp `xorm:"created"`
 	Updated timeutil.TimeStamp `xorm:"updated index"`
+}
+
+// IfResult is the tri-state outcome of a job's `if:` condition evaluation.
+type IfResult int8
+
+const (
+	IfResultUnevaluated IfResult = iota // 0, the `if:` hasn't been evaluated server-side yet
+	IfResultTrue                        // 1, the `if:` evaluated to true
+	IfResultFalse                       // 2, the `if:` evaluated to false
+)
+
+// IfResultFromBool maps an evaluated boolean to the persisted tri-state value.
+func IfResultFromBool(b bool) IfResult {
+	return util.Iif(b, IfResultTrue, IfResultFalse)
 }
 
 // ActionRunAttemptJobIDIndex backs the run-wide AttemptJobID counter, keyed by ActionRun.ID.

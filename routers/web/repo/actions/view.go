@@ -30,6 +30,7 @@ import (
 	"gitea.dev/modules/httplib"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/log"
+	"gitea.dev/modules/optional"
 	"gitea.dev/modules/storage"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/templates"
@@ -319,9 +320,10 @@ type ViewResponse struct {
 			JobSummaries []*ViewJobSummary `json:"jobSummaries,omitempty"`
 		} `json:"run"`
 		CurrentJob struct {
-			Title  string         `json:"title"`
-			Detail string         `json:"detail"`
-			Steps  []*ViewJobStep `json:"steps"`
+			Title       string              `json:"title"`
+			Detail      string              `json:"detail"`
+			Steps       []*ViewJobStep      `json:"steps"`
+			Diagnostics *ViewJobDiagnostics `json:"diagnostics,omitempty"`
 		} `json:"currentJob"`
 	} `json:"state"`
 	Logs struct {
@@ -344,6 +346,16 @@ type ViewJob struct {
 	// Reusable workflow caller fields. Zero/empty for non-caller jobs.
 	IsReusableCaller bool   `json:"isReusableCaller"`
 	CallUses         string `json:"callUses,omitempty"`
+}
+
+// ViewJobDiagnostics is the "why isn't my job running" info shown while a job is waiting/blocked.
+type ViewJobDiagnostics struct {
+	RunsOn           []string `json:"runsOn,omitempty"`
+	WaitingForRunner bool     `json:"waitingForRunner"`
+	NoMatchingRunner string   `json:"noMatchingRunner,omitempty"` // localized helper text when no online runner matches
+	AssignedRunner   string   `json:"assignedRunner,omitempty"`
+	IfExpression     string   `json:"ifExpression,omitempty"`
+	IfResult         string   `json:"ifResult,omitempty"` // "true" | "false" | "" (unevaluated)
 }
 
 type ViewJobSummary struct {
@@ -748,6 +760,67 @@ func fillViewRunResponseCurrentJob(ctx *context_module.Context, resp *ViewRespon
 		}
 		resp.State.CurrentJob.Steps = append(resp.State.CurrentJob.Steps, steps...)
 		resp.Logs.StepsLog = append(resp.Logs.StepsLog, logs...)
+	}
+
+	resp.State.CurrentJob.Diagnostics = buildJobDiagnostics(ctx, current, task)
+}
+
+// buildJobDiagnostics returns the "why isn't my job running" panel data, or nil when the job is
+// not waiting/blocked (the panel is only shown while a job is pending).
+func buildJobDiagnostics(ctx *context_module.Context, job *actions_model.ActionRunJob, task *actions_model.ActionTask) *ViewJobDiagnostics {
+	if !job.Status.In(actions_model.StatusWaiting, actions_model.StatusBlocked) {
+		return nil
+	}
+
+	diag := &ViewJobDiagnostics{RunsOn: job.RunsOn}
+
+	// While the job is waiting for a runner, warn if no online runner can match its labels.
+	if job.Status.IsWaiting() {
+		diag.WaitingForRunner = true
+		runners, err := db.Find[actions_model.ActionRunner](ctx, actions_model.FindRunnerOptions{
+			RepoID:        ctx.Repo.Repository.ID,
+			IsOnline:      optional.Some(true),
+			WithAvailable: true,
+		})
+		if err != nil {
+			log.Error("FindRunners for job diagnostics failed: %v", err)
+		} else if !hasMatchingOnlineRunner(runners, job.RunsOn) {
+			diag.NoMatchingRunner = ctx.Locale.TrString("actions.runs.no_matching_online_runner_helper", strings.Join(job.RunsOn, ","))
+		}
+	}
+
+	// Once a runner has picked up the job, show which one.
+	if task != nil && task.RunnerID > 0 {
+		if runner, err := actions_model.GetRunnerByID(ctx, task.RunnerID); err == nil {
+			diag.AssignedRunner = runner.Name
+		}
+	}
+
+	// Show the `if:` expression and, when known, its evaluated result.
+	if parsedJob, err := job.ParseJob(); err == nil && len(parsedJob.If.Value) > 0 {
+		diag.IfExpression = parsedJob.If.Value
+		diag.IfResult = ifResultToString(job.IfResult)
+		if diag.IfResult == "" {
+			// Not evaluated server-side (e.g. a job without `needs`); evaluate read-only for display.
+			if res, ok := actions_service.EvaluateJobIfForDisplay(ctx, job); ok {
+				diag.IfResult = strconv.FormatBool(res)
+			}
+		}
+	}
+
+	return diag
+}
+
+// ifResultToString maps the persisted `if:` evaluation outcome to its display string,
+// returning "" when it hasn't been evaluated server-side.
+func ifResultToString(r actions_model.IfResult) string {
+	switch r {
+	case actions_model.IfResultTrue:
+		return "true"
+	case actions_model.IfResultFalse:
+		return "false"
+	default:
+		return ""
 	}
 }
 

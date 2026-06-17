@@ -50,10 +50,20 @@ type LocaleStorageOptions = {
   actionsLogShowTimestamps: boolean;
 };
 
+type JobDiagnostics = {
+  runsOn?: Array<string>;
+  waitingForRunner: boolean;
+  noMatchingRunner?: string;
+  assignedRunner?: string;
+  ifExpression?: string;
+  ifResult?: string;
+};
+
 type CurrentJob = {
   title: string;
   detail: string;
   steps: Array<Step>;
+  diagnostics?: JobDiagnostics;
 };
 
 type JobData = {
@@ -472,6 +482,38 @@ async function hashChangeListener() {
       </div>
     </div>
   </div>
+  <!-- "why isn't my job running" diagnostics; only present while the job is waiting/blocked -->
+  <div class="job-info-diagnostics" v-if="currentJob.diagnostics && !isCallerJob">
+    <div class="job-info-diagnostics-row" v-if="currentJob.diagnostics.runsOn?.length">
+      <span class="job-info-diagnostics-label">{{ locale.diagnostics.requestedLabels }}</span>
+      <span class="job-info-diagnostics-value flex-text-block tw-flex-wrap">
+        <span class="ui label" v-for="label in currentJob.diagnostics.runsOn" :key="label">{{ label }}</span>
+      </span>
+    </div>
+    <div class="job-info-diagnostics-row" v-if="currentJob.diagnostics.ifExpression">
+      <span class="job-info-diagnostics-label">{{ locale.diagnostics.ifCondition }}</span>
+      <span class="job-info-diagnostics-value flex-text-block tw-flex-wrap">
+        <code>{{ currentJob.diagnostics.ifExpression }}</code>
+        <span
+          v-if="currentJob.diagnostics.ifResult"
+          class="job-info-diagnostics-if-result"
+          :class="currentJob.diagnostics.ifResult === 'true' ? 'is-true' : 'is-false'"
+        >{{ locale.diagnostics.ifResult }}: {{ currentJob.diagnostics.ifResult }}</span>
+      </span>
+    </div>
+    <div class="job-info-diagnostics-row" v-if="currentJob.diagnostics.assignedRunner">
+      <span class="job-info-diagnostics-label">{{ locale.diagnostics.assignedRunner }}</span>
+      <span class="job-info-diagnostics-value">{{ currentJob.diagnostics.assignedRunner }}</span>
+    </div>
+    <div class="job-info-diagnostics-notice" v-if="currentJob.diagnostics.waitingForRunner">
+      <SvgIcon name="octicon-hourglass"/>
+      <span>{{ locale.diagnostics.waitingForRunner }}</span>
+    </div>
+    <div class="job-info-diagnostics-notice tw-text-yellow" v-if="currentJob.diagnostics.noMatchingRunner">
+      <SvgIcon name="octicon-alert"/>
+      <span>{{ currentJob.diagnostics.noMatchingRunner }}</span>
+    </div>
+  </div>
   <!-- always create the node because we have our own event listeners on it, don't use "v-if" -->
   <div class="job-step-container" ref="stepsContainer" v-show="!isCallerJob && currentJob.steps.length">
     <div class="job-step-section" v-for="(jobStep, stepIdx) in currentJob.steps" :key="stepIdx">
@@ -591,6 +633,48 @@ async function hashChangeListener() {
   align-items: baseline;
   gap: 4px;
   min-width: 0;
+}
+
+.job-info-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px;
+  padding: 12px 16px;
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--border-radius);
+  color: var(--color-info-text);
+  font-size: 13px;
+}
+
+.job-info-diagnostics-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.job-info-diagnostics-label {
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.job-info-diagnostics-value code {
+  color: var(--color-info-text);
+}
+
+.job-info-diagnostics-if-result.is-true {
+  color: var(--color-green);
+}
+
+.job-info-diagnostics-if-result.is-false {
+  color: var(--color-red);
+}
+
+.job-info-diagnostics-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .job-step-container {

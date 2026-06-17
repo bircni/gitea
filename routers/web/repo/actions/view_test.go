@@ -76,6 +76,48 @@ func TestViewSummaryBranchFromRun(t *testing.T) {
 	})
 }
 
+func TestIfResultToString(t *testing.T) {
+	assert.Empty(t, ifResultToString(actions_model.IfResultUnevaluated))
+	assert.Equal(t, "true", ifResultToString(actions_model.IfResultTrue))
+	assert.Equal(t, "false", ifResultToString(actions_model.IfResultFalse))
+}
+
+func TestBuildJobDiagnostics(t *testing.T) {
+	const payload = `
+name: test
+on: push
+jobs:
+  job1:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - run: echo
+`
+
+	t.Run("nil for running/done job", func(t *testing.T) {
+		// A job that is no longer pending has no diagnostics panel; ctx is not touched on this path.
+		job := &actions_model.ActionRunJob{Status: actions_model.StatusSuccess, RunsOn: []string{"ubuntu-latest"}}
+		assert.Nil(t, buildJobDiagnostics(nil, job, nil))
+	})
+
+	t.Run("blocked job exposes labels and if result", func(t *testing.T) {
+		// Blocked (not waiting) + IfResult already set + no task: buildJobDiagnostics does not touch ctx.
+		job := &actions_model.ActionRunJob{
+			Status:          actions_model.StatusBlocked,
+			RunsOn:          []string{"ubuntu-latest"},
+			IfResult:        actions_model.IfResultTrue,
+			WorkflowPayload: []byte(payload),
+		}
+		diag := buildJobDiagnostics(nil, job, nil)
+		require.NotNil(t, diag)
+		assert.Equal(t, []string{"ubuntu-latest"}, diag.RunsOn)
+		assert.False(t, diag.WaitingForRunner)
+		assert.Empty(t, diag.AssignedRunner)
+		assert.NotEmpty(t, diag.IfExpression)
+		assert.Equal(t, "true", diag.IfResult)
+	})
+}
+
 func TestConvertToViewModel(t *testing.T) {
 	task := &actions_model.ActionTask{
 		Status: actions_model.StatusSuccess,

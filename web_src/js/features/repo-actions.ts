@@ -56,6 +56,13 @@ export function initRepositoryActionView() {
         skipped: el.getAttribute('data-locale-status-skipped'),
         blocked: el.getAttribute('data-locale-status-blocked'),
       },
+      diagnostics: {
+        requestedLabels: el.getAttribute('data-locale-diagnostics-requested-labels'),
+        waitingForRunner: el.getAttribute('data-locale-diagnostics-waiting-for-runner'),
+        assignedRunner: el.getAttribute('data-locale-diagnostics-assigned-runner'),
+        ifCondition: el.getAttribute('data-locale-diagnostics-if-condition'),
+        ifResult: el.getAttribute('data-locale-diagnostics-if-result'),
+      },
       logsAlwaysAutoScroll: el.getAttribute('data-locale-logs-always-auto-scroll'),
       logsAlwaysExpandRunning: el.getAttribute('data-locale-logs-always-expand-running'),
       workflowFile: el.getAttribute('data-locale-workflow-file'),
