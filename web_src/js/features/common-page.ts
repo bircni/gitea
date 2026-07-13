@@ -10,18 +10,6 @@ import {initScopedWorkflowRequired} from './comp/ScopedWorkflows.ts';
 
 const {appUrl, appSubUrl} = window.config;
 
-function initHeadNavbarContentToggle() {
-  const navbar = document.querySelector('#navbar');
-  const btn = document.querySelector('#navbar-expand-toggle');
-  if (!navbar || !btn) return;
-
-  btn.addEventListener('click', () => {
-    const isExpanded = btn.classList.contains('active');
-    navbar.classList.toggle('navbar-menu-open', !isExpanded);
-    btn.classList.toggle('active', !isExpanded);
-  });
-}
-
 function initFooterLanguageMenu() {
   document.querySelector('.ui.dropdown .menu.language-menu')?.addEventListener('click', async (e) => {
     const item = (e.target as HTMLElement).closest('.item');
@@ -48,7 +36,6 @@ function initFooterThemeSelector() {
 }
 
 export function initCommmPageComponents() {
-  initHeadNavbarContentToggle();
   initFooterLanguageMenu();
   initFooterThemeSelector();
 }

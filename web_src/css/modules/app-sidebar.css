@@ -1,0 +1,302 @@
+#app-sidebar {
+  background: var(--color-nav-bg);
+  border-right: 1px solid var(--color-secondary);
+}
+
+/* the outer element spans the whole grid so the background is continuous; this inner
+   one is what actually sticks and scrolls */
+#app-sidebar .sidebar-inner {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+}
+
+/* brand */
+#app-sidebar .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 8px 12px;
+  color: var(--color-text-dark);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+#app-sidebar .sidebar-brand:hover {
+  color: var(--color-primary);
+}
+
+#app-sidebar .sidebar-brand img {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+#app-sidebar .sidebar-brand span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* search */
+#app-sidebar .sidebar-search {
+  margin-bottom: 10px;
+}
+
+#app-sidebar .sidebar-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--border-radius);
+  background: var(--color-input-background);
+  color: var(--color-input-text);
+}
+
+/* section labels */
+#app-sidebar .sidebar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px 5px;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-light-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app-sidebar .sidebar-label a {
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#app-sidebar .sidebar-label a:hover {
+  color: var(--color-primary);
+}
+
+/* nav items */
+#app-sidebar .sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: var(--border-radius);
+  color: var(--color-nav-text);
+  text-decoration: none;
+  min-width: 0;
+}
+
+#app-sidebar .sidebar-item:hover {
+  background: var(--color-nav-hover-bg);
+}
+
+#app-sidebar .sidebar-item.active {
+  background: var(--color-primary-alpha-10);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+#app-sidebar .sidebar-item .svg {
+  flex: none;
+  color: var(--color-text-light-2);
+}
+
+#app-sidebar .sidebar-item.active .svg {
+  color: var(--color-primary);
+}
+
+#app-sidebar .sidebar-item .sidebar-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app-sidebar .sidebar-item .sidebar-item-count {
+  flex: none;
+  font-size: 11px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-light-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the user block pinned to the bottom */
+#app-sidebar .sidebar-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#app-sidebar .sidebar-foot .sidebar-user {
+  flex: 1;
+  min-width: 0;
+}
+
+/* the user and create-new menus are fomantic dropdowns, so they keep the .ui.dropdown hook */
+#app-sidebar .sidebar-foot .ui.dropdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--border-radius);
+  color: var(--color-nav-text);
+  cursor: pointer;
+}
+
+#app-sidebar .sidebar-foot .ui.dropdown:hover {
+  background: var(--color-nav-hover-bg);
+}
+
+#app-sidebar .sidebar-foot .sidebar-user-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app-sidebar .sidebar-foot .ui.dropdown > .menu {
+  bottom: 100%;
+  top: auto;
+  left: 0;
+  margin-bottom: 4px;
+}
+
+#app-sidebar .sidebar-icons {
+  display: flex;
+  align-items: center;
+}
+
+#app-sidebar .sidebar-icons .item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--border-radius);
+  color: var(--color-text-light-1);
+}
+
+#app-sidebar .sidebar-icons .item:hover {
+  background: var(--color-nav-hover-bg);
+}
+
+/* notification count, stopwatch dot and admin badge, which ride on top of their icon */
+#app-sidebar .item,
+#app-sidebar .sidebar-user {
+  position: relative;
+}
+
+#app-sidebar a.item:hover .notification_count,
+#app-sidebar a.item:hover .header-stopwatch-dot,
+#app-sidebar .navbar-admin-badge {
+  border-color: var(--color-nav-hover-bg);
+}
+
+#app-sidebar a.item .notification_count,
+#app-sidebar a.item .header-stopwatch-dot,
+#app-sidebar .navbar-admin-badge {
+  color: var(--color-nav-bg);
+  padding: 0 3.75px;
+  font-size: 12px;
+  line-height: 12px;
+  font-weight: var(--font-weight-bold);
+  background: var(--color-primary);
+  border: 2px solid var(--color-nav-bg);
+  position: absolute;
+  left: calc(100% - 9px);
+  bottom: calc(100% - 9px);
+  min-width: 17px;
+  height: 17px;
+  border-radius: var(--border-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1; /* prevent the button background from overlaying the icon */
+  user-select: none;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.navbar-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+#app-sidebar .navbar-admin-badge {
+  bottom: calc(100% - 29px);
+  left: calc(100% - 18px);
+  padding: 1.5px;
+}
+
+/* below the breakpoint the sidebar is a top bar: brand and user stay, the nav lists
+   scroll horizontally rather than hiding behind a toggle */
+@media (max-width: 767.98px) {
+  #app-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--color-secondary);
+  }
+
+  #app-sidebar .sidebar-inner {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
+  #app-sidebar .sidebar-brand {
+    padding: 0;
+  }
+
+  #app-sidebar .sidebar-search {
+    order: 10;
+    flex: 1 0 100%;
+    margin-bottom: 0;
+  }
+
+  #app-sidebar .sidebar-label {
+    display: none;
+  }
+
+  #app-sidebar .sidebar-nav {
+    order: 20;
+    flex: 1 0 100%;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  #app-sidebar .sidebar-item {
+    white-space: nowrap;
+  }
+
+  #app-sidebar .sidebar-item .sidebar-item-text {
+    flex: none;
+  }
+
+  #app-sidebar .sidebar-foot {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+    border-top: none;
+  }
+}

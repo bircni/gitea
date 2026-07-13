@@ -16,7 +16,7 @@ test.describe('events', () => {
       loginUser(page, owner),
     ]);
     await page.goto('/');
-    const badge = page.locator('a.not-mobile .notification_count');
+    const badge = page.locator('.notification_count');
     await expect(badge).toBeHidden();
 
     // Create issue as another user — this generates a notification delivered via server push
@@ -44,7 +44,7 @@ test.describe('events', () => {
     await page.goto('/');
 
     // Verify stopwatch is visible and links to the correct issue
-    const stopwatch = page.locator('.active-stopwatch.not-mobile');
+    const stopwatch = page.locator('.active-stopwatch');
     await expect(stopwatch).toBeVisible();
   });
 
