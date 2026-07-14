@@ -388,39 +388,45 @@ a.label,
   color: var(--color-text-light-2);
 }
 
-/* the app shell: a fixed sidebar column and a content column. the rows must stretch,
-   otherwise a short page leaves the sidebar column unpainted below the fold */
+/* the app shell: a fixed sidebar beside a content column. flex, not grid — a grid item
+   cannot span "all rows" without an explicit grid, so pages with many top-level children
+   would collapse the sidebar to a single row */
 .full.height {
   flex-grow: 1;
-  display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  display: flex;
+  align-items: stretch;
 }
 
-/* the sidebar spans every row so its background reaches the bottom of the page */
-.full.height > #app-sidebar {
-  grid-column: 1;
-  grid-row: 1 / -1;
+#app-sidebar {
+  flex: 0 0 var(--sidebar-width);
 }
 
-.full.height > :not(#app-sidebar) {
-  grid-column: 2;
+#app-content {
+  flex: 1;
+  min-width: 0; /* let long content shrink instead of pushing the sidebar */
+  display: flex;
+  flex-direction: column;
 }
 
-/* the bottom breathing room belongs to the content column, not the shell, otherwise
-   it would leave an unpainted strip below the sidebar */
-.full.height > :last-child {
+/* the footer is the last child of the content column, so auto margin drops it to the
+   bottom of the viewport on short pages instead of hiding it below the fold */
+#app-content > .page-footer {
+  margin-top: auto;
+}
+
+/* the breathing room that used to sit under the whole shell now sits under the page,
+   above the footer */
+.page-content {
   padding-bottom: var(--page-space-bottom);
 }
 
 @media (max-width: 767.98px) {
-  /* below the breakpoint the sidebar becomes a top bar and the shell is a single column */
+  /* below the breakpoint the sidebar becomes a top bar */
   .full.height {
-    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
   }
-  .full.height > #app-sidebar,
-  .full.height > :not(#app-sidebar) {
-    grid-column: 1;
-    grid-row: auto;
+  #app-sidebar {
+    flex: none;
   }
 }
 

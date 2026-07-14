@@ -1565,8 +1565,8 @@ tbody.commit-list {
 
 /* fomantic's last-child selector does not work with hidden last child */
 .ui.buttons .unescape-button {
-  border-top-right-radius: 0.28571429rem;
-  border-bottom-right-radius: 0.28571429rem;
+  border-top-right-radius: var(--border-radius);
+  border-bottom-right-radius: var(--border-radius);
 }
 
 .webhook-info {

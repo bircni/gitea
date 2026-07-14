@@ -52,7 +52,7 @@
   padding: 0.67857143em 1em;
   font-size: 1em;
   color: var(--color-text);
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
 }
 
 .ui.input textarea,
@@ -61,7 +61,7 @@
   padding: 0.78571429em 1em;
   outline: none;
   color: var(--color-text);
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
   font-size: 1em;
   font-family: var(--fonts-regular);
   line-height: 1.2857;

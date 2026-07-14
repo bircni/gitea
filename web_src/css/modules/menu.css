@@ -6,7 +6,7 @@
   font-weight: var(--font-weight-normal);
   background: var(--color-menu);
   border: 1px solid var(--color-secondary);
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
   min-height: 2.85714286em;
   font-size: 1rem;
 }
@@ -42,7 +42,7 @@
   font-weight: var(--font-weight-normal);
 }
 .ui.menu > .item:first-child {
-  border-radius: 0.28571429rem 0 0 0.28571429rem;
+  border-radius: var(--border-radius) 0 0 var(--border-radius);
 }
 
 .ui.menu .item::before {
@@ -126,7 +126,7 @@
 
 .ui.menu .dropdown.item .menu {
   min-width: calc(100% - 1px);
-  border-radius: 0 0 0.28571429rem 0.28571429rem;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
   background: var(--color-body);
   margin: 0;
   flex-direction: column !important;
@@ -170,7 +170,7 @@
 }
 
 .ui.secondary.menu .dropdown.item > .menu {
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
   margin-top: 0.35714286em;
 }
 
@@ -217,10 +217,12 @@
   background: none;
 }
 
+/* "you are here" reads the same everywhere: a primary tint, as in the app sidebar,
+   rather than a neutral grey block */
 .ui.menu .active.item {
-  color: var(--color-text);
-  background: var(--color-active);
-  font-weight: var(--font-weight-normal);
+  color: var(--color-primary);
+  background: var(--color-primary-alpha-10);
+  font-weight: var(--font-weight-semibold);
 }
 .ui.menu .active.item > i.icon {
   opacity: 1;
@@ -269,10 +271,10 @@
   border-right: none;
 }
 .ui.vertical.menu > .item:first-child {
-  border-radius: 0.28571429rem 0.28571429rem 0 0;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 .ui.vertical.menu > .item:last-child {
-  border-radius: 0 0 0.28571429rem 0.28571429rem;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 
 .ui.vertical.menu .item::before {
@@ -323,17 +325,19 @@
 }
 
 .ui.vertical.menu .active.item {
-  background: var(--color-active);
+  color: var(--color-primary);
+  background: var(--color-primary-alpha-10);
+  font-weight: var(--font-weight-semibold);
   border-radius: 0;
 }
 .ui.vertical.menu > .active.item:first-child {
-  border-radius: 0.28571429rem 0.28571429rem 0 0;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 .ui.vertical.menu > .active.item:last-child {
-  border-radius: 0 0 0.28571429rem 0.28571429rem;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 .ui.vertical.menu > .active.item:only-child {
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
 }
 .ui.vertical.menu .active.item .menu .active.item {
   border-left: none;
@@ -368,7 +372,7 @@
   border-color: var(--color-secondary);
   color: var(--color-text-dark);
   margin-bottom: -1px;
-  border-radius: 0.28571429rem 0.28571429rem 0 0 !important;
+  border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
 }
 
 .ui.tabular.menu + .attached:not(.top).segment,
@@ -394,10 +398,10 @@
   vertical-align: middle;
 }
 .ui.pagination.menu .item:last-child {
-  border-radius: 0 0.28571429rem 0.28571429rem 0;
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 .ui.compact.menu .item:last-child {
-  border-radius: 0 0.28571429rem 0.28571429rem 0;
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 .ui.pagination.menu .item:last-child::before {
   display: none;
@@ -451,7 +455,7 @@
   padding: 0.78571429em 0.92857143em;
   margin: 0;
   background: none;
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
 }
 
 .ui.secondary.menu .item::before {
@@ -475,7 +479,7 @@
 }
 
 .ui.secondary.menu .active.item {
-  border-radius: 0.28571429rem;
+  border-radius: var(--border-radius);
 }
 
 .ui.secondary.menu .active.item,
@@ -494,7 +498,7 @@
 .ui.secondary.vertical.menu > .item {
   border: none;
   margin: 0 0 0.35714286em;
-  border-radius: 0.28571429rem !important;
+  border-radius: var(--border-radius) !important;
 }
 .ui.secondary.vertical.menu > .header.item {
   border-radius: 0;
@@ -595,7 +599,7 @@
   flex-shrink: 0;
 }
 .ui.compact.menu:not(.secondary) .item:last-child {
-  border-radius: 0 0.28571429rem 0.28571429rem 0;
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 .ui.compact.menu .item:last-child::before {
   display: none;
@@ -677,14 +681,14 @@
   margin-bottom: 0;
   top: 0;
   margin-top: 1rem;
-  border-radius: 0.28571429rem 0.28571429rem 0 0;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 .ui.menu[class*="top attached"]:first-child {
   margin-top: 0;
 }
 
 .ui.top.attached.menu > .item:first-child {
-  border-radius: 0.28571429rem 0 0;
+  border-radius: var(--border-radius) 0 0;
 }
 
 .ui.attached.menu:not(.tabular) {

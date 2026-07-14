@@ -9,6 +9,11 @@
 			<input type="search" name="q" autocomplete="off" placeholder="{{ctx.Locale.Tr "search.search"}}" aria-label="{{ctx.Locale.Tr "search.search"}}">
 		</form>
 
+		{{/* on the dashboard pages, which user or org you are looking at is a sidebar control */}}
+		{{if and .ContextUser (or .PageIsDashboard .PageIsIssues .PageIsPulls .PageIsMilestonesDashboard)}}
+			{{template "user/dashboard/navbar" .}}
+		{{end}}
+
 		{{if and .IsSigned (not .MustChangePassword)}}
 			<div class="sidebar-nav">
 				<a class="sidebar-item{{if .PageIsDashboard}} active{{end}}" href="{{AppSubUrl}}/">
@@ -75,6 +80,7 @@
 					</div>
 				</div>
 			{{else if .IsSigned}}
+				<div class="sidebar-foot-row">
 				<div class="ui dropdown jump sidebar-user" data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}">
 					<span class="navbar-avatar">
 						{{ctx.AvatarUtils.Avatar .SignedUser 24}}
@@ -146,6 +152,7 @@
 						</div>
 					</div>
 				</div>
+				</div><!-- end .sidebar-foot-row -->
 			{{else}}
 				<a class="sidebar-item{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
 					{{svg "octicon-sign-in"}}<span class="sidebar-item-text">{{ctx.Locale.Tr "sign_in"}}</span>
@@ -187,4 +194,3 @@
 		{{end}}
 	</nav>
 </div>
-{{template "base/head_banner"}}

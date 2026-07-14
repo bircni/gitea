@@ -3,12 +3,13 @@
   border-right: 1px solid var(--color-secondary);
 }
 
-/* the outer element spans the whole grid so the background is continuous; this inner
-   one is what actually sticks and scrolls */
+/* the outer element stretches with the shell so the background is continuous; this inner
+   one sticks to the viewport. it must be a full 100vh, otherwise the foot's margin-top:auto
+   has no free space to push against and the user block rides up under the nav */
 #app-sidebar .sidebar-inner {
   position: sticky;
   top: 0;
-  max-height: 100vh;
+  height: 100vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -85,6 +86,43 @@
   color: var(--color-primary);
 }
 
+/* the dashboard context switcher and org team filter */
+#app-sidebar .sidebar-context.ui.dropdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--border-radius);
+  background: var(--color-input-background);
+  color: var(--color-nav-text);
+  cursor: pointer;
+  min-width: 0;
+}
+
+#app-sidebar .sidebar-context.ui.dropdown:hover {
+  border-color: var(--color-secondary-dark-3);
+}
+
+#app-sidebar .sidebar-context > .text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+#app-sidebar .sidebar-context .sidebar-context-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app-sidebar .sidebar-context > .dropdown.icon {
+  flex: none;
+  color: var(--color-text-light-2);
+}
+
 /* nav items */
 #app-sidebar .sidebar-item {
   display: flex;
@@ -131,11 +169,18 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* the user block pinned to the bottom */
+/* the user block, always pinned to the bottom */
 #app-sidebar .sidebar-foot {
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--color-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* signed in: the user menu and the icon cluster share one row */
+#app-sidebar .sidebar-foot-row {
   display: flex;
   align-items: center;
   gap: 4px;
