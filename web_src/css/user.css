@@ -42,8 +42,11 @@
 }
 
 .user.profile .ui.card #profile-avatar img {
+  /* the raw avatar is served at its full size; cap it so it does not dominate the page */
+  width: 180px;
   max-width: 100%;
   height: auto;
+  border-radius: var(--border-radius-medium);
 }
 
 @media (max-width: 767.98px) {

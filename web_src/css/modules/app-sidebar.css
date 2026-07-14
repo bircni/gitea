@@ -23,6 +23,7 @@
   align-items: center;
   gap: 9px;
   padding: 4px 8px 12px;
+  min-width: 0; /* so the name can ellipsis instead of pushing the user menu off-screen */
   color: var(--color-text-dark);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
@@ -289,9 +290,10 @@
   padding: 1.5px;
 }
 
-/* below the breakpoint the sidebar is a top bar: brand and user stay, the nav lists
-   scroll horizontally rather than hiding behind a toggle */
-@media (max-width: 767.98px) {
+/* Below the breakpoint the sidebar is a top bar: the brand and the user menu share the
+   first row, and the nav lists scroll horizontally rather than hiding behind a toggle.
+   Keep this value in sync with the shell breakpoint in base.css. */
+@media (max-width: 999.98px) {
   #app-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--color-secondary);
@@ -299,22 +301,39 @@
 
   #app-sidebar .sidebar-inner {
     position: static;
-    max-height: none;
+    height: auto; /* must undo the 100vh; a top bar is only as tall as its content */
     overflow: visible;
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: 1fr auto;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     padding: 8px 12px;
   }
 
   #app-sidebar .sidebar-brand {
+    grid-column: 1;
+    grid-row: 1;
     padding: 0;
   }
 
+  #app-sidebar .sidebar-foot {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  #app-sidebar .sidebar-search,
+  #app-sidebar .sidebar-context,
+  #app-sidebar .sidebar-nav {
+    grid-column: 1 / -1;
+  }
+
   #app-sidebar .sidebar-search {
-    order: 10;
-    flex: 1 0 100%;
     margin-bottom: 0;
   }
 
@@ -323,25 +342,24 @@
   }
 
   #app-sidebar .sidebar-nav {
-    order: 20;
-    flex: 1 0 100%;
     display: flex;
     gap: 4px;
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
+  #app-sidebar .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* in a scrolling row the items must keep their intrinsic width, or they collapse
+     onto each other */
   #app-sidebar .sidebar-item {
+    flex: none;
     white-space: nowrap;
   }
 
   #app-sidebar .sidebar-item .sidebar-item-text {
     flex: none;
-  }
-
-  #app-sidebar .sidebar-foot {
-    margin-top: 0;
-    margin-left: auto;
-    padding-top: 0;
-    border-top: none;
   }
 }
