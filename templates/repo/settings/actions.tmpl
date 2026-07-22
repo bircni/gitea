@@ -8,6 +8,8 @@
 			{{template "shared/variables/variable_list" .}}
 		{{else if eq .PageType "general"}}
 			{{template "repo/settings/actions_general" .}}
+		{{else if eq .PageType "queue"}}
+			{{template "shared/actions/queue_list" .}}
 		{{end}}
 	</div>
 {{template "repo/settings/layout_footer" .}}

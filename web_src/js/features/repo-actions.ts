@@ -31,6 +31,7 @@ export function initRepositoryActions() {
   registerGlobalInitFunc('initWorkflowBadgeForm', initWorkflowBadgeForm);
   initRepositoryActionsView();
   registerGlobalInitFunc('initActionRunsList', initActionRunsList);
+  registerGlobalInitFunc('initActionQueueList', initActionQueueList);
 }
 
 function initRepositoryActionsView() {
@@ -130,6 +131,19 @@ function initActionRunsList(el: HTMLElement) {
         Idiomorph.morph(oldItem, newItem, {morphStyle: 'outerHTML'});
         recoverMorphElements(el.querySelector(`#${newItem.id}`)!, protectedElems);
       }
+    },
+  });
+}
+
+function initActionQueueList(el: HTMLElement) {
+  activePageTimerRefresh({
+    interval: () => Number(el.getAttribute('data-queue-refresh-interval')),
+    async callback() {
+      const resp = await GET(el.getAttribute('data-queue-refresh-link')!);
+      if (!resp.ok || resp.status !== 200) return;
+      // The queue rows carry no interactive state, so morph the whole fragment in place.
+      const newEl = createElementFromHTML(await resp.text());
+      Idiomorph.morph(el, newEl, {morphStyle: 'outerHTML'});
     },
   });
 }

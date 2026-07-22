@@ -12,7 +12,9 @@ import (
 
 	actions_model "gitea.dev/models/actions"
 	"gitea.dev/models/db"
+	"gitea.dev/modules/container"
 	"gitea.dev/modules/log"
+	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/templates"
 	"gitea.dev/modules/util"
@@ -165,6 +167,95 @@ func Runners(ctx *context.Context) {
 
 	ctx.Data["Page"] = pager
 
+	ctx.HTML(http.StatusOK, rCtx.RunnersTemplate)
+}
+
+// Queue renders the Actions build queue: waiting jobs in runner pickup order plus currently running jobs.
+func Queue(ctx *context.Context) {
+	ctx.Data["PageIsSharedSettingsQueue"] = true
+	ctx.Data["Title"] = ctx.Tr("actions.actions")
+	ctx.Data["PageType"] = "queue"
+
+	rCtx, err := getRunnersCtx(ctx)
+	if err != nil {
+		ctx.ServerError("getRunnersCtx", err)
+		return
+	}
+
+	// scope narrows the query to the current context. Admin (both 0) sees the whole instance, which is
+	// the only scope where the order is globally exact; repo/org/user scopes show the correct relative
+	// order of their own jobs, but not their absolute position within the instance-wide queue.
+	scope := func(opts *actions_model.FindRunJobOptions) {
+		if rCtx.IsRepo {
+			opts.RepoID = rCtx.RepoID
+		} else if rCtx.IsOrg || rCtx.IsUser {
+			opts.OwnerID = rCtx.OwnerID
+		}
+	}
+
+	page := max(ctx.FormInt("page"), 1)
+
+	// Mirror the runner pickup predicate (see CreateTaskForRunner): waiting, unclaimed, non-reusable-caller jobs.
+	queuedOpts := actions_model.FindRunJobOptions{
+		ListOptions:      db.ListOptions{Page: page, PageSize: 50},
+		Statuses:         []actions_model.Status{actions_model.StatusWaiting},
+		IsReusableCaller: optional.Some(false), // reusable callers never run on a runner, so they are not queued
+		HasTask:          optional.Some(false), // a claimed job already has a task and is no longer queued
+		OrderBy:          actions_model.QueuedJobsOrderBy,
+	}
+	scope(&queuedOpts)
+	queuedJobs, queuedTotal, err := db.FindAndCount[actions_model.ActionRunJob](ctx, queuedOpts)
+	if err != nil {
+		ctx.ServerError("FindQueuedJobs", err)
+		return
+	}
+	if err := actions_model.ActionJobList(queuedJobs).LoadAttributes(ctx, true); err != nil {
+		ctx.ServerError("LoadAttributes", err)
+		return
+	}
+
+	// running jobs are bounded by the number of online runners, so a single capped page is enough.
+	runningOpts := actions_model.FindRunJobOptions{
+		ListOptions: db.ListOptions{Page: 1, PageSize: 100},
+		Statuses:    []actions_model.Status{actions_model.StatusRunning},
+		OrderBy:     actions_model.RunningJobsOrderBy,
+	}
+	scope(&runningOpts)
+	runningJobs, err := db.Find[actions_model.ActionRunJob](ctx, runningOpts)
+	if err != nil {
+		ctx.ServerError("FindRunningJobs", err)
+		return
+	}
+	if err := actions_model.ActionJobList(runningJobs).LoadAttributes(ctx, true); err != nil {
+		ctx.ServerError("LoadAttributes", err)
+		return
+	}
+
+	ctx.Data["QueuedJobs"] = queuedJobs
+	ctx.Data["QueuedTotal"] = queuedTotal
+	ctx.Data["QueueOffset"] = (page - 1) * queuedOpts.PageSize // absolute position of the first row on this page
+	ctx.Data["RunningJobs"] = runningJobs
+	ctx.Data["ShowRepoColumn"] = !rCtx.IsRepo
+
+	pager := context.NewPagination(queuedTotal, queuedOpts.PageSize, page, 5)
+	pager.AddParamFromRequest(ctx.Req)
+	pager.RemoveParam(container.SetOf("refresh")) // keep the auto-refresh flag out of the page links
+	ctx.Data["Page"] = pager
+
+	// The list auto-refreshes by re-fetching just the fragment: poll faster while there is activity,
+	// slower when idle so quiet pages don't hammer the server.
+	hasActivity := len(queuedJobs) > 0 || len(runningJobs) > 0
+	refreshInterval := util.Iif[int64](hasActivity, 3000, 10000)
+	if !setting.IsProd {
+		refreshInterval = util.Iif[int64](hasActivity, 1000, 2000) // faster in dev for easier debugging
+	}
+	ctx.Data["QueueRefreshIntervalMs"] = refreshInterval
+	ctx.Data["QueueRefreshLink"] = templates.QueryBuild(setting.AppSubURL+ctx.Req.RequestURI, "refresh", "1")
+
+	if ctx.FormBool("refresh") {
+		ctx.HTML(http.StatusOK, "shared/actions/queue_list")
+		return
+	}
 	ctx.HTML(http.StatusOK, rCtx.RunnersTemplate)
 }
 
