@@ -166,6 +166,12 @@
 						</a>
 					{{end}}
 
+					{{if .ShowSecurityAdvisories}}
+						<a class="{{if .PageIsSecurityAdvisories}}active {{end}}item" href="{{.RepoLink}}/security">
+							{{svg "octicon-shield"}} {{ctx.Locale.Tr "repo.security_advisories"}}
+						</a>
+					{{end}}
+
 					{{template "custom/extra_tabs" .}}
 
 					{{if .Permission.IsAdmin}}

@@ -1,0 +1,15 @@
+{{/* . is a security_model.Severity string, possibly empty. Uses the
+	theme's semantic error/warning/info/success bg+text+border token pairs
+	(see templates/devtest/severity-colors.tmpl) rather than solid ui-color
+	labels: .ui.yellow.label pairs white text on #fbbd08, a ~1.5:1 contrast
+	ratio that fails WCAG outright, so plain "medium" severity was
+	unreadable. These token pairs are chosen for contrast, not decoration. */}}
+{{if eq . "critical"}}
+	<div class="tw-inline-block tw-px-2 tw-py-0.5 tw-rounded tw-text-xs tw-font-semibold tw-border tw-bg-error-bg tw-text-error-text tw-border-error-border">{{ctx.Locale.Tr "repo.security_advisories.severity.critical"}}</div>
+{{else if eq . "high"}}
+	<div class="tw-inline-block tw-px-2 tw-py-0.5 tw-rounded tw-text-xs tw-font-semibold tw-border tw-bg-warning-bg tw-text-warning-text tw-border-warning-border">{{ctx.Locale.Tr "repo.security_advisories.severity.high"}}</div>
+{{else if eq . "medium"}}
+	<div class="tw-inline-block tw-px-2 tw-py-0.5 tw-rounded tw-text-xs tw-font-semibold tw-border tw-bg-info-bg tw-text-info-text tw-border-info-border">{{ctx.Locale.Tr "repo.security_advisories.severity.medium"}}</div>
+{{else if eq . "low"}}
+	<div class="tw-inline-block tw-px-2 tw-py-0.5 tw-rounded tw-text-xs tw-font-semibold tw-border tw-bg-success-bg tw-text-success-text tw-border-success-border">{{ctx.Locale.Tr "repo.security_advisories.severity.low"}}</div>
+{{end}}

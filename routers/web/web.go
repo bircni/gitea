@@ -36,6 +36,7 @@ import (
 	"gitea.dev/routers/web/org"
 	"gitea.dev/routers/web/repo"
 	"gitea.dev/routers/web/repo/actions"
+	repo_security "gitea.dev/routers/web/repo/security"
 	repo_setting "gitea.dev/routers/web/repo/setting"
 	shared_actions "gitea.dev/routers/web/shared/actions"
 	"gitea.dev/routers/web/shared/project"
@@ -545,6 +546,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 		m.Methods("GET, HEAD", "/*", public.FileHandlerFunc())
 	}, optionsCorsHandler())
 
+	m.Get("/-/advisories", optSignIn, repo_security.GlobalAdvisories)
 	m.Post("/-/markup", reqSignIn, web.Bind[*structs.MarkupOption](), misc.Markup)
 	m.Post("/-/web-banner/dismiss", misc.WebBannerDismiss)
 	m.Get("/-/web-theme/list", misc.WebThemeList)
@@ -1126,6 +1128,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 		m.Get("/repositories", org.Repositories)
 		m.Get("/heatmap", user.DashboardHeatmap)
+		m.Get("/security", repo_security.OrgAdvisories)
 
 		m.Group("/projects", func() {
 			m.Group("", func() {
@@ -1545,6 +1548,20 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 		}, reqRepoProjectsWriter, context.RepoMustNotBeArchived())
 	}, optSignIn, context.RepoAssignment, reqRepoProjectsReader, repo.MustEnableRepoProjects)
 	// end "/{username}/{reponame}/projects"
+
+	m.Group("/{username}/{reponame}/security", func() {
+		m.Get("", repo_security.List)
+		m.Get("/advisories/{gtsa_id}", repo_security.ViewAdvisory)
+		m.Group("/advisories", func() {
+			m.Get("/new", repo_security.NewAdvisory)
+			m.Post("/new", web.Bind[*forms.NewAdvisoryForm](), repo_security.NewAdvisoryPost)
+			m.Group("/{gtsa_id}", func() {
+				m.Post("/publish", repo_security.PublishAdvisoryPost)
+				m.Post("/{action:close|withdraw}", repo_security.TransitionAdvisoryPost)
+			})
+		}, reqSignIn, context.RepoMustNotBeArchived())
+	}, optSignIn, context.RepoAssignment, repo_security.MustEnableSecurityAdvisories)
+	// end "/{username}/{reponame}/security"
 
 	m.Group("/{username}/{reponame}/actions", func() {
 		m.Get("", actions.List)

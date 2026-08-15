@@ -1,0 +1,38 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content security">
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<h2 class="tw-flex tw-items-center tw-gap-2 tw-mb-4">
+			{{svg "octicon-shield" 20}} {{ctx.Locale.Tr "repo.security_advisories.global_list"}}
+		</h2>
+
+		<div class="flex-divided-list">
+			{{range .Advisories}}
+				{{$repo := index $.AdvisoryRepos .RepoID}}
+				<div class="item flex-relaxed-list">
+					<span class="list-item-large-title">
+						{{if $repo}}
+							<a class="muted" href="{{$repo.Link}}/security/advisories/{{.GTSAID}}">
+								<span class="tw-text-text-light-2">{{$repo.FullName}}:</span> {{.Summary}}
+							</a>
+						{{else}}
+							{{.Summary}}
+						{{end}}
+					</span>
+					<div class="list-item-secondary-bar tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<span class="tw-text-text-light-2 tw-font-mono">{{.GTSAID}}</span>
+						{{template "repo/security/severity_label" .Severity}}
+					</div>
+				</div>
+			{{else}}
+				<div class="empty-placeholder">
+					{{svg "octicon-shield" 48}}
+					<p>{{ctx.Locale.Tr "repo.security_advisories.list_empty"}}</p>
+				</div>
+			{{end}}
+		</div>
+
+		{{template "base/paginate" .}}
+	</div>
+</div>
+{{template "base/footer" .}}

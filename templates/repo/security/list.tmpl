@@ -1,0 +1,36 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository security">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<div class="flex-left-right tw-mb-4">
+			<h2 class="tw-flex tw-items-center tw-gap-2 tw-m-0">
+				{{svg "octicon-shield" 20}} {{ctx.Locale.Tr "repo.security_advisories"}}
+			</h2>
+			{{if .CanAdminAdvisory}}
+				<a class="ui small primary button" href="{{.RepoLink}}/security/advisories/new">{{svg "octicon-plus" 16 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.new"}}</a>
+			{{end}}
+		</div>
+
+		<div class="flex-divided-list">
+			{{range .Advisories}}
+				<div class="item flex-relaxed-list">
+					<span class="list-item-large-title">
+						<a class="muted" href="{{$.RepoLink}}/security/advisories/{{.GTSAID}}">{{.Summary}}</a>
+					</span>
+					<div class="list-item-secondary-bar tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<span class="tw-text-text-light-2 tw-font-mono">{{.GTSAID}}</span>
+						{{template "repo/security/state_label" .State}}
+						{{template "repo/security/severity_label" .Severity}}
+					</div>
+				</div>
+			{{else}}
+				<div class="empty-placeholder">
+					{{svg "octicon-shield" 48}}
+					<p>{{ctx.Locale.Tr "repo.security_advisories.list_empty"}}</p>
+				</div>
+			{{end}}
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

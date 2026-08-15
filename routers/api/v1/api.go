@@ -1098,6 +1098,7 @@ func Routes() *web.Router {
 			m.Get("/gitignore/templates/{name}", misc.GetGitignoreTemplateInfo)
 			m.Get("/licenses", misc.ListLicenseTemplates)
 			m.Get("/licenses/{name}", misc.GetLicenseTemplateInfo)
+			m.Get("/-/advisories.osv.json", repo.ListInstanceSecurityAdvisoriesOSV)
 			m.Get("/label/templates", misc.ListLabelTemplates)
 			m.Get("/label/templates/{name}", misc.GetLabelTemplate)
 
@@ -1621,6 +1622,18 @@ func Routes() *web.Router {
 				}, reqAdmin(), reqToken())
 
 				m.Methods("HEAD,GET", "/{ball_type:tarball|zipball|bundle}/*", reqRepoReader(unit.TypeCode), context.ReferencesGitRepo(true), repo.DownloadArchive)
+
+				// Access is governed by services/security.Can{Read,Write,Admin}Advisory,
+				// a per-advisory ACL - not by a unit, since advisories aren't unit-gated.
+				m.Group("/security-advisories", func() {
+					m.Combo("").Get(repo.ListSecurityAdvisories).
+						Post(reqToken(), bind(api.CreateSecurityAdvisoryOption{}), repo.CreateSecurityAdvisory)
+					m.Group("/{gtsa_id}", func() {
+						m.Combo("").Get(repo.GetSecurityAdvisory).
+							Patch(reqToken(), bind(api.EditSecurityAdvisoryOption{}), repo.EditSecurityAdvisory)
+						m.Get(".osv.json", repo.GetSecurityAdvisoryOSV)
+					})
+				})
 			}, repoAssignment(), checkTokenPublicOnly())
 		}, tokenRequiresScopes(auth_model.AccessTokenScopeCategoryRepository))
 
@@ -1855,6 +1868,13 @@ func Routes() *web.Router {
 				})
 			}, reqToken(), reqOrgOwnership())
 		}, tokenRequiresScopes(auth_model.AccessTokenScopeCategoryOrganization), orgAssignment(true), checkTokenPublicOnly())
+
+		// Advisory visibility is filtered per-advisory (services/security ACL), so this
+		// uses the repository scope category like the repo-scoped advisory endpoints,
+		// not the organization category the rest of /orgs/{org} uses above.
+		m.Group("/orgs/{org}", func() {
+			m.Get("/security-advisories", org.ListSecurityAdvisories)
+		}, tokenRequiresScopes(auth_model.AccessTokenScopeCategoryRepository), orgAssignment(true), checkTokenPublicOnly())
 		m.Group("/teams/{teamid}", func() {
 			m.Combo("").Patch(reqToken(), reqOrgOwnership(), bind(api.EditTeamOption{}), org.EditTeam).
 				Delete(reqToken(), reqOrgOwnership(), org.DeleteTeam)

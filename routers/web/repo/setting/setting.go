@@ -250,6 +250,7 @@ func handleSettingsPostUpdate(ctx *context.Context) {
 	repo.Description = form.Description
 	repo.Website = form.Website
 	repo.IsTemplate = form.Template
+	repo.PrivateReportingEnabled = form.PrivateReportingEnabled
 
 	if err := repo_service.UpdateRepository(ctx, repo, false); err != nil {
 		ctx.ServerError("UpdateRepository", err)

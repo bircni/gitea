@@ -165,24 +165,27 @@ type Repository struct {
 	DefaultBranch       string
 	DefaultWikiBranch   string
 
-	NumWatches          int
-	NumStars            int
-	NumForks            int
-	NumIssues           int
-	NumClosedIssues     int
-	NumOpenIssues       int `xorm:"-"`
-	NumPulls            int
-	NumClosedPulls      int
-	NumOpenPulls        int `xorm:"-"`
-	NumMilestones       int `xorm:"NOT NULL DEFAULT 0"`
-	NumClosedMilestones int `xorm:"NOT NULL DEFAULT 0"`
-	NumOpenMilestones   int `xorm:"-"`
-	NumProjects         int `xorm:"NOT NULL DEFAULT 0"`
-	NumClosedProjects   int `xorm:"NOT NULL DEFAULT 0"`
-	NumOpenProjects     int `xorm:"-"`
-	NumActionRuns       int `xorm:"NOT NULL DEFAULT 0"`
-	NumClosedActionRuns int `xorm:"NOT NULL DEFAULT 0"`
-	NumOpenActionRuns   int `xorm:"-"`
+	NumWatches             int
+	NumStars               int
+	NumForks               int
+	NumIssues              int
+	NumClosedIssues        int
+	NumOpenIssues          int `xorm:"-"`
+	NumPulls               int
+	NumClosedPulls         int
+	NumOpenPulls           int `xorm:"-"`
+	NumMilestones          int `xorm:"NOT NULL DEFAULT 0"`
+	NumClosedMilestones    int `xorm:"NOT NULL DEFAULT 0"`
+	NumOpenMilestones      int `xorm:"-"`
+	NumProjects            int `xorm:"NOT NULL DEFAULT 0"`
+	NumClosedProjects      int `xorm:"NOT NULL DEFAULT 0"`
+	NumOpenProjects        int `xorm:"-"`
+	NumActionRuns          int `xorm:"NOT NULL DEFAULT 0"`
+	NumClosedActionRuns    int `xorm:"NOT NULL DEFAULT 0"`
+	NumOpenActionRuns      int `xorm:"-"`
+	NumPublishedAdvisories int `xorm:"NOT NULL DEFAULT 0"`
+
+	PrivateReportingEnabled bool `xorm:"NOT NULL DEFAULT false"`
 
 	IsPrivate  bool `xorm:"INDEX"`
 	IsEmpty    bool `xorm:"INDEX"`

@@ -255,4 +255,9 @@ type swaggerParameterBodies struct {
 
 	// in:body
 	MergeUpstreamRequest api.MergeUpstreamRequest
+
+	// in:body
+	CreateSecurityAdvisoryOption api.CreateSecurityAdvisoryOption
+	// in:body
+	EditSecurityAdvisoryOption api.EditSecurityAdvisoryOption
 }

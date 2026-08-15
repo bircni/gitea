@@ -30,6 +30,13 @@
 					<label for="website">{{ctx.Locale.Tr "repo.settings.site"}}</label>
 					<input id="website" name="website" type="url" maxlength="1024" value="{{.Repository.Website}}">
 				</div>
+				<div class="inline field">
+					<label>{{ctx.Locale.Tr "repo.security_advisories.private_reporting"}}</label>
+					<div class="ui checkbox">
+						<input name="private_reporting_enabled" type="checkbox" {{if .Repository.PrivateReportingEnabled}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "repo.security_advisories.private_reporting_helper"}}</label>
+					</div>
+				</div>
 				<div class="field">
 					<button class="ui primary button">{{ctx.Locale.Tr "repo.settings.update_settings"}}</button>
 				</div>

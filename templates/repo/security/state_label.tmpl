@@ -1,0 +1,12 @@
+{{/* . is a security_model.State string */}}
+{{if eq . "triage"}}
+	<div class="ui grey label issue-state-label">{{svg "octicon-eye" 14 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.state.triage"}}</div>
+{{else if eq . "draft"}}
+	<div class="ui grey label issue-state-label">{{svg "octicon-git-pull-request-draft" 14 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.state.draft"}}</div>
+{{else if eq . "published"}}
+	<div class="ui green label issue-state-label">{{svg "octicon-shield-check" 14 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.state.published"}}</div>
+{{else if eq . "closed"}}
+	<div class="ui red label issue-state-label">{{svg "octicon-issue-closed" 14 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.state.closed"}}</div>
+{{else if eq . "withdrawn"}}
+	<div class="ui purple label issue-state-label">{{svg "octicon-shield-x" 14 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.state.withdrawn"}}</div>
+{{end}}

@@ -1,0 +1,125 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository security view">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+
+		<h1 class="tw-flex tw-items-baseline tw-flex-wrap tw-gap-2 tw-text-2xl tw-font-normal tw-mb-2 tw-break-anywhere">
+			{{.Advisory.Summary}}
+			<span class="tw-text-text-light-2 tw-font-mono tw-text-base tw-font-normal">{{.Advisory.GTSAID}}</span>
+		</h1>
+
+		<div class="flex-left-right tw-mb-4 tw-flex-wrap tw-gap-2">
+			<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+				{{template "repo/security/state_label" .Advisory.State}}
+				{{template "repo/security/severity_label" .Advisory.Severity}}
+				{{$createdStr := DateUtils.TimeSince .Advisory.CreatedUnix}}
+				<span class="tw-text-text-light-2">
+					{{ctx.Locale.Tr "repo.security_advisories.created_at"}} {{$createdStr}}
+				</span>
+			</div>
+			{{if .CanWriteAdvisory}}
+				<div class="tw-flex tw-gap-2">
+					{{if .CanTransitionToPublished}}
+						<a role="button" class="ui primary button link-action" href
+							data-modal-confirm="{{ctx.Locale.Tr "repo.security_advisories.publish_confirm"}}"
+							data-url="{{.RepoLink}}/security/advisories/{{.Advisory.GTSAID}}/publish">
+							{{svg "octicon-shield-check" 16 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.publish"}}
+						</a>
+					{{end}}
+					{{if .CanTransitionToClosed}}
+						<a role="button" class="ui button link-action" href
+							data-url="{{.RepoLink}}/security/advisories/{{.Advisory.GTSAID}}/close">
+							{{svg "octicon-skip" 16 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.close"}}
+						</a>
+					{{end}}
+					{{if .CanTransitionToWithdrawn}}
+						<a role="button" class="ui red button link-action" href
+							data-url="{{.RepoLink}}/security/advisories/{{.Advisory.GTSAID}}/withdraw">
+							{{svg "octicon-shield-x" 16 "tw-mr-1"}}{{ctx.Locale.Tr "repo.security_advisories.withdraw"}}
+						</a>
+					{{end}}
+				</div>
+			{{end}}
+		</div>
+
+		<div class="issue-content">
+			<div class="issue-content-left">
+				{{if .Advisory.Description}}
+					<div class="render-content markup tw-mb-4">{{.RenderedDescription}}</div>
+				{{else}}
+					<p class="tw-text-text-light-2 tw-mb-4">{{ctx.Locale.Tr "repo.security_advisories.description"}}: -</p>
+				{{end}}
+
+				<h4 class="ui top attached header">{{ctx.Locale.Tr "repo.security_advisories.affected_packages"}}</h4>
+				<div class="ui attached table segment">
+					{{range .Vulnerabilities}}
+						<div class="tw-flex tw-items-center tw-gap-4 tw-py-2 tw-border-b tw-border-b-secondary">
+							<span class="ui grey label tw-shrink-0">{{.Ecosystem}}</span>
+							<span class="tw-font-mono tw-font-semibold">{{.PackageName}}</span>
+							<span class="tw-text-text-light-2 tw-font-mono tw-flex-1">{{.VulnerableVersionRange}}</span>
+							{{if .PatchedVersions}}
+								<span class="tw-flex tw-items-center tw-gap-1 tw-font-mono tw-text-green">
+									{{svg "octicon-arrow-right" 12}} {{.PatchedVersions}}
+								</span>
+							{{end}}
+						</div>
+					{{else}}
+						<p class="tw-text-text-light-2 tw-m-0">{{ctx.Locale.Tr "repo.security_advisories.no_affected_packages"}}</p>
+					{{end}}
+				</div>
+			</div>
+
+			<div class="issue-content-right ui segment">
+				<span class="text"><strong>{{ctx.Locale.Tr "repo.security_advisories.severity"}}</strong></span>
+				<div class="tw-flex tw-items-center tw-gap-2 tw-my-2">
+					{{if .Advisory.Severity}}
+						{{template "repo/security/severity_label" .Advisory.Severity}}
+					{{else}}
+						<span class="tw-text-text-light-2">{{ctx.Locale.Tr "repo.security_advisories.no_severity"}}</span>
+					{{end}}
+				</div>
+				{{if .Advisory.CVSSv3Vector}}
+					<div class="tw-flex tw-justify-between tw-items-baseline">
+						<span class="tw-text-text-light-2">{{ctx.Locale.Tr "repo.security_advisories.cvss_score"}} (v3.1)</span>
+						<span class="tw-font-semibold">{{.Advisory.CVSSv3Score}} / 10</span>
+					</div>
+					<div class="tw-text-text-light-2 tw-font-mono tw-break-anywhere tw-text-xs">{{.Advisory.CVSSv3Vector}}</div>
+				{{end}}
+				{{if .Advisory.CVSSv4Vector}}
+					<div class="tw-text-text-light-2 tw-mt-2">{{ctx.Locale.Tr "repo.security_advisories.cvss_v4_vector"}}</div>
+					<div class="tw-text-text-light-2 tw-font-mono tw-break-anywhere tw-text-xs">{{.Advisory.CVSSv4Vector}}</div>
+				{{end}}
+
+				<div class="divider"></div>
+				<span class="text"><strong>{{ctx.Locale.Tr "repo.security_advisories.cve_id"}}</strong></span>
+				<div class="tw-my-2">
+					{{if .Advisory.CVEID}}
+						<span class="tw-font-mono">{{.Advisory.CVEID}}</span>
+					{{else}}
+						<span class="tw-text-text-light-2">{{ctx.Locale.Tr "repo.security_advisories.no_cve"}}</span>
+					{{end}}
+				</div>
+
+				<div class="divider"></div>
+				<span class="text"><strong>{{ctx.Locale.Tr "repo.security_advisories.collaborators"}}</strong></span>
+				<div class="ui list tw-flex tw-flex-wrap tw-my-2">
+					{{range .Collaborators}}
+						<a href="{{.HomeLink}}" data-tooltip-content="{{.GetDisplayName}}">
+							{{ctx.AvatarUtils.Avatar . 28 "tw-my-0.5 tw-mr-1"}}
+						</a>
+					{{else}}
+						<span class="tw-text-text-light-2">{{ctx.Locale.Tr "repo.security_advisories.no_collaborators"}}</span>
+					{{end}}
+				</div>
+
+				{{if .Advisory.PublishedUnix}}
+					<div class="divider"></div>
+					{{$publishedStr := DateUtils.TimeSince .Advisory.PublishedUnix}}
+					<span class="text tw-text-text-light-2">{{ctx.Locale.Tr "repo.security_advisories.published_at"}} {{$publishedStr}}</span>
+				{{end}}
+			</div>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

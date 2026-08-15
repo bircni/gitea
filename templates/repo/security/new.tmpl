@@ -1,0 +1,37 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository security new">
+	{{template "repo/header" .}}
+	<div class="ui container medium">
+		{{template "base/alert" .}}
+		<h2 class="ui dividing header">{{ctx.Locale.Tr "repo.security_advisories.new_draft"}}</h2>
+		<form class="ui form" action="{{.RepoLink}}/security/advisories/new" method="post">
+			<div class="required field {{if .Err_Summary}}error{{end}}">
+				<label for="summary">{{ctx.Locale.Tr "repo.security_advisories.summary"}}</label>
+				<input id="summary" name="summary" maxlength="1024" required autofocus>
+			</div>
+			<div class="field">
+				<label for="description">{{ctx.Locale.Tr "repo.security_advisories.description"}}</label>
+				<textarea id="description" name="description" rows="8"></textarea>
+			</div>
+			<div class="field">
+				<label for="severity">{{ctx.Locale.Tr "repo.security_advisories.severity"}}</label>
+				<select id="severity" name="severity" class="ui dropdown">
+					<option value=""></option>
+					{{range .Severities}}
+						<option value="{{.}}">{{.}}</option>
+					{{end}}
+				</select>
+			</div>
+			<div class="field">
+				<label for="cvss_v3_vector">{{ctx.Locale.Tr "repo.security_advisories.cvss_v3_vector"}}</label>
+				<input id="cvss_v3_vector" name="cvss_v3_vector" placeholder="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H">
+			</div>
+			<div class="divider"></div>
+			<div class="tw-flex tw-justify-end tw-gap-2">
+				<a class="ui cancel button" href="{{.RepoLink}}/security">{{ctx.Locale.Tr "cancel"}}</a>
+				<button class="ui primary button">{{ctx.Locale.Tr "repo.security_advisories.create"}}</button>
+			</div>
+		</form>
+	</div>
+</div>
+{{template "base/footer" .}}

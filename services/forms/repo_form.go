@@ -98,6 +98,8 @@ type RepoSettingForm struct {
 	Template               bool
 	EnablePrune            bool
 
+	PrivateReportingEnabled bool
+
 	// Advanced settings
 	EnableCode bool
 

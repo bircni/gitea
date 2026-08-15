@@ -21,6 +21,23 @@
   },
   "basePath": "/GITEA-API-APP-SUBURL/api/v1",
   "paths": {
+    "/-/advisories.osv.json": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "miscellaneous"
+        ],
+        "summary": "List every published security advisory on the instance in OSV format",
+        "operationId": "listInstanceSecurityAdvisoriesOSV",
+        "responses": {
+          "200": {
+            "description": "OSV-schema bulk export document"
+          }
+        }
+      }
+    },
     "/admin/actions/jobs": {
       "get": {
         "produces": [
@@ -4466,6 +4483,47 @@
           },
           "403": {
             "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      }
+    },
+    "/orgs/{org}/security-advisories": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "organization"
+        ],
+        "summary": "List an organization's security advisories",
+        "operationId": "orgListSecurityAdvisories",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "name of the organization",
+            "name": "org",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "description": "page number of results to return (1-based)",
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "page size of results",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/SecurityAdvisoryList"
           },
           "404": {
             "$ref": "#/responses/notFound"
@@ -18758,6 +18816,244 @@
         }
       }
     },
+    "/repos/{owner}/{repo}/security-advisories": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "List a repository's security advisories",
+        "operationId": "repoListSecurityAdvisories",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "owner of the repo",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "name of the repo",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "description": "page number of results to return (1-based)",
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "page size of results",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/SecurityAdvisoryList"
+          }
+        }
+      },
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Create a security advisory",
+        "operationId": "repoCreateSecurityAdvisory",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "owner of the repo",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "name of the repo",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/CreateSecurityAdvisoryOption"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/SecurityAdvisory"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/security-advisories/{gtsa_id}": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get a security advisory",
+        "operationId": "repoGetSecurityAdvisory",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "owner of the repo",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "name of the repo",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "id of the advisory",
+            "name": "gtsa_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/SecurityAdvisory"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      },
+      "patch": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Update a security advisory",
+        "operationId": "repoEditSecurityAdvisory",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "owner of the repo",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "name of the repo",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "id of the advisory",
+            "name": "gtsa_id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/EditSecurityAdvisoryOption"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/SecurityAdvisory"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/security-advisories/{gtsa_id}.osv.json": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get a published security advisory in OSV format",
+        "operationId": "repoGetSecurityAdvisoryOSV",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "owner of the repo",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "name of the repo",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "id of the advisory",
+            "name": "gtsa_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OSV-schema advisory document"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      }
+    },
     "/repos/{owner}/{repo}/signing-key.gpg": {
       "get": {
         "produces": [
@@ -27674,6 +27970,62 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "CreateSecurityAdvisoryOption": {
+      "type": "object",
+      "title": "CreateSecurityAdvisoryOption is the request body to create a maintainer-authored draft advisory.",
+      "required": [
+        "summary",
+        "vulnerabilities"
+      ],
+      "properties": {
+        "cve_id": {
+          "type": "string",
+          "x-go-name": "CVEID"
+        },
+        "cvss_v3_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv3Vector"
+        },
+        "cvss_v4_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv4Vector"
+        },
+        "cwe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "CWEIDs"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "x-go-enum-desc": "low SecurityAdvisorySeverityLow\nmedium SecurityAdvisorySeverityMedium\nhigh SecurityAdvisorySeverityHigh\ncritical SecurityAdvisorySeverityCritical",
+          "x-go-name": "Severity"
+        },
+        "summary": {
+          "type": "string",
+          "x-go-name": "Summary"
+        },
+        "vulnerabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SecurityAdvisoryVulnerabilityOption"
+          },
+          "x-go-name": "Vulnerabilities"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "CreateStatusOption": {
       "description": "CreateStatusOption holds the information needed to create a new CommitStatus for a Commit",
       "type": "object",
@@ -29002,6 +29354,64 @@
           "description": "a URL with more information about the repository.",
           "type": "string",
           "x-go-name": "Website"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "EditSecurityAdvisoryOption": {
+      "type": "object",
+      "title": "EditSecurityAdvisoryOption is the request body to update an advisory's metadata or transition its state.",
+      "properties": {
+        "cve_id": {
+          "type": "string",
+          "x-go-name": "CVEID"
+        },
+        "cvss_v3_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv3Vector"
+        },
+        "cvss_v4_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv4Vector"
+        },
+        "cwe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "CWEIDs"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "x-go-enum-desc": "low SecurityAdvisorySeverityLow\nmedium SecurityAdvisorySeverityMedium\nhigh SecurityAdvisorySeverityHigh\ncritical SecurityAdvisorySeverityCritical",
+          "x-go-name": "Severity"
+        },
+        "state": {
+          "description": "State transitions the advisory, e.g. to \"published\", \"closed\", or \"withdrawn\".\nPublishing runs the publish-time checklist and may be rejected.",
+          "type": "string",
+          "enum": [
+            "triage",
+            "draft",
+            "published",
+            "closed",
+            "withdrawn"
+          ],
+          "x-go-enum-desc": "triage SecurityAdvisoryStateTriage\ndraft SecurityAdvisoryStateDraft\npublished SecurityAdvisoryStatePublished\nclosed SecurityAdvisoryStateClosed\nwithdrawn SecurityAdvisoryStateWithdrawn",
+          "x-go-name": "State"
+        },
+        "summary": {
+          "type": "string",
+          "x-go-name": "Summary"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -32799,6 +33209,251 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "SecurityAdvisory": {
+      "type": "object",
+      "title": "SecurityAdvisory represents a repository security advisory.",
+      "properties": {
+        "author": {
+          "$ref": "#/definitions/User"
+        },
+        "closed_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "ClosedAt"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "CreatedAt"
+        },
+        "credits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SecurityAdvisoryCredit"
+          },
+          "x-go-name": "Credits"
+        },
+        "cve_id": {
+          "type": "string",
+          "x-go-name": "CVEID"
+        },
+        "cvss_severities": {
+          "$ref": "#/definitions/SecurityAdvisoryCVSSSeverities"
+        },
+        "cwe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "CWEIDs"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "gtsa_id": {
+          "type": "string",
+          "x-go-name": "GTSAID"
+        },
+        "html_url": {
+          "type": "string",
+          "x-go-name": "HTMLURL"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "PublishedAt"
+        },
+        "publisher": {
+          "$ref": "#/definitions/User"
+        },
+        "repository": {
+          "$ref": "#/definitions/RepositoryMeta"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "x-go-enum-desc": "low SecurityAdvisorySeverityLow\nmedium SecurityAdvisorySeverityMedium\nhigh SecurityAdvisorySeverityHigh\ncritical SecurityAdvisorySeverityCritical",
+          "x-go-name": "Severity"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "triage",
+            "draft",
+            "published",
+            "closed",
+            "withdrawn"
+          ],
+          "x-go-enum-desc": "triage SecurityAdvisoryStateTriage\ndraft SecurityAdvisoryStateDraft\npublished SecurityAdvisoryStatePublished\nclosed SecurityAdvisoryStateClosed\nwithdrawn SecurityAdvisoryStateWithdrawn",
+          "x-go-name": "State"
+        },
+        "summary": {
+          "type": "string",
+          "x-go-name": "Summary"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "UpdatedAt"
+        },
+        "url": {
+          "type": "string",
+          "x-go-name": "URL"
+        },
+        "vulnerabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SecurityAdvisoryVulnerability"
+          },
+          "x-go-name": "Vulnerabilities"
+        },
+        "withdrawn_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "WithdrawnAt"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SecurityAdvisoryCVSSSeverities": {
+      "type": "object",
+      "title": "SecurityAdvisoryCVSSSeverities carries the CVSS v3 and v4 vectors/scores of an advisory.",
+      "properties": {
+        "cvss_v3_score": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "CVSSv3Score"
+        },
+        "cvss_v3_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv3Vector"
+        },
+        "cvss_v4_vector": {
+          "type": "string",
+          "x-go-name": "CVSSv4Vector"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SecurityAdvisoryCredit": {
+      "type": "object",
+      "title": "SecurityAdvisoryCredit attributes a person's contribution to an advisory.",
+      "properties": {
+        "original_author": {
+          "description": "OriginalAuthor is set instead of User for an outside reporter with no local account.",
+          "type": "string",
+          "x-go-name": "OriginalAuthor"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "accepted",
+            "declined"
+          ],
+          "x-go-enum-desc": "pending SecurityAdvisoryCreditStatePending\naccepted SecurityAdvisoryCreditStateAccepted\ndeclined SecurityAdvisoryCreditStateDeclined",
+          "x-go-name": "State"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "finder",
+            "reporter",
+            "analyst",
+            "coordinator",
+            "remediation_developer",
+            "reviewer",
+            "verifier",
+            "tool",
+            "sponsor",
+            "other"
+          ],
+          "x-go-enum-desc": "finder SecurityAdvisoryCreditTypeFinder\nreporter SecurityAdvisoryCreditTypeReporter\nanalyst SecurityAdvisoryCreditTypeAnalyst\ncoordinator SecurityAdvisoryCreditTypeCoordinator\nremediation_developer SecurityAdvisoryCreditTypeRemediationDeveloper\nreviewer SecurityAdvisoryCreditTypeReviewer\nverifier SecurityAdvisoryCreditTypeVerifier\ntool SecurityAdvisoryCreditTypeTool\nsponsor SecurityAdvisoryCreditTypeSponsor\nother SecurityAdvisoryCreditTypeOther",
+          "x-go-name": "Type"
+        },
+        "user": {
+          "$ref": "#/definitions/User"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SecurityAdvisoryPackage": {
+      "type": "object",
+      "title": "SecurityAdvisoryPackage identifies an affected package.",
+      "properties": {
+        "ecosystem": {
+          "description": "Ecosystem is a validated open string: GitHub's 13 ecosystem values,\nany OSV ecosystem string, or \"other\" for a package with no registry.",
+          "type": "string",
+          "x-go-name": "Ecosystem"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SecurityAdvisoryVulnerability": {
+      "type": "object",
+      "title": "SecurityAdvisoryVulnerability is one affected package entry on an advisory.",
+      "properties": {
+        "package": {
+          "$ref": "#/definitions/SecurityAdvisoryPackage"
+        },
+        "patched_versions": {
+          "type": "string",
+          "x-go-name": "PatchedVersions"
+        },
+        "vulnerable_functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VulnerableFunctions"
+        },
+        "vulnerable_version_range": {
+          "description": "VulnerableVersionRange is stored normalized, e.g. \"\u003e= 1.0.0, \u003c 1.2.3\".",
+          "type": "string",
+          "x-go-name": "VulnerableVersionRange"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SecurityAdvisoryVulnerabilityOption": {
+      "type": "object",
+      "title": "SecurityAdvisoryVulnerabilityOption is the request-side shape for creating or replacing a vulnerability entry.",
+      "required": [
+        "package",
+        "vulnerable_version_range"
+      ],
+      "properties": {
+        "package": {
+          "$ref": "#/definitions/SecurityAdvisoryPackage"
+        },
+        "patched_versions": {
+          "type": "string",
+          "x-go-name": "PatchedVersions"
+        },
+        "vulnerable_functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VulnerableFunctions"
+        },
+        "vulnerable_version_range": {
+          "type": "string",
+          "x-go-name": "VulnerableVersionRange"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "ServerVersion": {
       "description": "ServerVersion wraps the version of the server",
       "type": "object",
@@ -34737,6 +35392,21 @@
         "type": "array",
         "items": {
           "$ref": "#/definitions/Secret"
+        }
+      }
+    },
+    "SecurityAdvisory": {
+      "description": "SecurityAdvisory",
+      "schema": {
+        "$ref": "#/definitions/SecurityAdvisory"
+      }
+    },
+    "SecurityAdvisoryList": {
+      "description": "SecurityAdvisoryList",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/SecurityAdvisory"
         }
       }
     },

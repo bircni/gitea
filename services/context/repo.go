@@ -33,6 +33,7 @@ import (
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
 	asymkey_service "gitea.dev/services/asymkey"
+	security_service "gitea.dev/services/security"
 
 	"github.com/editorconfig/editorconfig-core-go/v2"
 )
@@ -613,6 +614,20 @@ func repoAssignmentPrepareTemplateData(ctx *Context, data *repoAssignmentPrepare
 	ctx.Data["CanWriteIssues"] = ctx.Repo.Permission.CanWrite(unit_model.TypeIssues)
 	ctx.Data["CanWritePulls"] = ctx.Repo.Permission.CanWrite(unit_model.TypePullRequests)
 	ctx.Data["CanWriteActions"] = ctx.Repo.Permission.CanWrite(unit_model.TypeActions)
+
+	// Show the security tab when the viewer can administer advisories, the
+	// repo already has something published, or private reporting is open to
+	// this (signed-in) viewer. This is coarse feature-surface visibility
+	// only - individual advisory pages apply their own ACL on top of it.
+	showSecurityAdvisories, err := security_service.CanAdminAdvisory(ctx, ctx.Doer, repo)
+	if err != nil {
+		ctx.ServerError("CanAdminAdvisory", err)
+		return
+	}
+	if !showSecurityAdvisories {
+		showSecurityAdvisories = repo.NumPublishedAdvisories > 0 || (repo.PrivateReportingEnabled && ctx.IsSigned)
+	}
+	ctx.Data["ShowSecurityAdvisories"] = showSecurityAdvisories
 
 	canSignedUserFork, err := repo_module.CanUserForkRepo(ctx, ctx.Doer, ctx.Repo.Repository)
 	if err != nil {
