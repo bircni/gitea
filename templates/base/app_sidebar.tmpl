@@ -66,7 +66,7 @@
 
 		<div class="sidebar-foot">
 			{{if and .IsSigned .MustChangePassword}}
-				<div class="ui dropdown jump sidebar-user" data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}">
+				<div class="ui dropdown jump sidebar-user" data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}" data-signed-in-username="{{.SignedUser.Name}}">
 					{{ctx.AvatarUtils.Avatar .SignedUser 24}}
 					<span class="sidebar-user-name">{{.SignedUser.Name}}</span>
 					{{svg "octicon-triangle-down"}}
@@ -81,7 +81,7 @@
 				</div>
 			{{else if .IsSigned}}
 				<div class="sidebar-foot-row">
-				<div class="ui dropdown jump sidebar-user" data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}">
+				<div class="ui dropdown jump sidebar-user" data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}" data-signed-in-username="{{.SignedUser.Name}}">
 					<span class="navbar-avatar">
 						{{ctx.AvatarUtils.Avatar .SignedUser 24}}
 						{{if .IsAdmin}}{{svg "octicon-shield-check" 16 "navbar-admin-badge"}}{{end}}
