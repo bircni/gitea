@@ -957,9 +957,14 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 		data.canBypassProtectionAsAdmin = isRepoAdmin && !prInfo.ProtectedBranchRule.BlockAdminMergeOverride
 	}
 
+	// A branch requiring the merge queue only offers "add to queue" or "mark merged manually" for a
+	// non-bypassing doer - a direct merge would skip the queue's batch testing entirely.
+	mergeQueueRequiresQueue := prInfo.ProtectedBranchRule != nil && prInfo.ProtectedBranchRule.EnableMergeQueue && !data.canBypassProtection
+
 	// CanMergeNow means: if the doer has write permission, whether the PR can be merged now
 	data.canMergeNow = (!data.hasOverridableBlockers || data.canBypassProtection) && // status checks are satisfied
-		(!data.requireSigned || data.willSign) // signing requirement is satisfied
+		(!data.requireSigned || data.willSign) && // signing requirement is satisfied
+		!mergeQueueRequiresQueue
 
 	prInfo.prepareMergeBoxFormProps(ctx)
 	prInfo.prepareMergeBoxInfoItems(ctx)

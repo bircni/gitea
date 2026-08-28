@@ -39,6 +39,7 @@ import (
 	git_service "gitea.dev/services/git"
 	"gitea.dev/services/gitdiff"
 	issue_service "gitea.dev/services/issue"
+	"gitea.dev/services/mergequeue"
 	"gitea.dev/services/notifications"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
@@ -950,9 +951,25 @@ func MergePullRequest(ctx *context.APIContext) {
 
 	manuallyMerged := repo_model.MergeStyle(form.Do) == repo_model.MergeStyleManuallyMerged
 
+	// On a branch with the merge queue enabled, "merge when checks succeed" means "add to the merge
+	// queue" instead of scheduling classic single-PR auto-merge - matching GitHub's "Merge when ready"
+	// behavior, where the same button/API repurposes itself rather than running two competing mechanisms.
+	mergeQueueEnabled := false
+	if form.MergeWhenChecksSucceed {
+		var err error
+		mergeQueueEnabled, _, err = mergequeue.IsEnabledForBranch(ctx, pr.BaseRepoID, pr.BaseBranch)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+	}
+
 	mergeCheckType := pull_service.MergeCheckTypeGeneral
 	if form.MergeWhenChecksSucceed {
 		mergeCheckType = pull_service.MergeCheckTypeAuto
+		if mergeQueueEnabled {
+			mergeCheckType = pull_service.MergeCheckTypeQueue
+		}
 	}
 	if manuallyMerged {
 		mergeCheckType = pull_service.MergeCheckTypeManually
@@ -971,6 +988,10 @@ func MergePullRequest(ctx *context.APIContext) {
 		} else if errors.Is(err, pull_service.ErrNotMergeableState) {
 			ctx.APIError(http.StatusMethodNotAllowed, "Please try again later")
 		} else if errors.Is(err, pull_service.ErrNotReadyToMerge) {
+			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
+		} else if errors.Is(err, pull_service.ErrMustUseMergeQueue) {
+			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
+		} else if errors.Is(err, pull_service.ErrMergeQueueNotEnabled) {
 			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
 		} else if asymkey_service.IsErrWontSign(err) {
 			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
@@ -1025,6 +1046,23 @@ func MergePullRequest(ctx *context.APIContext) {
 	}
 
 	if form.MergeWhenChecksSucceed {
+		if mergeQueueEnabled {
+			if err := mergequeue.EnqueuePullRequest(ctx, ctx.Doer, pr, mergequeue.EnqueuePullRequestOptions{
+				MergeStyle:             repo_model.MergeStyle(form.Do),
+				Message:                message,
+				DeleteBranchAfterMerge: deleteBranchAfterMerge,
+			}); err != nil {
+				if pull_model.IsErrAlreadyInMergeQueue(err) {
+					ctx.APIError(http.StatusConflict, err.Error())
+					return
+				}
+				ctx.APIErrorInternal(err)
+				return
+			}
+			ctx.Status(http.StatusCreated)
+			return
+		}
+
 		scheduled, err := automerge.ScheduleAutoMerge(ctx, ctx.Doer, pr, repo_model.MergeStyle(form.Do), message, deleteBranchAfterMerge)
 		if err != nil {
 			if pull_model.IsErrAlreadyScheduledToAutoMerge(err) {
@@ -1340,7 +1378,29 @@ func CancelScheduledAutoMerge(ctx *context.APIContext) {
 		return
 	}
 	if !exist {
-		ctx.APIErrorNotFound()
+		// the PR may instead have an active merge queue entry (auto-merge is repurposed into
+		// "add to queue" on queue-enabled branches, see MergePullRequest)
+		queueExists, queueEntry, err := pull_model.GetActiveMergeQueueEntryByPullID(ctx, pull.ID)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		if !queueExists {
+			ctx.APIErrorNotFound()
+			return
+		}
+		if !canRemoveFromMergeQueue(ctx, pull, queueEntry) {
+			return
+		}
+		if err := mergequeue.RemoveFromMergeQueue(ctx, ctx.Doer, pull); err != nil {
+			if errors.Is(err, pull_service.ErrNoPermissionToMerge) {
+				ctx.APIError(http.StatusForbidden, "user has no permission to remove the pull request from the merge queue")
+				return
+			}
+			ctx.APIErrorInternal(err)
+			return
+		}
+		ctx.Status(http.StatusNoContent)
 		return
 	}
 
@@ -1361,6 +1421,188 @@ func CancelScheduledAutoMerge(ctx *context.APIContext) {
 	} else {
 		ctx.Status(http.StatusNoContent)
 	}
+}
+
+// AddPullRequestToMergeQueue adds a pull request to its base branch's merge queue
+func AddPullRequestToMergeQueue(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/pulls/{index}/merge-queue repository repoAddPullRequestToMergeQueue
+	// ---
+	// summary: Add a pull request to its base branch's merge queue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the pull request
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// - name: body
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/MergeQueueOption"
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/error"
+	//   "423":
+	//     "$ref": "#/responses/repoArchivedError"
+	form := web.GetForm[*forms.MergeQueueForm](ctx)
+
+	pullIndex := ctx.PathParamInt64("index")
+	pr, err := issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, pullIndex)
+	if err != nil {
+		if issues_model.IsErrPullRequestNotExist(err) {
+			ctx.APIErrorNotFound()
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+	pr.BaseRepo = ctx.Repo.Repository
+	if err := pr.LoadIssue(ctx); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	mergeStyle := repo_model.MergeStyle(form.Do)
+	message := strings.TrimSpace(form.MergeTitleField)
+	if len(message) == 0 {
+		var err error
+		message, _, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, mergeStyle)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+	}
+	if messageBody := strings.TrimSpace(form.MergeMessageField); messageBody != "" {
+		message += "\n\n" + messageBody
+	}
+
+	deleteBranchAfterMerge, err := pull_service.ShouldDeleteBranchAfterMerge(ctx, form.DeleteBranchAfterMerge, ctx.Repo.Repository, pr)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	if err := mergequeue.EnqueuePullRequest(ctx, ctx.Doer, pr, mergequeue.EnqueuePullRequestOptions{
+		MergeStyle:             mergeStyle,
+		Message:                message,
+		DeleteBranchAfterMerge: deleteBranchAfterMerge,
+	}); err != nil {
+		if pull_model.IsErrAlreadyInMergeQueue(err) {
+			ctx.APIError(http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, pull_service.ErrNotReadyToMerge) || errors.Is(err, pull_service.ErrNoPermissionToMerge) || errors.Is(err, pull_service.ErrMergeQueueNotEnabled) {
+			ctx.APIError(http.StatusForbidden, err.Error())
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}
+
+// RemovePullRequestFromMergeQueue removes a pull request from its base branch's merge queue
+func RemovePullRequestFromMergeQueue(ctx *context.APIContext) {
+	// swagger:operation DELETE /repos/{owner}/{repo}/pulls/{index}/merge-queue repository repoRemovePullRequestFromMergeQueue
+	// ---
+	// summary: Remove a pull request from its base branch's merge queue
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the pull request
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "423":
+	//     "$ref": "#/responses/repoArchivedError"
+
+	pullIndex := ctx.PathParamInt64("index")
+	pr, err := issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, pullIndex)
+	if err != nil {
+		if issues_model.IsErrPullRequestNotExist(err) {
+			ctx.APIErrorNotFound()
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	queueExists, queueEntry, err := pull_model.GetActiveMergeQueueEntryByPullID(ctx, pr.ID)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	if !queueExists {
+		ctx.APIErrorNotFound()
+		return
+	}
+	if !canRemoveFromMergeQueue(ctx, pr, queueEntry) {
+		return
+	}
+	if err := mergequeue.RemoveFromMergeQueue(ctx, ctx.Doer, pr); err != nil {
+		if errors.Is(err, pull_service.ErrNoPermissionToMerge) {
+			ctx.APIError(http.StatusForbidden, "user has no permission to remove the pull request from the merge queue")
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}
+
+func canRemoveFromMergeQueue(ctx *context.APIContext, pr *issues_model.PullRequest, entry *pull_model.MergeQueueEntry) bool {
+	if ctx.Doer.ID == entry.EnqueuedByID {
+		return true
+	}
+	allowed, err := pull_service.IsUserAllowedToMerge(ctx, pr, ctx.Repo.Permission, ctx.Doer)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return false
+	}
+	if !allowed {
+		ctx.APIError(http.StatusForbidden, "user has no permission to remove the pull request from the merge queue")
+		return false
+	}
+	return true
 }
 
 // GetPullRequestCommits gets all commits associated with a given PR

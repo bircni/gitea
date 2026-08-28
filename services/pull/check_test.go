@@ -11,6 +11,7 @@ import (
 	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
+	access_model "gitea.dev/models/perm/access"
 	"gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
@@ -24,6 +25,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCheckPullMergeable_RequiresMergeQueue(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	require.NoError(t, pr.LoadBaseRepo(ctx))
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	perm, err := access_model.GetDoerRepoPermission(ctx, pr.BaseRepo, doer)
+	require.NoError(t, err)
+
+	err = CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeQueue, repo_model.MergeStyleMerge, false)
+	assert.ErrorIs(t, err, ErrMergeQueueNotEnabled)
+
+	pb := &git_model.ProtectedBranch{
+		RepoID:           pr.BaseRepoID,
+		RuleName:         pr.BaseBranch,
+		EnableMergeQueue: true,
+	}
+	_, err = db.GetEngine(ctx).Insert(pb)
+	require.NoError(t, err)
+	defer db.GetEngine(ctx).ID(pb.ID).Delete(&git_model.ProtectedBranch{})
+
+	// A direct/immediate merge is rejected outright: the branch requires the merge queue instead.
+	err = CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeGeneral, repo_model.MergeStyleMerge, false)
+	assert.ErrorIs(t, err, ErrMustUseMergeQueue)
+
+	// Adding the PR to the merge queue is unaffected by this particular check.
+	err = CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeQueue, repo_model.MergeStyleMerge, false)
+	assert.NotErrorIs(t, err, ErrMustUseMergeQueue)
+
+	// A repo admin using force-merge can still bypass the queue requirement.
+	admin := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	adminPerm, err := access_model.GetDoerRepoPermission(ctx, pr.BaseRepo, admin)
+	require.NoError(t, err)
+	err = CheckPullMergeable(ctx, admin, &adminPerm, pr, MergeCheckTypeGeneral, repo_model.MergeStyleMerge, true)
+	assert.NotErrorIs(t, err, ErrMustUseMergeQueue)
+}
 
 func TestPullRequest_AddToTaskQueue(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())

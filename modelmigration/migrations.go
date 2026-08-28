@@ -425,6 +425,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(349, "Expand action_schedule content column", v28.ExpandActionScheduleContent),
 		newMigration(350, "Add published_unix column to release", v28.AddPublishedUnixToRelease),
 		newMigration(351, "Track transfer recipient access grants", v28.AddRecipientAccessGrantedToRepoTransfer),
+		newMigration(352, "Add merge queue tables and branch protection settings", v28.AddMergeQueue),
 	}
 	return preparedMigrations
 }

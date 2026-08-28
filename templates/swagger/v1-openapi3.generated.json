@@ -7698,6 +7698,40 @@
         "x-go-name": "MergePullRequestForm",
         "x-go-package": "gitea.dev/services/forms"
       },
+      "MergeQueueOption": {
+        "description": "MergeQueueForm form for adding a Pull Request to its base branch's merge queue",
+        "properties": {
+          "delete_branch_after_merge": {
+            "type": "boolean",
+            "x-go-name": "DeleteBranchAfterMerge"
+          },
+          "do": {
+            "enum": [
+              "merge",
+              "rebase",
+              "rebase-merge",
+              "squash",
+              "fast-forward-only"
+            ],
+            "type": "string",
+            "x-go-name": "Do"
+          },
+          "merge_message_field": {
+            "type": "string",
+            "x-go-name": "MergeMessageField"
+          },
+          "merge_title_field": {
+            "type": "string",
+            "x-go-name": "MergeTitleField"
+          }
+        },
+        "required": [
+          "do"
+        ],
+        "type": "object",
+        "x-go-name": "MergeQueueForm",
+        "x-go-package": "gitea.dev/services/forms"
+      },
       "MergeUpstreamRequest": {
         "properties": {
           "branch": {
@@ -29569,6 +29603,123 @@
           }
         },
         "summary": "Merge a pull request",
+        "tags": [
+          "repository"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/pulls/{index}/merge-queue": {
+      "delete": {
+        "operationId": "repoRemovePullRequestFromMergeQueue",
+        "parameters": [
+          {
+            "description": "owner of the repo",
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "name of the repo",
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "index of the pull request",
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/empty"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
+          }
+        },
+        "summary": "Remove a pull request from its base branch's merge queue",
+        "tags": [
+          "repository"
+        ]
+      },
+      "post": {
+        "operationId": "repoAddPullRequestToMergeQueue",
+        "parameters": [
+          {
+            "description": "owner of the repo",
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "name of the repo",
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "index of the pull request",
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeQueueOption"
+              }
+            }
+          },
+          "x-originalParamName": "body"
+        },
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/empty"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
+          }
+        },
+        "summary": "Add a pull request to its base branch's merge queue",
         "tags": [
           "repository"
         ]

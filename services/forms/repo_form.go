@@ -183,6 +183,12 @@ type ProtectBranchForm struct {
 	ProtectedFilePatterns         string
 	UnprotectedFilePatterns       string
 	BlockAdminMergeOverride       bool
+
+	EnableMergeQueue       bool
+	MergeQueueMinBatchSize int
+	MergeQueueMaxBatchSize int
+	MergeQueueWaitMinutes  int
+	MergeQueueMergeStyle   string
 }
 
 // WebhookForm form for changing web hook
@@ -456,6 +462,18 @@ func (f *MergePullRequestForm) UnmarshalJSON(b []byte) error {
 	f.MergeWhenChecksSucceed = a.MergeWhenChecksSucceed
 	f.DeleteBranchAfterMerge = a.DeleteBranchAfterMerge
 	return nil
+}
+
+// MergeQueueForm form for adding a Pull Request to its base branch's merge queue
+// swagger:model MergeQueueOption
+type MergeQueueForm struct {
+	middleware.FormDefaultValidator
+	// required: true
+	// enum: ["merge","rebase","rebase-merge","squash","fast-forward-only"]
+	Do                     string `json:"do" binding:"Required;In(merge,rebase,rebase-merge,squash,fast-forward-only)"`
+	MergeTitleField        string `json:"merge_title_field,omitempty"`
+	MergeMessageField      string `json:"merge_message_field,omitempty"`
+	DeleteBranchAfterMerge *bool  `json:"delete_branch_after_merge,omitempty"`
 }
 
 // CodeCommentForm form for adding code comments for PRs

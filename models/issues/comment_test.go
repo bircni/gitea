@@ -45,6 +45,15 @@ func TestCreateComment(t *testing.T) {
 	unittest.AssertInt64InRange(t, now, then, int64(updatedIssue.UpdatedUnix))
 }
 
+func TestCreateMergeQueueComment_NilDoerUsesGhost(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	comment, err := issues_model.CreateMergeQueueComment(t.Context(), issues_model.CommentTypePRRemovedFromMergeQueue, pr, nil, "gone")
+	assert.NoError(t, err)
+	assert.Equal(t, user_model.GhostUserID, comment.PosterID)
+	assert.Equal(t, "gone", comment.Content)
+}
+
 func TestLoadAssigneeUserAndTeam_DeletedTeamBecomesGhostTeam(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 15})

@@ -1523,6 +1523,9 @@ func Routes() *web.Router {
 						m.Combo("/merge").Get(repo.IsPullRequestMerged).
 							Post(reqToken(), mustNotBeArchived, bind(forms.MergePullRequestForm{}), repo.MergePullRequest).
 							Delete(reqToken(), mustNotBeArchived, repo.CancelScheduledAutoMerge)
+						m.Combo("/merge-queue").
+							Post(reqToken(), mustNotBeArchived, bind(forms.MergeQueueForm{}), repo.AddPullRequestToMergeQueue).
+							Delete(reqToken(), mustNotBeArchived, repo.RemovePullRequestFromMergeQueue)
 						m.Group("/reviews", func() {
 							m.Combo("").
 								Get(repo.ListPullReviews).

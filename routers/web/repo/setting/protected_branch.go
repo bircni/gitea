@@ -13,25 +13,30 @@ import (
 	"time"
 
 	git_model "gitea.dev/models/git"
+	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/base"
 	"gitea.dev/modules/glob"
 	"gitea.dev/modules/json"
+	"gitea.dev/modules/log"
 	"gitea.dev/modules/templates"
 	"gitea.dev/modules/web"
 	"gitea.dev/routers/web/repo"
 	"gitea.dev/services/context"
 	"gitea.dev/services/forms"
+	"gitea.dev/services/mergequeue"
 	pull_service "gitea.dev/services/pull"
 	"gitea.dev/services/repository"
 )
 
 const (
-	tplProtectedBranch templates.TplName = "repo/settings/protected_branch"
+	tplProtectedBranch      templates.TplName = "repo/settings/protected_branch"
+	tplProtectedBranchQueue templates.TplName = "repo/settings/protected_branch_queue"
 )
 
 // ProtectedBranchRules render the page to protect the repository
@@ -275,6 +280,48 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 	protectBranch.BlockOnOutdatedBranch = f.BlockOnOutdatedBranch
 	protectBranch.BlockAdminMergeOverride = f.BlockAdminMergeOverride
 
+	protectBranch.EnableMergeQueue = f.EnableMergeQueue
+	if f.EnableMergeQueue {
+		if f.MergeQueueMinBatchSize < 1 {
+			ctx.Flash.Error(ctx.Tr("repo.settings.protect_merge_queue_batch_size_min"))
+			ctx.Redirect(fmt.Sprintf("%s/settings/branches/edit?rule_name=%s", ctx.Repo.RepoLink, url.QueryEscape(protectBranch.RuleName)))
+			return
+		}
+		if f.MergeQueueMaxBatchSize < f.MergeQueueMinBatchSize {
+			ctx.Flash.Error(ctx.Tr("repo.settings.protect_merge_queue_max_batch_size_min"))
+			ctx.Redirect(fmt.Sprintf("%s/settings/branches/edit?rule_name=%s", ctx.Repo.RepoLink, url.QueryEscape(protectBranch.RuleName)))
+			return
+		}
+		if f.MergeQueueMergeStyle != "" {
+			style := repo_model.MergeStyle(f.MergeQueueMergeStyle)
+			if style != repo_model.MergeStyleMerge && style != repo_model.MergeStyleRebase &&
+				style != repo_model.MergeStyleRebaseMerge && style != repo_model.MergeStyleSquash {
+				ctx.Flash.Error(ctx.Tr("repo.settings.protect_merge_queue_invalid_merge_style"))
+				ctx.Redirect(fmt.Sprintf("%s/settings/branches/edit?rule_name=%s", ctx.Repo.RepoLink, url.QueryEscape(protectBranch.RuleName)))
+				return
+			}
+		}
+
+		// The merge queue's entire purpose is to gate on required checks against the batch's
+		// synthetic commit; without at least one required check configured there would be nothing to
+		// wait for, and PRs would merge as soon as a batch commit exists at all.
+		requiredContexts, err := pull_service.EffectiveRequiredContexts(ctx, ctx.Repo.Repository, protectBranch)
+		if err != nil {
+			ctx.ServerError("EffectiveRequiredContexts", err)
+			return
+		}
+		if len(requiredContexts) == 0 {
+			ctx.Flash.Error(ctx.Tr("repo.settings.protect_merge_queue_requires_status_check"))
+			ctx.Redirect(fmt.Sprintf("%s/settings/branches/edit?rule_name=%s", ctx.Repo.RepoLink, url.QueryEscape(protectBranch.RuleName)))
+			return
+		}
+
+		protectBranch.MergeQueueMinBatchSize = f.MergeQueueMinBatchSize
+		protectBranch.MergeQueueMaxBatchSize = f.MergeQueueMaxBatchSize
+		protectBranch.MergeQueueWaitMinutes = f.MergeQueueWaitMinutes
+		protectBranch.MergeQueueMergeStyle = f.MergeQueueMergeStyle
+	}
+
 	if err = pull_service.CreateOrUpdateProtectedBranch(ctx, ctx.Repo.Repository, protectBranch, git_model.WhitelistOptions{
 		UserIDs:          whitelistUsers,
 		TeamIDs:          whitelistTeams,
@@ -289,6 +336,10 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 	}); err != nil {
 		ctx.ServerError("CreateOrUpdateProtectedBranch", err)
 		return
+	}
+
+	if f.EnableMergeQueue {
+		mergequeue.TriggerQueuedBranches(ctx, ctx.Repo.Repository.ID, protectBranch.Match)
 	}
 
 	ctx.Flash.Success(ctx.Tr("repo.settings.update_protect_branch_success", protectBranch.RuleName))
@@ -388,4 +439,77 @@ func RenameBranchPost(ctx *context.Context) {
 
 	ctx.Flash.Success(ctx.Tr("repo.settings.rename_branch_success", form.From, form.To))
 	ctx.Redirect(ctx.Repo.RepoLink + "/branches")
+}
+
+// mergeQueueEntryView pairs a queue entry with the pull request it refers to, for display on the
+// queue management page.
+type mergeQueueEntryView struct {
+	Entry *pull_model.MergeQueueEntry
+	Pull  *issues_model.PullRequest
+}
+
+// SettingsProtectedBranchQueue shows the merge queue for a single branch protection rule: every
+// active entry, plus a handful of recent terminal ones, with a remove action for active entries.
+func SettingsProtectedBranchQueue(ctx *context.Context) {
+	ruleID := ctx.FormInt64("rule_id")
+	rule, err := git_model.GetProtectedBranchRuleByID(ctx, ctx.Repo.Repository.ID, ruleID)
+	if err != nil {
+		ctx.ServerError("GetProtectedBranchRuleByID", err)
+		return
+	}
+	if rule == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	entries, err := pull_model.GetMergeQueueEntriesForRuleView(ctx, ctx.Repo.Repository.ID, rule.Match, 20)
+	if err != nil {
+		ctx.ServerError("GetMergeQueueEntriesForRuleView", err)
+		return
+	}
+
+	views := make([]*mergeQueueEntryView, 0, len(entries))
+	for _, entry := range entries {
+		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullID)
+		if err != nil {
+			log.Error("GetPullRequestByID[%d]: %v", entry.PullID, err)
+			continue
+		}
+		if err := pr.LoadIssue(ctx); err != nil {
+			log.Error("LoadIssue: %v", err)
+			continue
+		}
+		views = append(views, &mergeQueueEntryView{Entry: entry, Pull: pr})
+	}
+
+	ctx.Data["PageIsSettingsBranches"] = true
+	ctx.Data["Title"] = ctx.Locale.TrString("repo.settings.protect_merge_queue") + " - " + rule.RuleName
+	ctx.Data["Rule"] = rule
+	ctx.Data["QueueEntries"] = views
+	ctx.HTML(http.StatusOK, tplProtectedBranchQueue)
+}
+
+// SettingsProtectedBranchQueueRemovePost removes a single entry from a branch's merge queue,
+// regardless of who originally enqueued it - only repo admins reach this route (see web.go).
+func SettingsProtectedBranchQueueRemovePost(ctx *context.Context) {
+	ruleID := ctx.FormInt64("rule_id")
+	entryID := ctx.PathParamInt64("id")
+
+	rule, err := git_model.GetProtectedBranchRuleByID(ctx, ctx.Repo.Repository.ID, ruleID)
+	if err != nil {
+		ctx.ServerError("GetProtectedBranchRuleByID", err)
+		return
+	}
+	if rule == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	if err := mergequeue.RemoveEntryByID(ctx, ctx.Repo.Repository.ID, entryID, rule.Match); err != nil {
+		ctx.ServerError("RemoveEntryByID", err)
+		return
+	}
+
+	ctx.Flash.Success(ctx.Tr("repo.settings.protect_merge_queue_entry_removed"))
+	ctx.Redirect(fmt.Sprintf("%s/settings/branches/queue?rule_id=%d", ctx.Repo.RepoLink, ruleID))
 }

@@ -696,6 +696,18 @@
 					{{end}}
 				</span>
 			</div>
+		{{else if or (eq .Type 39) (eq .Type 40)}}
+			<div class="timeline-item event" id="{{.HashTag}}">
+				<span class="badge">{{svg "octicon-git-merge" 16}}</span>
+				<span class="comment-text-line">
+					{{template "repo/issue/view_content/comments_authorlink" dict "comment" .}}
+					{{if eq .Type 39}}{{ctx.Locale.Tr "repo.pulls.merge_queue_added_comment" $createdStr}}
+					{{else}}{{ctx.Locale.Tr "repo.pulls.merge_queue_removed_comment" $createdStr}}{{end}}
+					{{if and (eq .Type 40) .Content}}
+						<span class="text small grey">- {{.Content}}</span>
+					{{end}}
+				</span>
+			</div>
 		{{end}}
 	{{end}}
 {{end}}

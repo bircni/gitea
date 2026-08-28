@@ -15,7 +15,10 @@ import (
 	actions_module "gitea.dev/modules/actions"
 	"gitea.dev/modules/commitstatus"
 	"gitea.dev/modules/git"
+	"gitea.dev/modules/json"
+	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/timeutil"
+	webhook_module "gitea.dev/modules/webhook"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -430,4 +433,16 @@ func findCommitStatusesForContext(t *testing.T, repoID int64, sha, context strin
 		Find(&statuses)
 	require.NoError(t, err)
 	return statuses
+}
+
+func TestGetCommitStatusEventNameAndCommitID_MergeGroup(t *testing.T) {
+	payload, err := json.Marshal(&api.MergeGroupPayload{HeadSHA: "abc123", BaseBranch: "main"})
+	require.NoError(t, err)
+	event, commitID, err := getCommitStatusEventNameAndCommitID(&actions_model.ActionRun{
+		Event:        webhook_module.HookEventMergeGroup,
+		EventPayload: string(payload),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, actions_module.GithubEventMergeGroup, event)
+	assert.Equal(t, "abc123", commitID)
 }

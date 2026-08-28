@@ -120,6 +120,9 @@ const (
 	CommentTypeUnpin // 37 unpin Issue/PullRequest
 
 	CommentTypeChangeTimeEstimate // 38 Change time estimate
+
+	CommentTypePRAddedToMergeQueue     // 39 pr was added to the merge queue
+	CommentTypePRRemovedFromMergeQueue // 40 pr was removed from the merge queue
 )
 
 var commentStrings = []string{
@@ -162,6 +165,8 @@ var commentStrings = []string{
 	"pin",
 	"unpin",
 	"change_time_estimate",
+	"pull_added_to_merge_queue",
+	"pull_removed_from_merge_queue",
 }
 
 func (t CommentType) String() string {
@@ -1237,6 +1242,35 @@ func CreateAutoMergeComment(ctx context.Context, typ CommentType, pr *PullReques
 		Doer:  doer,
 		Repo:  pr.BaseRepo,
 		Issue: pr.Issue,
+	})
+	return comment, err
+}
+
+// CreateMergeQueueComment is an internal function, only use it for CommentTypePRAddedToMergeQueue and
+// CommentTypePRRemovedFromMergeQueue CommentTypes. content is used as the removal reason when typ is
+// CommentTypePRRemovedFromMergeQueue; it is ignored otherwise.
+func CreateMergeQueueComment(ctx context.Context, typ CommentType, pr *PullRequest, doer *user_model.User, content string) (comment *Comment, err error) {
+	if typ != CommentTypePRAddedToMergeQueue && typ != CommentTypePRRemovedFromMergeQueue {
+		return nil, fmt.Errorf("comment type %d cannot be used to create a merge queue comment", typ)
+	}
+	if err = pr.LoadIssue(ctx); err != nil {
+		return nil, err
+	}
+
+	if err = pr.LoadBaseRepo(ctx); err != nil {
+		return nil, err
+	}
+
+	if doer == nil {
+		doer = user_model.NewGhostUser()
+	}
+
+	comment, err = CreateComment(ctx, &CreateCommentOptions{
+		Type:    typ,
+		Doer:    doer,
+		Repo:    pr.BaseRepo,
+		Issue:   pr.Issue,
+		Content: content,
 	})
 	return comment, err
 }

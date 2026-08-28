@@ -16,6 +16,7 @@ import (
 	"gitea.dev/modules/templates"
 	"gitea.dev/modules/util"
 	"gitea.dev/services/context"
+	"gitea.dev/services/mergequeue"
 	pull_service "gitea.dev/services/pull"
 )
 
@@ -51,17 +52,55 @@ func (prInfo *pullRequestViewInfo) prepareMergeBoxFormProps(ctx *context.Context
 		return
 	}
 
-	// Check if there is a pending pr merge
-	hasPendingPullRequestMerge, pendingPullRequestMerge, err := pull_model.GetScheduledMergeByPullID(ctx, pull.ID)
+	// On a branch with the merge queue enabled, "auto merge" is repurposed into "add to merge queue"
+	// (see MergePullRequest) - reflect that in the merge box's wording and pending-status tip.
+	mergeQueueEnabled, _, err := mergequeue.IsEnabledForBranch(ctx, pull.BaseRepoID, pull.BaseBranch)
 	if err != nil {
-		ctx.ServerError("GetScheduledMergeByPullID", err)
+		ctx.ServerError("IsEnabledForBranch", err)
 		return
 	}
 
+	var hasPendingPullRequestMerge bool
 	var hasPendingPullRequestMergeTip template.HTML
-	if hasPendingPullRequestMerge {
-		createdPRMergeStr := templates.TimeSince(pendingPullRequestMerge.CreatedUnix)
-		hasPendingPullRequestMergeTip = ctx.Locale.Tr("repo.pulls.auto_merge_has_pending_schedule", pendingPullRequestMerge.Doer.Name, createdPRMergeStr)
+	textAutoMergeButtonWhenSucceed := ctx.Locale.Tr("repo.pulls.auto_merge_button_when_succeed")
+	textAutoMergeWhenSucceed := ctx.Locale.Tr("repo.pulls.auto_merge_when_succeed")
+	textAutoMergeCancelSchedule := ctx.Locale.Tr("repo.pulls.auto_merge_cancel_schedule")
+
+	if mergeQueueEnabled {
+		textAutoMergeButtonWhenSucceed = ctx.Locale.Tr("repo.pulls.merge_queue_button_when_succeed")
+		textAutoMergeWhenSucceed = ctx.Locale.Tr("repo.pulls.merge_queue_when_succeed")
+		textAutoMergeCancelSchedule = ctx.Locale.Tr("repo.pulls.merge_queue_cancel")
+
+		queueExists, queueEntry, err := pull_model.GetActiveMergeQueueEntryByPullID(ctx, pull.ID)
+		if err != nil {
+			ctx.ServerError("GetActiveMergeQueueEntryByPullID", err)
+			return
+		}
+		if queueExists {
+			hasPendingPullRequestMerge = true
+			if queueEntry.Status == pull_model.MergeQueueEntryStatusTesting {
+				hasPendingPullRequestMergeTip = ctx.Locale.Tr("repo.pulls.merge_queue_testing_tip")
+			} else {
+				ahead, err := pull_model.CountQueuedEntriesAhead(ctx, queueEntry.RepoID, queueEntry.BaseBranch, queueEntry.Position)
+				if err != nil {
+					ctx.ServerError("CountQueuedEntriesAhead", err)
+					return
+				}
+				hasPendingPullRequestMergeTip = ctx.Locale.Tr("repo.pulls.merge_queue_position_tip", ahead+1)
+			}
+		}
+	} else {
+		// Check if there is a pending pr merge
+		var pendingPullRequestMerge *pull_model.AutoMerge
+		hasPendingPullRequestMerge, pendingPullRequestMerge, err = pull_model.GetScheduledMergeByPullID(ctx, pull.ID)
+		if err != nil {
+			ctx.ServerError("GetScheduledMergeByPullID", err)
+			return
+		}
+		if hasPendingPullRequestMerge {
+			createdPRMergeStr := templates.TimeSince(pendingPullRequestMerge.CreatedUnix)
+			hasPendingPullRequestMergeTip = ctx.Locale.Tr("repo.pulls.auto_merge_has_pending_schedule", pendingPullRequestMerge.Doer.Name, createdPRMergeStr)
+		}
 	}
 
 	var defaultMergeTitle, defaultMergeBody string
@@ -88,9 +127,9 @@ func (prInfo *pullRequestViewInfo) prepareMergeBoxFormProps(ctx *context.Context
 		"baseLink":                       prInfo.issue.Link(),
 		"textCancel":                     ctx.Locale.Tr("cancel"),
 		"textDeleteBranch":               ctx.Locale.Tr("repo.branch.delete", prInfo.headTarget),
-		"textAutoMergeButtonWhenSucceed": ctx.Locale.Tr("repo.pulls.auto_merge_button_when_succeed"),
-		"textAutoMergeWhenSucceed":       ctx.Locale.Tr("repo.pulls.auto_merge_when_succeed"),
-		"textAutoMergeCancelSchedule":    ctx.Locale.Tr("repo.pulls.auto_merge_cancel_schedule"),
+		"textAutoMergeButtonWhenSucceed": textAutoMergeButtonWhenSucceed,
+		"textAutoMergeWhenSucceed":       textAutoMergeWhenSucceed,
+		"textAutoMergeCancelSchedule":    textAutoMergeCancelSchedule,
 		"textClearMergeMessage":          ctx.Locale.Tr("repo.pulls.clear_merge_message"),
 		"textClearMergeMessageHint":      ctx.Locale.Tr("repo.pulls.clear_merge_message_hint"),
 		"textMergeCommitId":              ctx.Locale.Tr("repo.pulls.merge_commit_id"),

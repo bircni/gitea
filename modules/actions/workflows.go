@@ -170,7 +170,7 @@ func ScopedWorkflowStatusContextName(prefix, displayName, jobName, event string)
 // The two are kept in sync by hand and can drift; unify them into a single source so adding a status-producing event in one place automatically updates the other.
 func ShouldEventCreateCommitStatus(event string) bool {
 	switch event {
-	case "push", "pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "release":
+	case "push", "pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "release", GithubEventMergeGroup:
 		return true
 	}
 	return false
@@ -302,6 +302,14 @@ func detectWorkflowMatch(ctx context.Context, gitRepo *git.Repository, commit *g
 		webhook_module.HookEventPush:
 		pushPayload := payloadAs[*api.PushPayload](payload, inputEvent)
 		return matchPushEvent(ctx, gitRepo, commit, pushPayload, evt)
+
+	case // merge_group
+		webhook_module.HookEventMergeGroup:
+		mergeGroupPayload := payloadAs[*api.MergeGroupPayload](payload, inputEvent)
+		if matchMergeGroupEvent(mergeGroupPayload, evt) {
+			return detectMatched
+		}
+		return detectNotApplicable
 
 	case // issues
 		webhook_module.HookEventIssues,
@@ -489,6 +497,41 @@ func matchPushEvent(ctx context.Context, gitRepo *git.Repository, commit *git.Co
 		return detectMatched
 	}
 	return detectFilteredOut
+}
+
+// matchMergeGroupEvent filters an `on: merge_group` trigger by the base branch the merge queue
+// batch targets. GitHub's merge_group event supports `branches`/`branches-ignore` filters against
+// the queue's target branch; there is no analogous "tags" concept for a merge queue.
+func matchMergeGroupEvent(payload *api.MergeGroupPayload, evt *jobparser.Event) bool {
+	// with no special filter parameters
+	if len(evt.Acts()) == 0 {
+		return true
+	}
+
+	matchTimes := 0
+	for cond, vals := range evt.Acts() {
+		switch cond {
+		case "branches":
+			patterns, err := workflowpattern.CompilePatterns(vals...)
+			if err != nil {
+				break
+			}
+			if !workflowpattern.Skip(patterns, []string{payload.BaseBranch}) {
+				matchTimes++
+			}
+		case "branches-ignore":
+			patterns, err := workflowpattern.CompilePatterns(vals...)
+			if err != nil {
+				break
+			}
+			if !workflowpattern.Filter(patterns, []string{payload.BaseBranch}) {
+				matchTimes++
+			}
+		default:
+			log.Warn("merge_group event unsupported condition %q", cond)
+		}
+	}
+	return matchTimes == len(evt.Acts())
 }
 
 func matchIssuesEvent(issuePayload *api.IssuePayload, evt *jobparser.Event) bool {

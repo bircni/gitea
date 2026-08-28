@@ -24,6 +24,7 @@ import (
 	webhook_module "gitea.dev/modules/webhook"
 	"gitea.dev/services/convert"
 	notify_service "gitea.dev/services/notify"
+	pull_service "gitea.dev/services/pull"
 )
 
 type actionsNotifier struct {
@@ -557,6 +558,25 @@ func (n *actionsNotifier) PushCommits(ctx context.Context, pusher *user_model.Us
 	ctx = withMethod(ctx, "PushCommits")
 
 	apiPusher := convert.ToUser(ctx, pusher, nil)
+
+	// A push to a merge queue's synthetic combined-commit ref fires `merge_group` instead of `push`:
+	// it isn't a real branch update, so `on: push` workflows (even unfiltered ones) should not run
+	// against it, only workflows that explicitly opt in with `on: merge_group`.
+	if baseBranch, _, ok := pull_service.ParseMergeQueueTempRef(opts.RefFullName.String()); ok {
+		newNotifyInput(repo, pusher, webhook_module.HookEventMergeGroup).
+			WithRef(opts.RefFullName.String()).
+			WithPayload(&api.MergeGroupPayload{
+				BaseBranch: baseBranch,
+				BaseSHA:    opts.OldCommitID,
+				HeadSHA:    opts.NewCommitID,
+				Ref:        opts.RefFullName.String(),
+				Repo:       convert.ToRepo(ctx, repo, access_model.Permission{AccessMode: perm_model.AccessModeOwner}),
+				Sender:     apiPusher,
+			}).
+			Notify(ctx)
+		return
+	}
+
 	apiCommits, apiHeadCommit, err := commits.ToAPIPayloadCommits(ctx, repo)
 	if err != nil {
 		log.Error("commits.ToAPIPayloadCommits failed: %v", err)

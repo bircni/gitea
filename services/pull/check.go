@@ -46,6 +46,8 @@ var (
 	ErrNotMergeableState         = errors.New("not in mergeable state")
 	ErrDependenciesLeft          = errors.New("is blocked by an open dependency")
 	ErrHeadCommitsNotAllVerified = errors.New("the branch requires signed commits but not all head commits are verified")
+	ErrMustUseMergeQueue         = errors.New("this branch requires pull requests to be merged via the merge queue")
+	ErrMergeQueueNotEnabled      = errors.New("merge queue is not enabled for this branch")
 )
 
 func markPullRequestStatusAsChecking(ctx context.Context, pr *issues_model.PullRequest) bool {
@@ -129,6 +131,7 @@ const (
 	MergeCheckTypeGeneral  MergeCheckType = iota // general merge checks for "merge", "rebase", "squash", etc
 	MergeCheckTypeManually                       // Manually Merged button (mark a PR as merged manually)
 	MergeCheckTypeAuto                           // Auto Merge (Scheduled Merge) After Checks Succeed
+	MergeCheckTypeQueue                          // entering (or already inside) the merge queue: own-head status checks and "up to date with base" are superseded by the queue's batch test
 )
 
 // CheckPullMergeable check if the pull mergeable based on all conditions (branch protection, merge options, ...)
@@ -175,7 +178,42 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 			return ErrIsChecking
 		}
 
-		if errProtection := CheckPullBranchProtections(ctx, pr, false); errProtection != nil {
+		if mergeCheckType == MergeCheckTypeQueue {
+			pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+			if err != nil {
+				return fmt.Errorf("GetFirstMatchProtectedBranchRule failed, repo: %v, base branch: %v, err: %w", pr.BaseRepoID, pr.BaseBranch, err)
+			}
+			if pb == nil || !pb.EnableMergeQueue {
+				return ErrMergeQueueNotEnabled
+			}
+		}
+
+		// A branch requiring the merge queue only offers "add to queue" (MergeCheckTypeQueue) or
+		// "mark merged manually" (already returned above) - a direct/immediate merge bypasses the
+		// queue's batch testing entirely and is rejected here, the same way GitHub's merge button
+		// becomes "Merge when ready" and nothing else once the queue is required. Admins retain the
+		// existing force-merge bypass.
+		if mergeCheckType == MergeCheckTypeGeneral {
+			pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+			if err != nil {
+				return fmt.Errorf("GetFirstMatchProtectedBranchRule failed, repo: %v, base branch: %v, err: %w", pr.BaseRepoID, pr.BaseBranch, err)
+			}
+			if pb != nil && pb.EnableMergeQueue {
+				canBypass := false
+				if forceMerge {
+					isRepoAdmin := access_model.IsUserRepoAdmin(ctx, pr.BaseRepo, doer)
+					canBypass = git_model.CanBypassBranchProtection(ctx, pb, doer, isRepoAdmin)
+				}
+				if !canBypass {
+					return ErrMustUseMergeQueue
+				}
+			}
+		}
+
+		// MergeCheckTypeQueue skips the "own head status checks" and "up to date with base" branch
+		// protection checks: the merge queue's batch test against a synthetic combined commit
+		// supersedes both, the same way GitHub only requires checks to pass on the merge-group commit.
+		if errProtection := CheckPullBranchProtections(ctx, pr, false, mergeCheckType == MergeCheckTypeQueue); errProtection != nil {
 			if !errors.Is(errProtection, ErrNotReadyToMerge) {
 				log.Error("Error whilst checking pull branch protection for %-v: %v", pr, errProtection)
 				return errProtection

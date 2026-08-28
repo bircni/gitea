@@ -40,6 +40,9 @@ const (
 	HookEventSchedule    HookEventType = "schedule"
 	HookEventWorkflowRun HookEventType = "workflow_run"
 	HookEventWorkflowJob HookEventType = "workflow_job"
+	// HookEventMergeGroup fires when a merge queue batch's synthetic combined commit is pushed,
+	// so workflows can opt in to running required checks against it (see services/mergequeue).
+	HookEventMergeGroup HookEventType = "merge_group"
 )
 
 func AllEvents() []HookEventType {

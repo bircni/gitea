@@ -428,3 +428,58 @@ func TestMatchIssuesEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchMergeGroupEvent(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		payload  *api.MergeGroupPayload
+		yamlOn   string
+		expected bool
+	}{
+		{
+			desc:     "no filters always match",
+			payload:  &api.MergeGroupPayload{BaseBranch: "main"},
+			yamlOn:   "on:\n  merge_group:",
+			expected: true,
+		},
+		{
+			desc:     "branches filter matches base branch",
+			payload:  &api.MergeGroupPayload{BaseBranch: "main"},
+			yamlOn:   "on:\n  merge_group:\n    branches: [main]",
+			expected: true,
+		},
+		{
+			desc:     "branches filter does not match a different base branch",
+			payload:  &api.MergeGroupPayload{BaseBranch: "release/v1"},
+			yamlOn:   "on:\n  merge_group:\n    branches: [main]",
+			expected: false,
+		},
+		{
+			desc:     "branches-ignore filter excludes the base branch",
+			payload:  &api.MergeGroupPayload{BaseBranch: "main"},
+			yamlOn:   "on:\n  merge_group:\n    branches-ignore: [main]",
+			expected: false,
+		},
+		{
+			desc:     "branches-ignore filter allows a different base branch",
+			payload:  &api.MergeGroupPayload{BaseBranch: "release/v1"},
+			yamlOn:   "on:\n  merge_group:\n    branches-ignore: [main]",
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			evts, err := GetEventsFromContent(fullWorkflowContent(tc.yamlOn))
+			assert.NoError(t, err)
+			assert.Len(t, evts, 1)
+			assert.Equal(t, tc.expected, matchMergeGroupEvent(tc.payload, evts[0]))
+		})
+	}
+}
+
+func TestShouldEventCreateCommitStatus(t *testing.T) {
+	assert.True(t, ShouldEventCreateCommitStatus(GithubEventMergeGroup))
+	assert.True(t, ShouldEventCreateCommitStatus("push"))
+	assert.False(t, ShouldEventCreateCommitStatus("workflow_dispatch"))
+}

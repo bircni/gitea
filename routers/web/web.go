@@ -1192,6 +1192,8 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 				Post(web.Bind[*forms.ProtectBranchForm](), context.RepoMustNotBeArchived(), repo_setting.SettingsProtectedBranchPost)
 			m.Post("/{id}/delete", repo_setting.DeleteProtectedBranchRulePost)
 			m.Post("/priority", context.RepoMustNotBeArchived(), repo_setting.UpdateBranchProtectionPriories)
+			m.Get("/queue", repo_setting.SettingsProtectedBranchQueue)
+			m.Post("/queue/{id}/remove", context.RepoMustNotBeArchived(), repo_setting.SettingsProtectedBranchQueueRemovePost)
 		})
 
 		m.Group("/tags", func() {

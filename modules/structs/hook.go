@@ -330,6 +330,29 @@ func (p *PushPayload) JSONPayload() ([]byte, error) {
 	return json.MarshalIndent(p, "", "  ")
 }
 
+// MergeGroupPayload contains the payload for a merge queue "merge_group" event: it fires when a
+// merge queue batch's synthetic combined commit is pushed, so that `on: merge_group` workflows can
+// run required checks against it before the real merge happens. See services/mergequeue.
+type MergeGroupPayload struct {
+	// The name of the base branch the merge queue batch targets
+	BaseBranch string `json:"base_branch"`
+	// The commit SHA of the base branch's tip that the batch was built on
+	BaseSHA string `json:"base_sha"`
+	// The synthetic combined commit SHA that required checks should run against
+	HeadSHA string `json:"head_sha"`
+	// The full ref name the synthetic commit was pushed to
+	Ref string `json:"ref"`
+	// The repository the merge queue batch belongs to
+	Repo *Repository `json:"repository"`
+	// The user who triggered the webhook
+	Sender *User `json:"sender"`
+}
+
+// JSONPayload implements Payloader
+func (p *MergeGroupPayload) JSONPayload() ([]byte, error) {
+	return json.MarshalIndent(p, "", "  ")
+}
+
 // ParsePushHook parses push event hook content.
 func ParsePushHook(raw []byte) (*PushPayload, error) {
 	hook := new(PushPayload)

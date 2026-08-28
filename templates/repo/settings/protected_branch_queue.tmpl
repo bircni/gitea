@@ -1,0 +1,49 @@
+{{template "repo/settings/layout_head" (dict "pageClass" "repository settings branches")}}
+	<div class="repo-setting-content">
+		<h4 class="ui top attached header">
+			{{ctx.Locale.Tr "repo.settings.protect_merge_queue"}} - {{.Rule.RuleName}}
+		</h4>
+		<div class="ui attached segment">
+			<table class="ui very basic table">
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>{{ctx.Locale.Tr "repo.pulls"}}</th>
+						<th>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status"}}</th>
+						<th>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_updated"}}</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					{{range .QueueEntries}}
+						<tr>
+							<td>{{.Entry.Position}}</td>
+							<td>
+								<a href="{{.Pull.Issue.Link}}">#{{.Pull.Issue.Index}} {{.Pull.Issue.Title}}</a>
+							</td>
+							<td>
+								{{if eq .Entry.Status 0}}{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status_queued"}}
+								{{else if eq .Entry.Status 1}}{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status_testing"}}
+								{{else if eq .Entry.Status 2}}{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status_succeeded"}}
+								{{else if eq .Entry.Status 3}}{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status_failed"}}
+								{{else}}{{ctx.Locale.Tr "repo.settings.protect_merge_queue_status_removed"}}
+								{{end}}
+								{{if .Entry.RemovalReason}}<p class="help">{{.Entry.RemovalReason}}</p>{{end}}
+							</td>
+							<td>{{DateUtils.TimeSince .Entry.UpdatedUnix}}</td>
+							<td>
+								{{if or (eq .Entry.Status 0) (eq .Entry.Status 1)}}
+									<form class="form-fetch-action" action="{{$.Repository.Link}}/settings/branches/queue/{{.Entry.ID}}/remove?rule_id={{$.Rule.ID}}" method="post">
+										<button class="ui red tiny button">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_remove"}}</button>
+									</form>
+								{{end}}
+							</td>
+						</tr>
+					{{else}}
+						<tr><td colspan="5">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_empty"}}</td></tr>
+					{{end}}
+				</tbody>
+			</table>
+		</div>
+	</div>
+{{template "repo/settings/layout_footer" .}}

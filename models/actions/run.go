@@ -237,6 +237,17 @@ func (run *ActionRun) GetWorkflowRunEventPayload() (*api.WorkflowRunPayload, err
 	return nil, fmt.Errorf("event %s is not a workflow run event", run.Event)
 }
 
+func (run *ActionRun) GetMergeGroupEventPayload() (*api.MergeGroupPayload, error) {
+	if run.Event == webhook_module.HookEventMergeGroup {
+		var payload api.MergeGroupPayload
+		if err := json.Unmarshal([]byte(run.EventPayload), &payload); err != nil {
+			return nil, err
+		}
+		return &payload, nil
+	}
+	return nil, fmt.Errorf("event %s is not a merge_group event", run.Event)
+}
+
 func (run *ActionRun) IsSchedule() bool {
 	return run.ScheduleID > 0
 }

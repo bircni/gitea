@@ -68,6 +68,12 @@ type ProtectedBranch struct {
 	UnprotectedFilePatterns       string   `xorm:"TEXT"`
 	BlockAdminMergeOverride       bool     `xorm:"NOT NULL DEFAULT false"`
 
+	EnableMergeQueue       bool   `xorm:"NOT NULL DEFAULT false"`
+	MergeQueueMinBatchSize int    `xorm:"NOT NULL DEFAULT 1"`
+	MergeQueueMaxBatchSize int    `xorm:"NOT NULL DEFAULT 1"`
+	MergeQueueWaitMinutes  int    `xorm:"NOT NULL DEFAULT 5"`
+	MergeQueueMergeStyle   string `xorm:"VARCHAR(30)"`
+
 	CreatedUnix timeutil.TimeStamp `xorm:"created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
 }

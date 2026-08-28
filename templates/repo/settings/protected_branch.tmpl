@@ -383,6 +383,50 @@
 						<p class="help">{{ctx.Locale.Tr "repo.settings.block_admin_merge_override_desc"}}</p>
 					</div>
 				</div>
+
+				<h5 class="ui dividing header">{{ctx.Locale.Tr "repo.settings.protect_merge_queue"}}</h5>
+				<div class="grouped fields">
+					<div class="field">
+						<div class="ui checkbox">
+							<input name="enable_merge_queue" type="checkbox" class="toggle-target-enabled" data-target="#merge_queue_box" {{if .Rule.EnableMergeQueue}}checked{{end}}>
+							<label>{{ctx.Locale.Tr "repo.settings.protect_enable_merge_queue"}}</label>
+							<p class="help">{{ctx.Locale.Tr "repo.settings.protect_enable_merge_queue_desc"}}</p>
+						</div>
+					</div>
+					<div id="merge_queue_box" class="grouped fields {{if not .Rule.EnableMergeQueue}}disabled{{end}}">
+						<div class="field">
+							<label>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_batch_size"}}</label>
+							<input name="merge_queue_min_batch_size" type="number" min="1" value="{{if .Rule.MergeQueueMinBatchSize}}{{.Rule.MergeQueueMinBatchSize}}{{else}}1{{end}}">
+							<p class="help">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_batch_size_desc"}}</p>
+						</div>
+						<div class="field">
+							<label>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_max_batch_size"}}</label>
+							<input name="merge_queue_max_batch_size" type="number" min="1" value="{{if .Rule.MergeQueueMaxBatchSize}}{{.Rule.MergeQueueMaxBatchSize}}{{else}}1{{end}}">
+							<p class="help">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_max_batch_size_desc"}}</p>
+						</div>
+						<div class="field">
+							<label>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_wait_minutes"}}</label>
+							<input name="merge_queue_wait_minutes" type="number" min="0" value="{{if .Rule.MergeQueueWaitMinutes}}{{.Rule.MergeQueueWaitMinutes}}{{else}}5{{end}}">
+							<p class="help">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_wait_minutes_desc"}}</p>
+						</div>
+						<div class="field">
+							<label>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_merge_style"}}</label>
+							<select name="merge_queue_merge_style" class="ui dropdown">
+								<option value="" {{if eq .Rule.MergeQueueMergeStyle ""}}selected{{end}}>{{ctx.Locale.Tr "repo.settings.protect_merge_queue_merge_style_default"}}</option>
+								<option value="merge" {{if eq .Rule.MergeQueueMergeStyle "merge"}}selected{{end}}>{{ctx.Locale.Tr "repo.pulls.merge_pull_request"}}</option>
+								<option value="rebase" {{if eq .Rule.MergeQueueMergeStyle "rebase"}}selected{{end}}>{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}</option>
+								<option value="rebase-merge" {{if eq .Rule.MergeQueueMergeStyle "rebase-merge"}}selected{{end}}>{{ctx.Locale.Tr "repo.pulls.rebase_merge_commit_pull_request"}}</option>
+								<option value="squash" {{if eq .Rule.MergeQueueMergeStyle "squash"}}selected{{end}}>{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</option>
+							</select>
+							<p class="help">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_merge_style_desc"}}</p>
+						</div>
+						{{if .Rule.ID}}
+							<div class="field">
+								<a class="ui basic button" href="{{$.Repository.Link}}/settings/branches/queue?rule_id={{.Rule.ID}}">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_view"}}</a>
+							</div>
+						{{end}}
+					</div>
+				</div>
 				<div class="divider"></div>
 
 				<div class="field">

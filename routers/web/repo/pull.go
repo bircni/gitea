@@ -47,6 +47,7 @@ import (
 	"gitea.dev/services/forms"
 	git_service "gitea.dev/services/git"
 	"gitea.dev/services/gitdiff"
+	"gitea.dev/services/mergequeue"
 	"gitea.dev/services/notifications"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
@@ -1052,9 +1053,25 @@ func MergePullRequest(ctx *context.Context) {
 
 	manuallyMerged := repo_model.MergeStyle(form.Do) == repo_model.MergeStyleManuallyMerged
 
+	// On a branch with the merge queue enabled, "merge when checks succeed" means "add to the merge
+	// queue" instead of scheduling classic single-PR auto-merge - matching GitHub's "Merge when ready"
+	// behavior, where the same button/API repurposes itself rather than running two competing mechanisms.
+	mergeQueueEnabled := false
+	if form.MergeWhenChecksSucceed {
+		var err error
+		mergeQueueEnabled, _, err = mergequeue.IsEnabledForBranch(ctx, pr.BaseRepoID, pr.BaseBranch)
+		if err != nil {
+			ctx.ServerError("IsEnabledForBranch", err)
+			return
+		}
+	}
+
 	mergeCheckType := pull_service.MergeCheckTypeGeneral
 	if form.MergeWhenChecksSucceed {
 		mergeCheckType = pull_service.MergeCheckTypeAuto
+		if mergeQueueEnabled {
+			mergeCheckType = pull_service.MergeCheckTypeQueue
+		}
 	}
 	if manuallyMerged {
 		mergeCheckType = pull_service.MergeCheckTypeManually
@@ -1079,6 +1096,10 @@ func MergePullRequest(ctx *context.Context) {
 			ctx.JSONError(ctx.Tr("repo.pulls.no_merge_not_ready"))
 		case errors.Is(err, pull_service.ErrNotReadyToMerge):
 			ctx.JSONError(ctx.Tr("repo.pulls.no_merge_not_ready"))
+		case errors.Is(err, pull_service.ErrMustUseMergeQueue):
+			ctx.JSONError(ctx.Tr("repo.pulls.must_use_merge_queue"))
+		case errors.Is(err, pull_service.ErrMergeQueueNotEnabled):
+			ctx.JSONError(ctx.Tr("repo.pulls.merge_queue_not_enabled"))
 		case asymkey_service.IsErrWontSign(err):
 			ctx.JSONError(err.Error()) // has no translation ...
 		case errors.Is(err, pull_service.ErrHeadCommitsNotAllVerified):
@@ -1131,6 +1152,24 @@ func MergePullRequest(ctx *context.Context) {
 	deleteBranchAfterMerge := optional.FromPtr(form.DeleteBranchAfterMerge).Value()
 
 	if form.MergeWhenChecksSucceed {
+		if mergeQueueEnabled {
+			if err := mergequeue.EnqueuePullRequest(ctx, ctx.Doer, pr, mergequeue.EnqueuePullRequestOptions{
+				MergeStyle:             repo_model.MergeStyle(form.Do),
+				Message:                message,
+				DeleteBranchAfterMerge: deleteBranchAfterMerge,
+			}); err != nil {
+				if pull_model.IsErrAlreadyInMergeQueue(err) {
+					ctx.JSONError(ctx.Tr("repo.pulls.auto_merge_newly_scheduled"))
+					return
+				}
+				ctx.ServerError("EnqueuePullRequest", err)
+				return
+			}
+			ctx.Flash.Success(ctx.Tr("repo.pulls.auto_merge_newly_scheduled"))
+			ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d", ctx.Repo.RepoLink, pr.Index))
+			return
+		}
+
 		// delete all scheduled auto merges
 		_ = pull_model.DeleteScheduledAutoMerge(ctx, pr.ID)
 		// schedule auto merge
@@ -1258,7 +1297,38 @@ func CancelAutoMergePullRequest(ctx *context.Context) {
 		return
 	}
 	if !exist {
-		ctx.NotFound(nil)
+		// the PR may instead have an active merge queue entry (auto-merge is repurposed into
+		// "add to queue" on queue-enabled branches, see MergePullRequest)
+		queueExists, queueEntry, err := pull_model.GetActiveMergeQueueEntryByPullID(ctx, issue.PullRequest.ID)
+		if err != nil {
+			ctx.ServerError("GetActiveMergeQueueEntryByPullID", err)
+			return
+		}
+		if !queueExists {
+			ctx.NotFound(nil)
+			return
+		}
+		if ctx.Doer.ID != queueEntry.EnqueuedByID {
+			allowed, err := pull_service.IsUserAllowedToMerge(ctx, issue.PullRequest, ctx.Repo.Permission, ctx.Doer)
+			if err != nil {
+				ctx.ServerError("IsUserAllowedToMerge", err)
+				return
+			}
+			if !allowed {
+				ctx.HTTPError(http.StatusForbidden, "user has no permission to remove the pull request from the merge queue")
+				return
+			}
+		}
+		if err := mergequeue.RemoveFromMergeQueue(ctx, ctx.Doer, issue.PullRequest); err != nil {
+			if errors.Is(err, pull_service.ErrNoPermissionToMerge) {
+				ctx.HTTPError(http.StatusForbidden, "user has no permission to remove the pull request from the merge queue")
+				return
+			}
+			ctx.ServerError("RemoveFromMergeQueue", err)
+			return
+		}
+		ctx.Flash.Success(ctx.Tr("repo.pulls.auto_merge_canceled_schedule"))
+		ctx.Redirect(fmt.Sprintf("%s/pulls/%d", ctx.Repo.RepoLink, issue.Index))
 		return
 	}
 

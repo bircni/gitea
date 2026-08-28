@@ -46,9 +46,15 @@
 							<div class="item-main">
 								<div class="item-title">
 									<div class="ui basic primary label">{{.RuleName}}</div>
+									{{if .EnableMergeQueue}}
+										<div class="ui basic teal label">{{ctx.Locale.Tr "repo.settings.protect_merge_queue"}}</div>
+									{{end}}
 								</div>
 							</div>
 							<div class="item-trailing">
+								{{if .EnableMergeQueue}}
+									<a class="ui tiny button" href="{{$.Repository.Link}}/settings/branches/queue?rule_id={{.ID}}">{{ctx.Locale.Tr "repo.settings.protect_merge_queue_view"}}</a>
+								{{end}}
 								<a class="ui tiny button" href="{{$.Repository.Link}}/settings/branches/edit?rule_name={{.RuleName}}">{{ctx.Locale.Tr "repo.settings.edit_protected_branch"}}</a>
 								<button class="ui red tiny button link-action" data-modal-confirm="#repo-branch-protection-delete-modal" data-url="{{$.Repository.Link}}/settings/branches/{{.ID}}/delete?id={{.ID}}">
 									{{ctx.Locale.Tr "repo.settings.protected_branch.delete_rule"}}

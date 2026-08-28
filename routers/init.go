@@ -43,6 +43,7 @@ import (
 	"gitea.dev/services/mailer"
 	mailer_incoming "gitea.dev/services/mailer/incoming"
 	markup_service "gitea.dev/services/markup"
+	"gitea.dev/services/mergequeue"
 	repo_migrations "gitea.dev/services/migrations"
 	mirror_service "gitea.dev/services/mirror"
 	"gitea.dev/services/oauth2_provider"
@@ -153,6 +154,7 @@ func InitWebInstalled(ctx context.Context) {
 	mustInit(webhook.Init)
 	mustInit(pull_service.Init)
 	mustInit(automerge.Init)
+	mustInit(mergequeue.Init)
 	mustInit(task.Init)
 	mustInit(repo_migrations.Init)
 	mustInit(websocket_service.Init)

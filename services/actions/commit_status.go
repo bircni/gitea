@@ -146,6 +146,16 @@ func getCommitStatusEventNameAndCommitID(run *actions_model.ActionRun) (event, c
 	case webhook_module.HookEventRelease:
 		event = string(run.Event)
 		commitID = run.CommitSHA
+	case webhook_module.HookEventMergeGroup:
+		event = actions_module.GithubEventMergeGroup
+		payload, err := run.GetMergeGroupEventPayload()
+		if err != nil {
+			return "", "", fmt.Errorf("GetMergeGroupEventPayload: %w", err)
+		}
+		if payload.HeadSHA == "" {
+			return "", "", errors.New("head sha is missing in merge_group event payload")
+		}
+		commitID = payload.HeadSHA
 	default: // do nothing, return empty
 	}
 	return event, commitID, nil
@@ -219,6 +229,10 @@ func CreateSkippedCommitStatusForFilteredWorkflow(ctx context.Context, repo *rep
 			if triggerEvent == actions_module.GithubEventPullRequestTarget {
 				statusEvent = "pull_request_target"
 			}
+		}
+	case webhook_module.HookEventMergeGroup:
+		if p, ok := payload.(*api.MergeGroupPayload); ok && p.HeadSHA != "" {
+			statusEvent, commitID = actions_module.GithubEventMergeGroup, p.HeadSHA
 		}
 	}
 	if statusEvent == "" || commitID == "" {

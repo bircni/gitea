@@ -23,6 +23,9 @@ const (
 	GithubEventPullRequestComment       = "pull_request_comment"
 	GithubEventGollum                   = "gollum"
 	GithubEventSchedule                 = "schedule"
+	// GithubEventMergeGroup fires for a merge queue batch's synthetic combined commit, mirroring
+	// GitHub's own "merge_group" event. See services/mergequeue.
+	GithubEventMergeGroup = "merge_group"
 )
 
 // IsDefaultBranchWorkflow returns true if the event only triggers workflows on the default branch

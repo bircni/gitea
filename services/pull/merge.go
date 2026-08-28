@@ -591,8 +591,11 @@ func isUserAllowedToMergeInRepoBranch(ctx context.Context, repoID int64, branch 
 	return false, nil
 }
 
-// CheckPullBranchProtections checks whether the PR is ready to be merged (reviews and status checks)
-func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullRequest, skipProtectedFilesCheck bool) (err error) {
+// CheckPullBranchProtections checks whether the PR is ready to be merged (reviews and status checks).
+// skipQueueSupersededChecks skips the checks that a merge queue batch test supersedes: the PR's own
+// head status checks (the queue tests a combined commit instead) and "up to date with base" (the
+// queue's synthetic rebuild onto the current tip is itself the up-to-date guarantee).
+func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullRequest, skipProtectedFilesCheck, skipQueueSupersededChecks bool) (err error) {
 	if err = pr.LoadBaseRepo(ctx); err != nil {
 		return fmt.Errorf("LoadBaseRepo: %w", err)
 	}
@@ -605,12 +608,14 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return nil
 	}
 
-	isPass, err := IsPullCommitStatusPass(ctx, pr)
-	if err != nil {
-		return err
-	}
-	if !isPass {
-		return util.ErrorWrap(ErrNotReadyToMerge, "Not all required status checks successful")
+	if !skipQueueSupersededChecks {
+		isPass, err := IsPullCommitStatusPass(ctx, pr)
+		if err != nil {
+			return err
+		}
+		if !isPass {
+			return util.ErrorWrap(ErrNotReadyToMerge, "Not all required status checks successful")
+		}
 	}
 
 	if !issues_model.HasEnoughApprovals(ctx, pb, pr) {
@@ -623,7 +628,7 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return util.ErrorWrap(ErrNotReadyToMerge, "There are official review requests")
 	}
 
-	if issues_model.MergeBlockedByOutdatedBranch(pb, pr) {
+	if !skipQueueSupersededChecks && issues_model.MergeBlockedByOutdatedBranch(pb, pr) {
 		return util.ErrorWrap(ErrNotReadyToMerge, "The head branch is behind the base branch")
 	}
 
