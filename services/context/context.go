@@ -211,14 +211,9 @@ func (ctx *Context) DoerNeedTwoFactorAuth() bool {
 	return ctx.Session.Get(session.KeyUserHasTwoFactorAuth) == false
 }
 
-// DoerIsAddingAccount returns true if the doer is signing in an additional account for this session.
-// The marker stores the initiating uid so it stops applying as soon as the active account changes.
+// DoerIsAddingAccount returns true if the doer is signing in an additional account for this session
 func (ctx *Context) DoerIsAddingAccount() bool {
-	if ctx.Doer == nil || ctx.Session == nil {
-		return false
-	}
-	uid, ok := ctx.Session.Get(session.KeyAddingAccountFor).(int64)
-	return ok && uid == ctx.Doer.ID
+	return ctx.Doer != nil && ctx.Session != nil && session.AddingAccountFor(ctx.Session) == ctx.Doer.ID
 }
 
 // HasError returns true if error occurs in form validation.

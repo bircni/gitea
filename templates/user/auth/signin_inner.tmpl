@@ -10,9 +10,9 @@
 	{{end}}
 	{{if .RememberedAccounts}}
 	<h4 class="ui top attached header center">{{ctx.Locale.Tr "auth.remembered_accounts"}}</h4>
-	<div class="ui attached segment remembered-accounts">
+	<div class="ui attached segment tw-flex tw-flex-col tw-gap-2">
 		{{range .RememberedAccounts}}
-		<button type="button" class="ui basic button link-action" data-url="{{AppSubUrl}}/user/login/remembered/{{.ID}}">
+		<button type="button" class="ui basic button link-action tw-justify-start" data-url="{{AppSubUrl}}/user/login/remembered/{{.ID}}">
 			{{ctx.AvatarUtils.Avatar . 24}}
 			{{.Name}}
 		</button>

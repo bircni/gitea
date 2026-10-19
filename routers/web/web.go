@@ -166,8 +166,12 @@ func newWebAuthMiddleware() *AuthMiddleware {
 		ctx.IsSigned = ar.Doer != nil
 		ctx.IsBasicAuth = ar.IsBasicAuth
 		if ctx.Doer == nil {
+			if auth.SwitchFromGoneAccount(ctx) {
+				return
+			}
 			// ensure the session uid is deleted
 			_ = ctx.Session.Delete(session.KeyUID)
+			_ = ctx.Session.Delete(session.KeySignedInAccounts)
 		}
 	}
 	return webAuth
@@ -210,14 +214,13 @@ func verifyAuthWithOptionsWeb(options *common.VerifyOptions) func(ctx *context.C
 			}
 		}
 
-		// When a signed-in user visits a page that requires sign-out (e.g.: "/user/login"), redirect to home (or alternate location),
-		// unless they are deliberately signing in an additional account for this session
+		// When a signed-in user visits a page that requires sign-out (e.g.: "/user/login"), redirect to home (or alternate location)
 		if options.SignOutRequired && ctx.IsSigned && !ctx.DoerIsAddingAccount() && ctx.Req.URL.RequestURI() != "/" {
 			ctx.RedirectToCurrentSite(ctx.FormString("redirect_to"))
 			return
 		}
 
-		if !options.SignOutRequired && !options.DisableCrossOriginProtection {
+		if (!options.SignOutRequired || ctx.IsSigned) && !options.DisableCrossOriginProtection { // signed in on a sign-out route only while adding an account
 			if err := crossOriginProtection.Check(ctx.Req); err != nil {
 				http.Error(ctx.Resp, err.Error(), http.StatusForbidden)
 				return
@@ -229,10 +232,12 @@ func verifyAuthWithOptionsWeb(options *common.VerifyOptions) func(ctx *context.C
 			return
 		}
 
-		// Redirect to log in page if auto-signin info is provided and has not signed in.
-		if !options.SignOutRequired && !ctx.IsSigned && ctx.GetSiteCookie(setting.CookieRememberName) != "" {
-			ctx.Redirect(middleware.RedirectLinkUserLogin(ctx.Req))
-			return
+		// Redirect to log in page if auto-signin info is provided and has not signed in, unless it only offers a choice of accounts which was offered already.
+		if !options.SignOutRequired && !ctx.IsSigned {
+			if cookie := ctx.GetSiteCookie(setting.CookieRememberName); cookie != "" && (!strings.Contains(cookie, ",") || ctx.Session.Get(session.KeyRememberedAccountsOffered) == nil) {
+				ctx.Redirect(middleware.RedirectLinkUserLogin(ctx.Req))
+				return
+			}
 		}
 
 		if options.AdminRequired {
@@ -572,7 +577,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 	m.Get("/user/login", auth.SignIn)
 	m.Group("/user", func() {
 		m.Post("/login", web.Bind[*forms.SignInForm](), auth.SignInPost)
-		m.Post("/login/remembered/{uid}", auth.SignInRemembered)
+		m.Post("/login/remembered/{uid}", crossOriginProtect, auth.SignInRemembered) // sign-out routes skip the check, but this one swaps identities
 		m.Group("", func() {
 			m.Combo("/login/openid").
 				Get(auth.SignInOpenID).

@@ -170,8 +170,8 @@ func oauth2LinkAccount(ctx *context.Context, u *user_model.User, linkAccountData
 	}
 
 	handleTwoFactorRequired(ctx, u, remember, map[string]any{
-		"linkAccount":           true,
-		session.KeySignInMethod: session.SignInMethodOAuth2,
+		"linkAccount":       true,
+		"twofaSignInMethod": session.SignInMethodOAuth2,
 	})
 }
 

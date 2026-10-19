@@ -13,6 +13,7 @@ import (
 	"time"
 
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/container"
 	"gitea.dev/modules/httplib"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/public"
@@ -78,36 +79,24 @@ func (c TemplateContext) ImpersonatedUser() *user_model.User {
 }
 
 // OtherSignedInAccounts returns the other accounts authenticated in this session, most recent first.
-// It is a template method so the lookup only runs when an HTML page actually renders it.
 func (c TemplateContext) OtherSignedInAccounts() []*user_model.User {
 	webCtx := GetWebContext(c)
-	if webCtx == nil || webCtx.Doer == nil || IsDoerSessionImpersonated(webCtx.Session) {
+	if webCtx == nil || webCtx.Doer == nil {
 		return nil
 	}
 	accounts := session.GetSignedInAccounts(webCtx.Session)
 	if len(accounts) <= 1 {
 		return nil
 	}
-	ids := make([]int64, 0, len(accounts)-1)
-	for _, acc := range accounts {
-		if acc.UID != webCtx.Doer.ID {
-			ids = append(ids, acc.UID)
-		}
-	}
-	users, err := user_model.GetUsersByIDs(c, ids)
+	ids := container.FilterSlice(accounts, func(acc session.SignedInAccount) (int64, bool) { return acc.UID, acc.UID != webCtx.Doer.ID })
+	users, err := user_model.GetUsersMapByIDs(c, ids)
 	if err != nil {
-		log.Error("Unable to load signed-in accounts: %v", err)
+		log.Error("GetUsersMapByIDs: %v", err)
 		return nil
 	}
-	byID := make(map[int64]*user_model.User, len(users))
-	for _, u := range users {
-		if u.IsActive && !u.ProhibitLogin && !u.MustChangePassword {
-			byID[u.ID] = u
-		}
-	}
 	ret := make([]*user_model.User, 0, len(ids))
-	for _, id := range ids { // GetUsersByIDs sorts by name, restore the session order
-		if u, ok := byID[id]; ok {
+	for _, id := range ids {
+		if u, ok := users[id]; ok && CanUseSignedInAccount(u) {
 			ret = append(ret, u)
 		}
 	}

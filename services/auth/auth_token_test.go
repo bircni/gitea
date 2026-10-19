@@ -139,10 +139,10 @@ func TestCheckAuthTokens(t *testing.T) {
 		at, value := newToken(t, 2)
 		defer func() { assert.NoError(t, auth_model.DeleteAuthTokenByID(t.Context(), at.ID)) }()
 
-		checked, err := CheckAuthTokens(t.Context(), value)
+		valid, compromised, err := CheckAuthTokens(t.Context(), value)
 		assert.NoError(t, err)
-		assert.False(t, checked.Compromised)
-		assert.Len(t, checked.Valid, 1)
+		assert.False(t, compromised)
+		assert.Len(t, valid, 1)
 	})
 
 	t.Run("KeepsSurvivors", func(t *testing.T) {
@@ -153,10 +153,10 @@ func TestCheckAuthTokens(t *testing.T) {
 			assert.NoError(t, auth_model.DeleteAuthTokenByID(t.Context(), at2.ID))
 		}()
 
-		checked, err := CheckAuthTokens(t.Context(), value1+",notexists:dummy,"+value2)
+		valid, compromised, err := CheckAuthTokens(t.Context(), value1+",notexists:dummy,"+value2)
 		assert.NoError(t, err)
-		assert.False(t, checked.Compromised)
-		assert.Len(t, checked.Valid, 2)
+		assert.False(t, compromised)
+		assert.Len(t, valid, 2)
 	})
 
 	t.Run("CompromisedDoesNotDropOthers", func(t *testing.T) {
@@ -164,11 +164,11 @@ func TestCheckAuthTokens(t *testing.T) {
 		at2, _ := newToken(t, 4)
 		defer func() { assert.NoError(t, auth_model.DeleteAuthTokenByID(t.Context(), at1.ID)) }()
 
-		checked, err := CheckAuthTokens(t.Context(), at2.ID+":"+hex.EncodeToString([]byte("wrong"))+","+value1)
+		valid, compromised, err := CheckAuthTokens(t.Context(), at2.ID+":"+hex.EncodeToString([]byte("wrong"))+","+value1)
 		assert.NoError(t, err)
-		assert.True(t, checked.Compromised)
-		assert.Len(t, checked.Valid, 1)
-		assert.Equal(t, at1.ID, checked.Valid[0].ID)
+		assert.True(t, compromised)
+		assert.Len(t, valid, 1)
+		assert.Equal(t, at1.ID, valid[0].ID)
 
 		// a mismatching hash revokes the token it was presented for
 		_, err = auth_model.GetAuthTokenByID(t.Context(), at2.ID)

@@ -58,13 +58,13 @@ func SignInOAuth(ctx *context.Context) {
 
 	oauth2Source := auth.MustSourceCfg[*oauth2.Source](authSource)
 
-	if err = oauth2Source.Callout(ctx.Req, ctx.Resp); err != nil {
+	if err = oauth2Source.Callout(ctx.Req, ctx.Resp, ctx.DoerIsAddingAccount()); err != nil {
 		if strings.Contains(err.Error(), "no provider for ") {
 			if err = oauth2.ResetOAuth2(ctx); err != nil {
 				ctx.ServerError("SignIn", err)
 				return
 			}
-			if err = oauth2Source.Callout(ctx.Req, ctx.Resp); err != nil {
+			if err = oauth2Source.Callout(ctx.Req, ctx.Resp, ctx.DoerIsAddingAccount()); err != nil {
 				ctx.ServerError("SignIn", err)
 			}
 			return
@@ -131,7 +131,7 @@ func SignInOAuthCallback(ctx *context.Context) {
 	}
 
 	if u == nil {
-		if ctx.Doer != nil {
+		if ctx.Doer != nil && !ctx.DoerIsAddingAccount() { // while adding, the identity belongs to the new account
 			// attach user to the current signed-in user
 			err = externalaccount.LinkAccountToUser(ctx, authSource.ID, ctx.Doer, gothUser)
 			if err != nil {
@@ -443,7 +443,7 @@ func handleOAuth2SignIn(ctx *context.Context, authSource *auth.Source, u *user_m
 		}
 	}
 
-	handleTwoFactorRequired(ctx, u, false, map[string]any{session.KeySignInMethod: session.SignInMethodOAuth2})
+	handleTwoFactorRequired(ctx, u, false, map[string]any{"twofaSignInMethod": session.SignInMethodOAuth2})
 }
 
 // OAuth2UserLoginCallback attempts to handle the callback from the OAuth2 provider and if successful

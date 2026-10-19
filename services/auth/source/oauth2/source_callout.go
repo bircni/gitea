@@ -5,13 +5,14 @@ package oauth2
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 )
 
-// Callout redirects request/response pair to authenticate against the provider
-func (source *Source) Callout(request *http.Request, response http.ResponseWriter) error {
+// Callout redirects request/response pair to authenticate against the provider, selectAccount asks it for an account picker
+func (source *Source) Callout(request *http.Request, response http.ResponseWriter, selectAccount bool) error {
 	// not sure if goth is thread safe (?) when using multiple providers
 	request.Header.Set(ProviderHeaderKey, source.AuthSource.Name)
 
@@ -22,11 +23,22 @@ func (source *Source) Callout(request *http.Request, response http.ResponseWrite
 	gothRWMutex.RLock()
 	defer gothRWMutex.RUnlock()
 
-	url, err := gothic.GetAuthURL(response, request)
-	if err == nil {
-		http.Redirect(response, request, url, http.StatusTemporaryRedirect)
+	authURL, err := gothic.GetAuthURL(response, request)
+	if err != nil {
+		return err
 	}
-	return err
+	if selectAccount {
+		u, err := url.Parse(authURL)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		q.Set("prompt", "select_account") // OIDC standard, other providers ignore unknown parameters
+		u.RawQuery = q.Encode()
+		authURL = u.String()
+	}
+	http.Redirect(response, request, authURL, http.StatusTemporaryRedirect)
+	return nil
 }
 
 // Callback handles OAuth callback, resolve to a goth user and send back to original url

@@ -67,6 +67,7 @@ func ClearSessionKeysForSignIn(sess SessionStore) {
 	_ = sess.Delete("openid_determined_username")
 	_ = sess.Delete("twofaUid")
 	_ = sess.Delete("twofaRemember")
+	_ = sess.Delete("twofaSignInMethod")
 	_ = sess.Delete("webauthnAssertion")
 	_ = sess.Delete("linkAccount")
 	_ = sess.Delete("linkAccountData")

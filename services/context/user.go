@@ -68,3 +68,8 @@ func userAssignment(ctx *Base, doer *user_model.User, errCb func(int, string)) (
 func IsDoerSessionImpersonated(sess session.Store) bool {
 	return sess.Get(session.KeyImpersonatorData) != nil
 }
+
+// CanUseSignedInAccount reports whether a remembered or previously added account may become the active one
+func CanUseSignedInAccount(u *user_model.User) bool {
+	return u.IsActive && !u.ProhibitLogin && u.IsIndividual()
+}

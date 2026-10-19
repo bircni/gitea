@@ -26,13 +26,13 @@ function initHeadNavbarContentToggle() {
 function initUserMenuPanes() {
   const menu = document.querySelector('#navbar .user-menu');
   if (!menu) return;
+  const dropdown = menu.closest('.ui.dropdown')!;
+  dropdown.addEventListener('click', () => { // capture runs before fomantic opens the menu, so it always opens on the main pane
+    if (fomanticQuery(dropdown).dropdown('is hidden')) menu.classList.remove('switching');
+  }, {capture: true});
   addDelegatedEventListener(menu, 'click', '.user-menu-pane-switch', (el, e) => {
-    e.preventDefault();
     e.stopPropagation(); // otherwise fomantic closes the whole dropdown
-    const target = el.getAttribute('data-user-menu-target');
-    for (const pane of queryElems<HTMLElement>(menu, ':scope > [data-user-menu-pane]')) {
-      pane.hidden = pane.getAttribute('data-user-menu-pane') !== target;
-    }
+    menu.classList.toggle('switching', el.getAttribute('data-user-menu-target') === 'switch');
   });
 }
 

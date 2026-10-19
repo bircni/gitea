@@ -12,6 +12,7 @@ import (
 	"time"
 
 	auth_model "gitea.dev/models/auth"
+	"gitea.dev/modules/session"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/modules/util"
@@ -68,34 +69,29 @@ func CheckAuthToken(ctx context.Context, value string) (*auth_model.AuthToken, e
 	return t, nil
 }
 
-// CheckedAuthTokens is the result of validating a remember-me cookie holding several tokens.
-type CheckedAuthTokens struct {
-	Valid       []*auth_model.AuthToken
-	Compromised bool
-}
-
 // CheckAuthTokens validates a comma separated list of tokens, keeping the usable ones.
-// A single-token value written before multi-account support parses as a one element list.
-func CheckAuthTokens(ctx context.Context, value string) (CheckedAuthTokens, error) {
-	var ret CheckedAuthTokens
-	if value == "" {
-		return ret, nil
-	}
-	for part := range strings.SplitSeq(value, ",") {
+// It returns ErrAuthTokenStale when a concurrent request is rewriting the cookie, the caller must leave it alone then.
+func CheckAuthTokens(ctx context.Context, value string) (valid []*auth_model.AuthToken, compromised bool, err error) {
+	stale := false
+	parts := strings.SplitN(value, ",", session.MaxSignedInAccounts+1)
+	for _, part := range parts[:min(len(parts), session.MaxSignedInAccounts)] { // never written longer, don't query a crafted one
 		t, err := CheckAuthToken(ctx, part)
 		switch {
 		case errors.Is(err, ErrAuthTokenInvalidHash):
-			ret.Compromised = true // the row is already revoked, but the other accounts stay usable
+			compromised = true // the row is already revoked, but the other accounts stay usable
 		case errors.Is(err, ErrAuthTokenStale):
-			return ret, err // a concurrent request is rewriting the cookie, acting on this one would undo it
+			stale = true // keep checking, so a compromised token is still reported
 		case errors.Is(err, ErrAuthTokenInvalidFormat), errors.Is(err, ErrAuthTokenExpired):
 		case err != nil:
-			return ret, err
-		case t != nil:
-			ret.Valid = append(ret.Valid, t)
+			return nil, false, err
+		default:
+			valid = append(valid, t)
 		}
 	}
-	return ret, nil
+	if stale {
+		return nil, compromised, ErrAuthTokenStale
+	}
+	return valid, compromised, nil
 }
 
 func RegenerateAuthToken(ctx context.Context, t *auth_model.AuthToken) (*auth_model.AuthToken, string, error) {

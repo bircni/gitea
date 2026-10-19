@@ -16,9 +16,10 @@ const (
 
 	SignInMethodOAuth2 = "oauth2"
 
-	// KeySignedInAccounts holds the JSON-encoded list of accounts authenticated in this session.
 	KeySignedInAccounts = "signedInAccounts"
 
-	// KeyAddingAccountFor holds the uid which started an "add another account" flow.
 	KeyAddingAccountFor = "addingAccountFor"
+
+	// KeyRememberedAccountsOffered stops anonymous pages from redirecting to a sign-in page which can't auto sign in.
+	KeyRememberedAccountsOffered = "rememberedAccountsOffered"
 )

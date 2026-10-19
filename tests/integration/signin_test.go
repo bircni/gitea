@@ -20,11 +20,12 @@ import (
 	"gitea.dev/modules/web/middleware"
 	"gitea.dev/routers"
 	"gitea.dev/routers/web/auth"
+	"gitea.dev/services/auth/source/oauth2"
 	"gitea.dev/services/context"
 	"gitea.dev/tests"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -217,16 +218,19 @@ func assertSignedInAs(t *testing.T, session *TestSession, name string) {
 	t.Helper()
 	req := NewRequest(t, "GET", "/")
 	resp := session.MakeRequest(t, req, http.StatusOK)
-	got, _ := NewHTMLParser(t, resp.Body).doc.Find("[data-signed-in-username]").Attr("data-signed-in-username")
-	assert.Equal(t, name, got)
+	assert.Equal(t, name, NewHTMLParser(t, resp.Body).Find("[data-signed-in-username]").AttrOr("data-signed-in-username", ""))
 }
 
-func addAccount(t *testing.T, session *TestSession, name string) {
+func loginUserRemembered(t *testing.T, name string) *TestSession {
 	t.Helper()
-	addAccountRemember(t, session, name, false)
+	session := emptyTestSession(t)
+	session.MakeRequest(t, NewRequestWithValues(t, "POST", "/user/login", map[string]string{
+		"user_name": name, "password": userPassword, "remember": "on",
+	}), http.StatusSeeOther)
+	return session
 }
 
-func addAccountRemember(t *testing.T, session *TestSession, name string, remember bool) {
+func addAccount(t *testing.T, session *TestSession, name string, remember bool) {
 	t.Helper()
 	session.MakeRequest(t, NewRequest(t, "POST", "/user/accounts/add"), http.StatusOK)
 	session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
@@ -245,7 +249,7 @@ func TestMultiAccountSignIn(t *testing.T) {
 
 	t.Run("AddAndSwitch", func(t *testing.T) {
 		session := loginUser(t, "user2")
-		addAccount(t, session, "user4")
+		addAccount(t, session, "user4", false)
 		assertSignedInAs(t, session, "user4")
 
 		req := NewRequestf(t, "POST", "/user/accounts/switch/%d", user2.ID)
@@ -261,7 +265,7 @@ func TestMultiAccountSignIn(t *testing.T) {
 
 	t.Run("SwitchRejectsProhibitedUser", func(t *testing.T) {
 		session := loginUser(t, "user2")
-		addAccount(t, session, "user4")
+		addAccount(t, session, "user4", false)
 
 		defer func() {
 			require.NoError(t, user_model.UpdateUserCols(t.Context(), &user_model.User{ID: user2.ID, ProhibitLogin: false}, "prohibit_login"))
@@ -275,6 +279,41 @@ func TestMultiAccountSignIn(t *testing.T) {
 		// the unusable account is pruned, so a second attempt is rejected outright
 		session.MakeRequest(t, NewRequestf(t, "POST", "/user/accounts/switch/%d", user2.ID), http.StatusBadRequest)
 	})
+
+	t.Run("AddViaOAuth2DoesNotLinkToCurrentAccount", func(t *testing.T) {
+		mockServer := createOAuth2MockProvider()
+		defer mockServer.Close()
+		addOAuth2Source(t, "test-add-account-source", oauth2.Source{
+			Provider:                      "openidConnect",
+			ClientID:                      "test-client-id",
+			OpenIDConnectAutoDiscoveryURL: mockServer.URL + "/.well-known/openid-configuration",
+		})
+		defer test.MockVariableValue(&setting.OAuth2Client.Username, "")()
+		defer test.MockVariableValue(&setting.OAuth2Client.EnableAutoRegistration, true)()
+
+		session := loginUser(t, "user2")
+		session.MakeRequest(t, NewRequest(t, "POST", "/user/accounts/add"), http.StatusOK)
+
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/user/oauth2/test-add-account-source"), http.StatusTemporaryRedirect)
+		assert.Contains(t, resp.Header().Get("Location"), "prompt=select_account")
+
+		defer test.MockVariableValue(&gothic.CompleteUserAuth, func(http.ResponseWriter, *http.Request) (goth.User, error) {
+			return goth.User{Provider: "openidConnect", UserID: "add-account-userid", Email: "add-account@example.com"}, nil
+		})()
+		session.MakeRequest(t, NewRequest(t, "GET", "/user/oauth2/test-add-account-source/callback?code=XYZ&state=XYZ"), http.StatusSeeOther)
+
+		unittest.AssertCount(t, &user_model.ExternalLoginUser{UserID: user2.ID}, 0)
+		assertSignedInAs(t, session, "add-account-userid")
+	})
+
+	t.Run("ReverseProxyCannotAddOrSwitch", func(t *testing.T) {
+		defer test.MockVariableValue(&setting.Service.EnableReverseProxyAuth, true)()
+		session := emptyTestSession(t)
+		for _, req := range []*RequestWrapper{NewRequest(t, "POST", "/user/accounts/add"), NewRequestf(t, "POST", "/user/accounts/switch/%d", user4.ID)} {
+			req.Header.Set(setting.ReverseProxyAuthUser, "user2")
+			session.MakeRequest(t, req, http.StatusForbidden)
+		}
+	})
 }
 
 func TestSignInRemembered(t *testing.T) {
@@ -284,31 +323,20 @@ func TestSignInRemembered(t *testing.T) {
 	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user4"})
 
 	// remember two accounts on one device
-	session := emptyTestSession(t)
-	session.MakeRequest(t, NewRequestWithValues(t, "POST", "/user/login", map[string]string{
-		"user_name": "user2", "password": userPassword, "remember": "on",
-	}), http.StatusSeeOther)
-	addAccountRemember(t, session, "user4", true)
+	session := loginUserRemembered(t, "user2")
+	addAccount(t, session, "user4", true)
 
 	// drop the session but keep the remember-me cookie, as closing the browser would
 	remembered := emptyTestSession(t)
 	baseURL, err := url.Parse(setting.AppURL)
 	require.NoError(t, err)
-	remembered.jar.SetCookies(baseURL, []*http.Cookie{{
-		Name:  setting.CookieRememberName,
-		Value: session.GetRawCookie(setting.CookieRememberName).Value,
-	}})
+	remembered.jar.SetCookies(baseURL, []*http.Cookie{session.GetRawCookie(setting.CookieRememberName)})
 	session = remembered
 
 	t.Run("OffersBothAccounts", func(t *testing.T) {
 		resp := session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		var uids []string
-		htmlDoc.doc.Find("[data-url*='/user/login/remembered/']").Each(func(_ int, s *goquery.Selection) {
-			url, _ := s.Attr("data-url")
-			uids = append(uids, url)
-		})
-		assert.Len(t, uids, 2, "both remembered accounts should be offered instead of auto-login")
+		assert.Equal(t, 2, htmlDoc.doc.Find("[data-url*='/user/login/remembered/']").Length())
 	})
 
 	t.Run("SignsInWithoutPassword", func(t *testing.T) {
@@ -316,9 +344,15 @@ func TestSignInRemembered(t *testing.T) {
 		session.MakeRequest(t, req, http.StatusOK)
 		assertSignedInAs(t, session, "user4")
 
-		// the other remembered account is switchable straight away
-		session.MakeRequest(t, NewRequestf(t, "POST", "/user/accounts/switch/%d", user2.ID), http.StatusOK)
+		// the other remembered account only joins the session once it is picked while adding an account
+		session.MakeRequest(t, NewRequestf(t, "POST", "/user/accounts/switch/%d", user2.ID), http.StatusBadRequest)
+		session.MakeRequest(t, NewRequest(t, "POST", "/user/accounts/add"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+		assert.Equal(t, 1, NewHTMLParser(t, resp.Body).Find("[data-url*='/user/login/remembered/']").Length())
+		session.MakeRequest(t, NewRequestf(t, "POST", "/user/login/remembered/%d", user2.ID), http.StatusOK)
 		assertSignedInAs(t, session, "user2")
+		session.MakeRequest(t, NewRequestf(t, "POST", "/user/accounts/switch/%d", user4.ID), http.StatusOK)
+		assertSignedInAs(t, session, "user4")
 	})
 
 	t.Run("RejectsAccountNotRemembered", func(t *testing.T) {
