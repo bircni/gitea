@@ -163,13 +163,18 @@ func signInRemembered(ctx *context.Context, accounts []rememberedAccount, chosen
 	if err := ctx.Session.Release(); err != nil {
 		return fmt.Errorf("unable to store session: %w", err)
 	}
-	return resetLocale(ctx, chosen)
+	if err := resetLocale(ctx, chosen); err != nil {
+		log.Error("Failed to reset locale for user %d: %v", chosen.ID, err)
+	}
+	return nil
 }
 
 // autoSignIn reads cookie and try to auto-login.
 func autoSignIn(ctx *context.Context) (autoSignInResult, error) {
 	accounts, compromised, err := checkRememberedAccounts(ctx)
-	if err != nil {
+	if errors.Is(err, auth_service.ErrAuthTokenStale) {
+		return autoSignInResult{}, nil
+	} else if err != nil {
 		return autoSignInResult{compromised: compromised}, err
 	}
 
@@ -178,7 +183,9 @@ func autoSignIn(ctx *context.Context) (autoSignInResult, error) {
 		setRememberCookie(ctx, nil)
 		return autoSignInResult{compromised: compromised}, nil
 	case 1:
-		if err := signInRemembered(ctx, accounts, accounts[0].user.ID); err != nil {
+		if err := signInRemembered(ctx, accounts, accounts[0].user.ID); errors.Is(err, auth_service.ErrAuthTokenStale) {
+			return autoSignInResult{compromised: compromised}, nil
+		} else if err != nil {
 			return autoSignInResult{compromised: compromised}, err
 		}
 		return autoSignInResult{signedIn: true, compromised: compromised}, nil
@@ -367,7 +374,10 @@ func SignIn(ctx *context.Context) {
 // The proof is possession of that account's remember-me token in the caller's own cookie.
 func SignInRemembered(ctx *context.Context) {
 	accounts, _, err := checkRememberedAccounts(ctx)
-	if err != nil {
+	if errors.Is(err, auth_service.ErrAuthTokenStale) {
+		ctx.JSONRedirect(setting.AppSubURL + "/user/login") // the concurrent request's cookie decides there
+		return
+	} else if err != nil {
 		ctx.ServerError("checkRememberedAccounts", err)
 		return
 	}
@@ -377,7 +387,10 @@ func SignInRemembered(ctx *context.Context) {
 		ctx.JSONRedirect(setting.AppSubURL + "/user/login")
 		return
 	}
-	if err := signInRemembered(ctx, accounts, uid); err != nil {
+	if err := signInRemembered(ctx, accounts, uid); errors.Is(err, auth_service.ErrAuthTokenStale) {
+		ctx.JSONRedirect(setting.AppSubURL + "/user/login")
+		return
+	} else if err != nil {
 		ctx.ServerError("signInRemembered", err)
 		return
 	}
@@ -475,6 +488,9 @@ func handleSignIn(ctx *context.Context, u *user_model.User, remember bool) {
 
 func handleSignInFull(ctx *context.Context, u *user_model.User, remember bool) {
 	if remember {
+		if err := auth.DeleteExpiredAuthTokens(ctx); err != nil {
+			log.Error("Failed to delete expired auth tokens: %v", err)
+		}
 		nt, token, err := auth_service.CreateAuthTokenForUserID(ctx, u.ID)
 		if err != nil {
 			ctx.ServerError("CreateAuthTokenForUserID", err)

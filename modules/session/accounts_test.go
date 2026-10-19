@@ -6,7 +6,6 @@ package session
 import (
 	"testing"
 
-	"gitea.com/go-chi/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,11 +61,9 @@ func TestSignedInAccounts(t *testing.T) {
 		assert.Nil(t, GetSignedInAccounts(fakeStore{KeySignedInAccounts: "not json"}))
 	})
 
-	t.Run("StoredValueIsGobEncodable", func(t *testing.T) {
-		// session data is gob-encoded and gob cannot encode unregistered types, so the list must be a string
-		sess := fakeStore{}
+	t.Run("StoredValueIsEncodable", func(t *testing.T) {
+		sess := NewMockMemStore("sid")
 		require.NoError(t, AddSignedInAccount(sess, SignedInAccount{UID: 1, SignInMethod: SignInMethodOAuth2}))
-		_, err := session.EncodeGob(map[any]any(sess))
-		require.NoError(t, err)
+		assert.Equal(t, []SignedInAccount{{UID: 1, SignInMethod: SignInMethodOAuth2}}, GetSignedInAccounts(sess))
 	})
 }

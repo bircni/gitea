@@ -200,7 +200,6 @@ func verifyAuthWithOptionsWeb(options *common.VerifyOptions) func(ctx *context.C
 						ctx.HTTPError(http.StatusUnauthorized, ctx.Locale.TrString("auth.must_change_password"))
 						return
 					}
-					middleware.SetRedirectToCookie(ctx.Resp, setting.AppSubURL+ctx.Req.URL.RequestURI())
 					ctx.Redirect(setting.AppSubURL + "/user/settings/change_password")
 					return
 				}
@@ -939,7 +938,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 	reqPackageAccess := func(accessMode perm.AccessMode) func(ctx *context.Context) {
 		return func(ctx *context.Context) {
-			if ctx.Package.AccessMode < accessMode && !ctx.IsUserSiteAdmin() {
+			if ctx.Package.AccessMode < accessMode {
 				ctx.NotFound(nil)
 			}
 		}
@@ -1101,7 +1100,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 		m.Get("/create", repo.Create)
 		m.Post("/create", web.Bind[*forms.CreateRepoForm](), repo.CreatePost)
 		m.Get("/migrate", repo.Migrate)
-		m.Post("/migrate", web.Bind[*forms.MigrateRepoForm](), repo.MigratePost)
+		m.Post("/migrate", repo.MigratePost)
 		m.Get("/search", repo.SearchRepo)
 	}, reqSignIn)
 	// end "/repo": create, migrate, search
@@ -1532,7 +1531,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 	m.Group("/{username}/{reponame}", func() {
 		m.Post("/topics", repo.TopicsPost)
-	}, context.RepoAssignment, reqRepoAdmin, context.RepoMustNotBeArchived())
+	}, optSignIn, context.RepoAssignment, reqRepoAdmin, context.RepoMustNotBeArchived())
 
 	m.Group("/{username}/{reponame}", func() {
 		if setting.Packages.Enabled {
