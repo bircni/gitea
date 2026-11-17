@@ -13,6 +13,7 @@ import (
 	packages_model "gitea.dev/models/packages"
 	perm_model "gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
@@ -673,6 +674,45 @@ func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 			Sender:      convert.ToUser(ctx, doer, nil),
 		}).
 		WithPullRequest(pr).
+		Notify(ctx)
+}
+
+func (n *actionsNotifier) PullRequestMergeQueueChanged(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, enqueued bool) {
+	ctx = withMethod(ctx, "PullRequestMergeQueueChanged")
+
+	if err := pr.LoadIssue(ctx); err != nil {
+		log.Error("pr.LoadIssue: %v", err)
+		return
+	}
+	if err := pr.Issue.LoadRepo(ctx); err != nil {
+		log.Error("pr.Issue.LoadRepo: %v", err)
+		return
+	}
+
+	newNotifyInput(pr.Issue.Repo, doer, webhook_module.HookEventPullRequest).
+		WithPayload(&api.PullRequestPayload{
+			Action:      util.Iif(enqueued, api.HookIssueEnqueued, api.HookIssueDequeued),
+			Index:       pr.Issue.Index,
+			PullRequest: convert.ToPayloadPullRequest(ctx, pr, nil),
+			Repository:  convert.ToRepo(ctx, pr.Issue.Repo, access_model.Permission{AccessMode: perm_model.AccessModeNone}),
+			Sender:      convert.ToUser(ctx, doer, nil),
+		}).
+		WithPullRequest(pr).
+		Notify(ctx)
+}
+
+// MergeGroupChecksRequested runs the merge_group workflows of the queue commit, like GitHub only for checks_requested
+func (n *actionsNotifier) MergeGroupChecksRequested(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry) {
+	ctx = withMethod(ctx, "MergeGroupChecksRequested")
+
+	payload, err := convert.ToMergeGroupPayload(ctx, doer, repo, entry, api.HookMergeGroupChecksRequested, "")
+	if err != nil {
+		log.Error("ToMergeGroupPayload: %v", err)
+		return
+	}
+	newNotifyInput(repo, doer, webhook_module.HookEventMergeGroup).
+		WithRef(entry.GroupRef).
+		WithPayload(payload).
 		Notify(ctx)
 }
 
