@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	pull_model "gitea.dev/models/pull"
@@ -24,6 +25,7 @@ import (
 	"gitea.dev/modules/process"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/timeutil"
+	"gitea.dev/modules/util"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 	repo_service "gitea.dev/services/repository"
@@ -61,10 +63,13 @@ func CheckAllQueues(ctx context.Context) error {
 	return nil
 }
 
+// addToQueue never blocks the caller: with an immediate queue the merge's own push hooks would otherwise wait for the branch lock held by the merge
 func addToQueue(repoID int64, branch string) {
-	if err := branchQueue.Push(fmt.Sprintf("%d:%s", repoID, branch)); err != nil && !errors.Is(err, queue.ErrAlreadyInQueue) {
-		log.Error("Unable to push merge queue of repo %d branch %s: %v", repoID, branch, err)
-	}
+	go func() {
+		if err := branchQueue.Push(fmt.Sprintf("%d:%s", repoID, branch)); err != nil && !errors.Is(err, queue.ErrAlreadyInQueue) {
+			log.Error("Unable to push merge queue of repo %d branch %s: %v", repoID, branch, err)
+		}
+	}()
 }
 
 func handleBranches(items ...string) []string {
@@ -120,7 +125,7 @@ func processQueue(ctx context.Context, repoID int64, branch string) error {
 	s := &queueState{repo: repo, gitRepo: gitRepo, pb: pb, branch: branch, prs: map[int64]*issues_model.PullRequest{}}
 	if pb == nil || !pb.RequireMergeQueue {
 		for _, e := range entries {
-			if err := s.removeEntry(ctx, e, nil, issues_model.MergeQueueRemovedNotMergeable); err != nil {
+			if err := s.removeEntry(ctx, e, issues_model.MergeQueueRemovedNotMergeable); err != nil {
 				return err
 			}
 		}
@@ -185,7 +190,7 @@ func (s *queueState) dropStaleEntries(ctx context.Context, entries []*pull_model
 			return err
 		}
 		if pr.HasMerged || pr.Issue.IsClosed || pr.BaseBranch != s.branch {
-			if err := s.removeEntry(ctx, e, nil, ""); err != nil {
+			if err := s.removeEntry(ctx, e, ""); err != nil {
 				return err
 			}
 			continue
@@ -195,7 +200,7 @@ func (s *queueState) dropStaleEntries(ctx context.Context, entries []*pull_model
 			return err
 		}
 		if headSHA != e.HeadSHA {
-			if err := s.removeEntry(ctx, e, nil, issues_model.MergeQueueRemovedHeadChanged); err != nil {
+			if err := s.removeEntry(ctx, e, issues_model.MergeQueueRemovedHeadChanged); err != nil {
 				return err
 			}
 			continue
@@ -269,7 +274,7 @@ func (s *queueState) removeFailedEntries(ctx context.Context) error {
 		if state, err := pull_service.GetMergeQueueCommitStatusState(ctx, s.repo, s.pb, e.GroupHeadSHA); err == nil && state.IsPending() {
 			reason = issues_model.MergeQueueRemovedChecksTimeout
 		}
-		if err := s.removeEntry(ctx, e, nil, reason); err != nil {
+		if err := s.removeEntry(ctx, e, reason); err != nil {
 			return err
 		}
 		for _, next := range s.entries[i+1:] {
@@ -378,7 +383,7 @@ func (s *queueState) buildEntries(ctx context.Context, baseSHA string) error {
 			if !isConflict(err) {
 				return err
 			}
-			if err := s.removeEntry(ctx, e, nil, issues_model.MergeQueueRemovedConflict); err != nil {
+			if err := s.removeEntry(ctx, e, issues_model.MergeQueueRemovedConflict); err != nil {
 				return err
 			}
 			s.entries = append(s.entries[:i], s.entries[i+1:]...)
@@ -397,7 +402,7 @@ func (s *queueState) buildEntries(ctx context.Context, baseSHA string) error {
 	}
 	if built > 0 {
 		// statuses may already exist or no checks may be required
-		go addToQueue(s.repo.ID, s.branch)
+		addToQueue(s.repo.ID, s.branch)
 	}
 	return nil
 }
@@ -426,15 +431,29 @@ func (s *queueState) destroyGroup(ctx context.Context, e *pull_model.MergeQueueE
 }
 
 // removeEntry takes the pull request out of the queue, a comment is only added for an open pull request
-func (s *queueState) removeEntry(ctx context.Context, e *pull_model.MergeQueueEntry, doer *user_model.User, reason issues_model.MergeQueueRemovalReason) error {
-	if doer == nil {
-		doer = s.enqueuer(ctx, e)
-	}
-	return removeEntry(ctx, s.repo, e, doer, reason)
+func (s *queueState) removeEntry(ctx context.Context, e *pull_model.MergeQueueEntry, reason issues_model.MergeQueueRemovalReason) error {
+	return removeEntry(ctx, s.repo, e, s.enqueuer(ctx, e), reason)
 }
 
 func removeEntry(ctx context.Context, repo *repo_model.Repository, e *pull_model.MergeQueueEntry, doer *user_model.User, reason issues_model.MergeQueueRemovalReason) error {
-	if deleted, err := pull_model.DeleteMergeQueueEntry(ctx, e.PullID); err != nil || !deleted {
+	pr, err := issues_model.GetPullRequestByID(ctx, e.PullID)
+	if err != nil && !issues_model.IsErrPullRequestNotExist(err) {
+		return err
+	}
+	// the comment is written in the same transaction, so it exists once the entry is gone
+	err = db.WithTx(ctx, func(ctx context.Context) error {
+		if deleted, err := pull_model.DeleteMergeQueueEntry(ctx, e.PullID); err != nil || !deleted {
+			return util.Iif(err != nil, err, errEntryGone)
+		}
+		if reason == "" || pr == nil {
+			return nil
+		}
+		_, err := issues_model.CreateMergeQueueComment(ctx, pr, doer, false, reason)
+		return err
+	})
+	if errors.Is(err, errEntryGone) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	if e.IsBuilt() {
@@ -443,15 +462,10 @@ func removeEntry(ctx context.Context, repo *repo_model.Repository, e *pull_model
 		}
 		notify_service.MergeGroupDestroyed(ctx, doer, repo, e, DestroyedDequeued)
 	}
-	pr, err := issues_model.GetPullRequestByID(ctx, e.PullID)
-	if err != nil {
-		return err
+	if pr != nil {
+		notify_service.PullRequestMergeQueueChanged(ctx, doer, pr, false)
 	}
-	if reason != "" {
-		if _, err := issues_model.CreateMergeQueueComment(ctx, pr, doer, false, reason); err != nil {
-			return err
-		}
-	}
-	notify_service.PullRequestMergeQueueChanged(ctx, doer, pr, false)
 	return nil
 }
+
+var errEntryGone = errors.New("merge queue entry is already removed")
