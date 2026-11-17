@@ -95,6 +95,11 @@ func TestPullMergeQueue(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, entry1.GroupHeadSHA, groupSHA)
 
+		resp := session.MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/user2/repo1/pulls/%d/merge_box", pr1.Index)), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), "/user2/repo1/queue/master")
+		resp = session.MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/queue/master"), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), fmt.Sprintf("#%d", pr3.Index))
+
 		req = NewRequest(t, "GET", "/api/v1/repos/user2/repo1/merge-queue/master").AddTokenAuth(token)
 		var listed []*api.MergeQueueEntry
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &listed)
