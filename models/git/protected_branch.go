@@ -77,6 +77,67 @@ type ProtectedBranchConfig struct {
 	ProtectedFilePatterns         string   `json:"protected_file_patterns,omitzero"`
 	UnprotectedFilePatterns       string   `json:"unprotected_file_patterns,omitzero"`
 	BlockAdminMergeOverride       bool     `json:"block_admin_merge_override,omitzero"`
+
+	RequireMergeQueue bool             `json:"require_merge_queue,omitzero"`
+	MergeQueue        MergeQueueConfig `json:"merge_queue,omitzero"`
+}
+
+type MergeQueueGroupingStrategy string
+
+const (
+	MergeQueueGroupingAllGreen  MergeQueueGroupingStrategy = "ALLGREEN"  // every entry must pass its own checks
+	MergeQueueGroupingHeadGreen MergeQueueGroupingStrategy = "HEADGREEN" // a passing entry also merges the entries before it
+)
+
+// MergeQueueConfig mirrors the settings of GitHub's "Require merge queue" rule
+type MergeQueueConfig struct {
+	MergeMethod                  repo_model.MergeStyle      `json:"merge_method,omitzero"`
+	MaxEntriesToBuild            int                        `json:"max_entries_to_build,omitzero"`
+	MinEntriesToMerge            int                        `json:"min_entries_to_merge,omitzero"`
+	MaxEntriesToMerge            int                        `json:"max_entries_to_merge,omitzero"`
+	MinEntriesToMergeWaitMinutes int                        `json:"min_entries_to_merge_wait_minutes,omitzero"`
+	GroupingStrategy             MergeQueueGroupingStrategy `json:"grouping_strategy,omitzero"`
+	CheckResponseTimeoutMinutes  int                        `json:"check_response_timeout_minutes,omitzero"`
+}
+
+// MergeQueueMergeStyles are the styles that can build a queue commit on top of another one
+var MergeQueueMergeStyles = []repo_model.MergeStyle{repo_model.MergeStyleMerge, repo_model.MergeStyleRebase, repo_model.MergeStyleRebaseMerge, repo_model.MergeStyleSquash}
+
+// DefaultMergeQueueConfig returns GitHub's defaults
+func DefaultMergeQueueConfig() MergeQueueConfig {
+	return MergeQueueConfig{
+		MergeMethod:                  repo_model.MergeStyleMerge,
+		MaxEntriesToBuild:            5,
+		MinEntriesToMerge:            1,
+		MaxEntriesToMerge:            5,
+		MinEntriesToMergeWaitMinutes: 5,
+		GroupingStrategy:             MergeQueueGroupingAllGreen,
+		CheckResponseTimeoutMinutes:  60,
+	}
+}
+
+// Normalized fills unset values with defaults, a stored zero wait time stays zero
+func (c MergeQueueConfig) Normalized() MergeQueueConfig {
+	def := DefaultMergeQueueConfig()
+	if !slices.Contains(MergeQueueMergeStyles, c.MergeMethod) {
+		c.MergeMethod = def.MergeMethod
+	}
+	if c.MaxEntriesToBuild < 1 {
+		c.MaxEntriesToBuild = def.MaxEntriesToBuild
+	}
+	if c.MinEntriesToMerge < 1 {
+		c.MinEntriesToMerge = def.MinEntriesToMerge
+	}
+	if c.MaxEntriesToMerge < 1 {
+		c.MaxEntriesToMerge = def.MaxEntriesToMerge
+	}
+	if c.GroupingStrategy != MergeQueueGroupingHeadGreen {
+		c.GroupingStrategy = MergeQueueGroupingAllGreen
+	}
+	if c.CheckResponseTimeoutMinutes < 1 {
+		c.CheckResponseTimeoutMinutes = def.CheckResponseTimeoutMinutes
+	}
+	return c
 }
 
 func init() {

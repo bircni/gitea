@@ -121,6 +121,9 @@ const (
 	CommentTypeUnpin // 37 unpin Issue/PullRequest
 
 	CommentTypeChangeTimeEstimate // 38 Change time estimate
+
+	CommentTypePRAddedToMergeQueue     // 39 pr was added to the merge queue
+	CommentTypePRRemovedFromMergeQueue // 40 pr was removed from the merge queue, the content holds the reason
 )
 
 var commentStrings = []string{
@@ -163,6 +166,8 @@ var commentStrings = []string{
 	"pin",
 	"unpin",
 	"change_time_estimate",
+	"added_to_merge_queue",
+	"removed_from_merge_queue",
 }
 
 func (t CommentType) String() string {
@@ -1288,6 +1293,39 @@ func CreateAutoMergeComment(ctx context.Context, typ CommentType, pr *PullReques
 		Issue: pr.Issue,
 	})
 	return comment, err
+}
+
+// MergeQueueRemovalReason is stored as the content of CommentTypePRRemovedFromMergeQueue
+type MergeQueueRemovalReason string
+
+const (
+	MergeQueueRemovedByUser        MergeQueueRemovalReason = "dequeued"
+	MergeQueueRemovedChecksFailed  MergeQueueRemovalReason = "checks_failed"
+	MergeQueueRemovedChecksTimeout MergeQueueRemovalReason = "checks_timeout"
+	MergeQueueRemovedConflict      MergeQueueRemovalReason = "conflict"
+	MergeQueueRemovedHeadChanged   MergeQueueRemovalReason = "head_changed"
+	MergeQueueRemovedNotMergeable  MergeQueueRemovalReason = "not_mergeable"
+)
+
+// CreateMergeQueueComment records that a pull request entered or left the merge queue
+func CreateMergeQueueComment(ctx context.Context, pr *PullRequest, doer *user_model.User, added bool, reason MergeQueueRemovalReason) (*Comment, error) {
+	if err := pr.LoadIssue(ctx); err != nil {
+		return nil, err
+	}
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		return nil, err
+	}
+	typ := CommentTypePRAddedToMergeQueue
+	if !added {
+		typ = CommentTypePRRemovedFromMergeQueue
+	}
+	return CreateComment(ctx, &CreateCommentOptions{
+		Type:    typ,
+		Doer:    doer,
+		Repo:    pr.BaseRepo,
+		Issue:   pr.Issue,
+		Content: string(reason),
+	})
 }
 
 // RemapExternalUser ExternalUserRemappable interface
