@@ -11,6 +11,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	packages_model "gitea.dev/models/packages"
 	project_model "gitea.dev/models/project"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
@@ -122,6 +123,33 @@ func MergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_mod
 }
 
 // AutoMergePullRequest notifies merge pull request to notifiers
+// PullRequestMergeQueueChanged notifies that a pull request entered or left the merge queue
+func PullRequestMergeQueueChanged(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, enqueued bool) {
+	defer recoverPanic()
+
+	for _, notifier := range notifiers {
+		notifier.PullRequestMergeQueueChanged(ctx, doer, pr, enqueued)
+	}
+}
+
+// MergeGroupChecksRequested notifies that a queue commit needs its checks to run
+func MergeGroupChecksRequested(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry) {
+	defer recoverPanic()
+
+	for _, notifier := range notifiers {
+		notifier.MergeGroupChecksRequested(ctx, doer, repo, entry)
+	}
+}
+
+// MergeGroupDestroyed notifies that a queue commit was merged, invalidated or dequeued
+func MergeGroupDestroyed(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry, reason string) {
+	defer recoverPanic()
+
+	for _, notifier := range notifiers {
+		notifier.MergeGroupDestroyed(ctx, doer, repo, entry, reason)
+	}
+}
+
 func AutoMergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest) {
 	defer recoverPanic()
 

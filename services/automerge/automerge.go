@@ -25,6 +25,7 @@ import (
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/services/automergequeue"
+	"gitea.dev/services/mergequeue"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 	repo_service "gitea.dev/services/repository"
@@ -220,6 +221,17 @@ func handlePullRequestAutoMerge(ctx context.Context, pr *issues_model.PullReques
 
 	if err := pull_service.CheckPullMergeable(ctx, doer, &perm, pr, pull_service.MergeCheckTypeGeneral, scheduledPRM.MergeStyle, false); err != nil {
 		return errors.Join(errSkipAutoMerge, errors.New("pull request is not mergeable"))
+	}
+
+	if required, _, err := mergequeue.IsRequired(ctx, pr.BaseRepoID, pr.BaseBranch); err != nil {
+		return err
+	} else if required {
+		// like GitHub's "merge when ready", a ready pull request enters the merge queue
+		if _, err := mergequeue.Enqueue(ctx, doer, pr, false); err != nil && !errors.Is(err, pull_model.ErrAlreadyInMergeQueue) {
+			return fmt.Errorf("failed to add PR:%d to the merge queue: %w", pr.ID, err)
+		}
+		_, err := pull_model.DeleteScheduledAutoMerge(ctx, pr.ID)
+		return err
 	}
 
 	// although expectedHeadCommitID is checked before, we should pass it to the Merge function to

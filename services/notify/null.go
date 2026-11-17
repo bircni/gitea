@@ -11,6 +11,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	packages_model "gitea.dev/models/packages"
 	project_model "gitea.dev/models/project"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
@@ -61,6 +62,15 @@ func (*NullNotifier) MergePullRequest(ctx context.Context, doer *user_model.User
 
 // AutoMergePullRequest places a place holder function
 func (*NullNotifier) AutoMergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest) {
+}
+
+func (*NullNotifier) PullRequestMergeQueueChanged(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, enqueued bool) {
+}
+
+func (*NullNotifier) MergeGroupChecksRequested(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry) {
+}
+
+func (*NullNotifier) MergeGroupDestroyed(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry, reason string) {
 }
 
 // PullRequestSynchronized places a place holder function
