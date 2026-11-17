@@ -116,6 +116,36 @@ func DefaultMergeQueueConfig() MergeQueueConfig {
 	}
 }
 
+// WithDefaults fills unset values with defaults, a zero wait time is a valid setting and stays
+func (c MergeQueueConfig) WithDefaults() MergeQueueConfig {
+	def := DefaultMergeQueueConfig()
+	c.MergeMethod = util.IfZero(c.MergeMethod, def.MergeMethod)
+	c.MaxEntriesToBuild = util.IfZero(c.MaxEntriesToBuild, def.MaxEntriesToBuild)
+	c.MinEntriesToMerge = util.IfZero(c.MinEntriesToMerge, def.MinEntriesToMerge)
+	c.MaxEntriesToMerge = util.IfZero(c.MaxEntriesToMerge, def.MaxEntriesToMerge)
+	c.GroupingStrategy = util.IfZero(c.GroupingStrategy, def.GroupingStrategy)
+	c.CheckResponseTimeoutMinutes = util.IfZero(c.CheckResponseTimeoutMinutes, def.CheckResponseTimeoutMinutes)
+	return c
+}
+
+// Validate checks the ranges GitHub allows
+func (c MergeQueueConfig) Validate() error {
+	inRange := func(v, low, high int) bool { return v >= low && v <= high }
+	switch {
+	case !slices.Contains(MergeQueueMergeStyles, c.MergeMethod):
+		return util.NewInvalidArgumentErrorf("merge queue merge method %q is not supported", c.MergeMethod)
+	case !inRange(c.MaxEntriesToBuild, 1, 100), !inRange(c.MinEntriesToMerge, 1, 100), !inRange(c.MaxEntriesToMerge, 1, 100):
+		return util.NewInvalidArgumentErrorf("merge queue group sizes must be between 1 and 100")
+	case c.MinEntriesToMerge > c.MaxEntriesToMerge:
+		return util.NewInvalidArgumentErrorf("merge queue minimum group size must not exceed the maximum")
+	case !inRange(c.MinEntriesToMergeWaitMinutes, 0, 360), !inRange(c.CheckResponseTimeoutMinutes, 1, 360):
+		return util.NewInvalidArgumentErrorf("merge queue wait time and check timeout must be at most 360 minutes")
+	case c.GroupingStrategy != MergeQueueGroupingAllGreen && c.GroupingStrategy != MergeQueueGroupingHeadGreen:
+		return util.NewInvalidArgumentErrorf("merge queue grouping strategy %q is not supported", c.GroupingStrategy)
+	}
+	return nil
+}
+
 // Normalized fills unset values with defaults, a stored zero wait time stays zero
 func (c MergeQueueConfig) Normalized() MergeQueueConfig {
 	def := DefaultMergeQueueConfig()

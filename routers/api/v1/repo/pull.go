@@ -37,6 +37,7 @@ import (
 	git_service "gitea.dev/services/git"
 	"gitea.dev/services/gitdiff"
 	issue_service "gitea.dev/services/issue"
+	"gitea.dev/services/mergequeue"
 	"gitea.dev/services/notifications"
 	pull_service "gitea.dev/services/pull"
 	repo_service "gitea.dev/services/repository"
@@ -850,6 +851,8 @@ func MergePullRequest(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/empty"
+	//   "201":
+	//     description: the merge is scheduled or the pull request was added to the merge queue
 	//   default:
 	//     "$ref": "#/responses/error"
 
@@ -971,6 +974,17 @@ func MergePullRequest(ctx *context.APIContext) {
 			ctx.Status(http.StatusCreated)
 			return
 		}
+	}
+
+	// a ready pull request enters the merge queue, which merges it with the method of the branch protection
+	if required, _, err := mergequeue.IsRequired(ctx, pr.BaseRepoID, pr.BaseBranch); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	} else if required && !form.ForceMerge {
+		if _, err := enqueuePullRequest(ctx, pr, false); err == nil {
+			ctx.Status(http.StatusCreated)
+		}
+		return
 	}
 
 	if err := pull_service.Merge(ctx, pr.ID, ctx.Doer, repo_model.MergeStyle(form.Do), form.HeadCommitID, message, false); err != nil {

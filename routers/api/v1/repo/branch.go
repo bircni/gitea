@@ -790,6 +790,11 @@ func CreateBranchProtection(ctx *context.APIContext) {
 		Priority: form.Priority,
 	}
 
+	if err := applyMergeQueueOption(protectBranch, &form.RequireMergeQueue, form.MergeQueue); err != nil {
+		ctx.APIError(http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
 	if err := pull_service.CreateOrUpdateProtectedBranch(ctx, ctx.Repo.Repository, protectBranch, git_model.WhitelistOptions{
 		UserIDs:          whitelistUsers,
 		TeamIDs:          whitelistTeams,
@@ -968,6 +973,11 @@ func EditBranchProtection(ctx *context.APIContext) {
 
 	if form.BlockAdminMergeOverride != nil {
 		protectBranch.BlockAdminMergeOverride = *form.BlockAdminMergeOverride
+	}
+
+	if err := applyMergeQueueOption(protectBranch, form.RequireMergeQueue, form.MergeQueue); err != nil {
+		ctx.APIError(http.StatusUnprocessableEntity, err.Error())
+		return
 	}
 
 	whitelistUsers := loadBranchProtectionUserIDs(ctx, form.PushWhitelistUsernames, protectBranch.WhitelistUserIDs)
@@ -1290,4 +1300,35 @@ func MergeUpstream(ctx *context.APIContext) {
 		return
 	}
 	ctx.JSON(http.StatusOK, &api.MergeUpstreamResponse{MergeStyle: mergeStyle})
+}
+
+// applyMergeQueueOption sets the merge queue settings, a queue needs required status checks to know when to merge
+func applyMergeQueueOption(pb *git_model.ProtectedBranch, require *bool, opt *api.BranchProtectionMergeQueue) error {
+	if require != nil {
+		pb.RequireMergeQueue = *require
+	}
+	if opt != nil {
+		pb.MergeQueue = git_model.MergeQueueConfig{
+			MergeMethod:                  repo_model.MergeStyle(opt.MergeMethod),
+			MaxEntriesToBuild:            opt.MaxEntriesToBuild,
+			MinEntriesToMerge:            opt.MinEntriesToMerge,
+			MaxEntriesToMerge:            opt.MaxEntriesToMerge,
+			MinEntriesToMergeWaitMinutes: opt.MinEntriesToMergeWaitMinutes,
+			GroupingStrategy:             git_model.MergeQueueGroupingStrategy(opt.GroupingStrategy),
+			CheckResponseTimeoutMinutes:  opt.CheckResponseTimeoutMinutes,
+		}.WithDefaults()
+		if err := pb.MergeQueue.Validate(); err != nil {
+			return err
+		}
+	}
+	if !pb.RequireMergeQueue {
+		return nil
+	}
+	if !pb.EnableStatusCheck {
+		return util.NewInvalidArgumentErrorf("a merge queue requires status checks to be enabled")
+	}
+	if opt == nil {
+		pb.MergeQueue = pb.MergeQueue.WithDefaults()
+	}
+	return nil
 }

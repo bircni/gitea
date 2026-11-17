@@ -6,6 +6,7 @@ package convert
 import (
 	"context"
 
+	git_model "gitea.dev/models/git"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
 	pull_model "gitea.dev/models/pull"
@@ -40,4 +41,34 @@ func ToMergeGroupPayload(ctx context.Context, doer *user_model.User, repo *repo_
 		Repo:       ToRepo(ctx, repo, access_model.Permission{AccessMode: perm.AccessModeOwner}),
 		Sender:     ToUser(ctx, doer, nil),
 	}, nil
+}
+
+// ToBranchProtectionMergeQueue converts the merge queue settings of a branch protection, filling in defaults
+func ToBranchProtectionMergeQueue(cfg git_model.MergeQueueConfig) *api.BranchProtectionMergeQueue {
+	cfg = cfg.Normalized()
+	return &api.BranchProtectionMergeQueue{
+		MergeMethod:                  string(cfg.MergeMethod),
+		MaxEntriesToBuild:            cfg.MaxEntriesToBuild,
+		MinEntriesToMerge:            cfg.MinEntriesToMerge,
+		MaxEntriesToMerge:            cfg.MaxEntriesToMerge,
+		MinEntriesToMergeWaitMinutes: cfg.MinEntriesToMergeWaitMinutes,
+		GroupingStrategy:             string(cfg.GroupingStrategy),
+		CheckResponseTimeoutMinutes:  cfg.CheckResponseTimeoutMinutes,
+	}
+}
+
+// ToMergeQueueEntry converts a merge queue entry
+func ToMergeQueueEntry(ctx context.Context, entry *pull_model.MergeQueueEntry, position int, prIndex int64, doer *user_model.User) *api.MergeQueueEntry {
+	_, enqueuer, _ := user_model.GetPossibleUserByID(ctx, entry.EnqueuerID)
+	return &api.MergeQueueEntry{
+		Position:          position,
+		State:             string(entry.State),
+		PullRequestIndex:  prIndex,
+		BaseBranch:        entry.BaseBranch,
+		HeadSHA:           entry.HeadSHA,
+		MergeGroupHeadSHA: entry.GroupHeadSHA,
+		MergeGroupHeadRef: entry.GroupRef,
+		Enqueuer:          ToUser(ctx, enqueuer, doer),
+		EnqueuedAt:        entry.CreatedUnix.AsTime(),
+	}
 }
