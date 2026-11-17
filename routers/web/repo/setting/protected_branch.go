@@ -22,6 +22,7 @@ import (
 	"gitea.dev/modules/glob"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/templates"
+	"gitea.dev/modules/util"
 	"gitea.dev/modules/web"
 	"gitea.dev/routers/web/repo"
 	"gitea.dev/services/audit"
@@ -121,6 +122,16 @@ func SettingsProtectedBranch(c *context.Context) {
 	}
 
 	c.Data["Rule"] = rule
+	c.Data["MergeQueue"] = util.Iif(rule.RequireMergeQueue, rule.MergeQueue.WithDefaults(), git_model.DefaultMergeQueueConfig())
+	c.Data["MergeQueueMergeStyles"] = []struct {
+		Style    repo_model.MergeStyle
+		LabelKey string
+	}{
+		{repo_model.MergeStyleMerge, "repo.pulls.merge_pull_request"},
+		{repo_model.MergeStyleRebase, "repo.pulls.rebase_merge_pull_request"},
+		{repo_model.MergeStyleRebaseMerge, "repo.pulls.rebase_merge_commit_pull_request"},
+		{repo_model.MergeStyleSquash, "repo.pulls.squash_merge_pull_request"},
+	}
 	c.HTML(http.StatusOK, tplProtectedBranch)
 }
 
@@ -303,6 +314,26 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 	protectBranch.UnprotectedFilePatterns = f.UnprotectedFilePatterns
 	protectBranch.BlockOnOutdatedBranch = f.BlockOnOutdatedBranch
 	protectBranch.BlockAdminMergeOverride = f.BlockAdminMergeOverride
+	protectBranch.RequireMergeQueue = f.RequireMergeQueue
+	if f.RequireMergeQueue {
+		protectBranch.MergeQueue = git_model.MergeQueueConfig{
+			MergeMethod:                  repo_model.MergeStyle(f.MergeQueueMergeMethod),
+			MaxEntriesToBuild:            f.MergeQueueMaxEntriesToBuild,
+			MinEntriesToMerge:            f.MergeQueueMinEntriesToMerge,
+			MaxEntriesToMerge:            f.MergeQueueMaxEntriesToMerge,
+			MinEntriesToMergeWaitMinutes: f.MergeQueueMinEntriesToMergeWaitMinutes,
+			GroupingStrategy:             util.Iif(f.MergeQueueGroupingStrategy == string(git_model.MergeQueueGroupingAllGreen), git_model.MergeQueueGroupingAllGreen, git_model.MergeQueueGroupingHeadGreen),
+			CheckResponseTimeoutMinutes:  f.MergeQueueCheckResponseTimeoutMinutes,
+		}
+		if !protectBranch.EnableStatusCheck {
+			ctx.JSONErrorWithField(ctx.Tr("repo.settings.merge_queue.requires_status_check"), "require_merge_queue")
+			return
+		}
+		if err := protectBranch.MergeQueue.Validate(); err != nil {
+			ctx.JSONErrorWithField(ctx.Tr("repo.settings.merge_queue.invalid_settings"), "require_merge_queue")
+			return
+		}
+	}
 
 	if err = pull_service.CreateOrUpdateProtectedBranch(ctx, ctx.Repo.Repository, protectBranch, git_model.WhitelistOptions{
 		UserIDs:          whitelistUsers,

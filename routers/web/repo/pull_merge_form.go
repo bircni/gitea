@@ -27,6 +27,10 @@ func (prInfo *pullRequestViewInfo) prepareMergeBoxFormProps(ctx *context.Context
 	if !prInfo.MergeBoxData.hasPermToMerge {
 		return
 	}
+	queue := prInfo.MergeBoxData.MergeQueue
+	if queue != nil && queue.Entry != nil {
+		return
+	}
 
 	prConfig := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
 
@@ -153,6 +157,20 @@ func (prInfo *pullRequestViewInfo) prepareMergeBoxFormProps(ctx *context.Context
 				"hideAutoMerge":         generalHideAutoMerge,
 			},
 		}
+	}
+
+	if queue != nil && len(mergeStyles) > 0 {
+		// the queue merges with the method of the branch protection, using the default message and branch deletion setting
+		mergeStyles = []any{map[string]any{
+			"name":                  prInfo.ProtectedBranchRule.MergeQueue.Normalized().MergeMethod,
+			"allowed":               true,
+			"textDoMerge":           ctx.Locale.Tr("repo.pulls.merge_queue.add"),
+			"hideMergeMessageTexts": true,
+			"hideAutoMerge":         generalHideAutoMerge,
+		}}
+		mergeFormProps["isPullBranchDeletable"] = false
+		mergeFormProps["textAutoMergeButtonWhenSucceed"] = ctx.Locale.Tr("repo.pulls.merge_queue.when_ready")
+		mergeFormProps["textAutoMergeWhenSucceed"] = ctx.Locale.Tr("repo.pulls.merge_queue.add_when_ready")
 	}
 
 	// Manually Merged is not a well-known feature, it is used to mark a non-mergeable PR (already merged, conflicted) as merged

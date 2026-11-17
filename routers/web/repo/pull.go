@@ -49,6 +49,7 @@ import (
 	"gitea.dev/services/forms"
 	git_service "gitea.dev/services/git"
 	"gitea.dev/services/gitdiff"
+	"gitea.dev/services/mergequeue"
 	"gitea.dev/services/notifications"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
@@ -279,6 +280,7 @@ type pullMergeBoxData struct {
 	UpdateStyleOptions  []*pullUpdateAction
 
 	MergeFormProps        map[string]any
+	MergeQueue            *pullMergeQueueData
 	ShowPullCommands      bool
 	ShowMergeInstructions bool
 	AutodetectManualMerge bool
@@ -1183,6 +1185,20 @@ func MergePullRequest(ctx *context.Context) {
 			ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d", ctx.Repo.RepoLink, pr.Index))
 			return
 		}
+	}
+
+	// a ready pull request enters the merge queue, which merges it with the method of the branch protection
+	if required, _, err := mergequeue.IsRequired(ctx, pr.BaseRepoID, pr.BaseBranch); err != nil {
+		ctx.ServerErrorAuto(err)
+		return
+	} else if required && !form.ForceMerge {
+		if _, err := mergequeue.Enqueue(ctx, ctx.Doer, pr, false); err != nil && !errors.Is(err, pull_model.ErrAlreadyInMergeQueue) {
+			ctx.ServerErrorAuto(err)
+			return
+		}
+		ctx.Flash.Success(ctx.Tr("repo.pulls.merge_queue.added"))
+		ctx.JSONRedirect(issue.Link())
+		return
 	}
 
 	if err := pull_service.Merge(ctx, pr.ID, ctx.Doer, repo_model.MergeStyle(form.Do), form.HeadCommitID, message, false); err != nil {
