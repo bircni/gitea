@@ -14,6 +14,7 @@ import (
 	packages_model "gitea.dev/models/packages"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
@@ -869,6 +870,45 @@ func (m *webhookNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 		Sender:      convert.ToUser(ctx, doer, nil),
 	}); err != nil {
 		log.Error("PrepareWebhooks [pull_id: %v]: %v", pr.ID, err)
+	}
+}
+
+func (m *webhookNotifier) PullRequestMergeQueueChanged(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, enqueued bool) {
+	if err := pr.LoadIssue(ctx); err != nil {
+		log.Error("LoadIssue: %v", err)
+		return
+	}
+	if err := pr.Issue.LoadAttributes(ctx); err != nil {
+		log.Error("LoadAttributes: %v", err)
+		return
+	}
+	if err := PrepareWebhooks(ctx, EventSource{Repository: pr.Issue.Repo}, webhook_module.HookEventPullRequest, &api.PullRequestPayload{
+		Action:      util.Iif(enqueued, api.HookIssueEnqueued, api.HookIssueDequeued),
+		Index:       pr.Issue.Index,
+		PullRequest: convert.ToPayloadPullRequest(ctx, pr, doer),
+		Repository:  convert.ToRepo(ctx, pr.Issue.Repo, access_model.Permission{AccessMode: perm.AccessModeOwner}),
+		Sender:      convert.ToUser(ctx, doer, nil),
+	}); err != nil {
+		log.Error("PrepareWebhooks [pull_id: %v]: %v", pr.ID, err)
+	}
+}
+
+func (m *webhookNotifier) MergeGroupChecksRequested(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry) {
+	sendMergeGroupHook(ctx, doer, repo, entry, api.HookMergeGroupChecksRequested, "")
+}
+
+func (m *webhookNotifier) MergeGroupDestroyed(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry, reason string) {
+	sendMergeGroupHook(ctx, doer, repo, entry, api.HookMergeGroupDestroyed, reason)
+}
+
+func sendMergeGroupHook(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, entry *pull_model.MergeQueueEntry, action api.HookMergeGroupAction, reason string) {
+	payload, err := convert.ToMergeGroupPayload(ctx, doer, repo, entry, action, reason)
+	if err != nil {
+		log.Error("ToMergeGroupPayload: %v", err)
+		return
+	}
+	if err := PrepareWebhooks(ctx, EventSource{Repository: repo}, webhook_module.HookEventMergeGroup, payload); err != nil {
+		log.Error("PrepareWebhooks [merge_group %s]: %v", entry.GroupRef, err)
 	}
 }
 

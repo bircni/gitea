@@ -211,6 +211,7 @@ type WebhookForm struct {
 	PullRequestReview        bool
 	PullRequestSync          bool
 	PullRequestReviewRequest bool
+	MergeGroup               bool
 	Wiki                     bool
 	Repository               bool
 	Release                  bool

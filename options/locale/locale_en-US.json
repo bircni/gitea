@@ -2339,6 +2339,8 @@
   "repo.settings.event_workflow_run_desc": "Gitea Actions Workflow run queued, waiting, in progress, or completed.",
   "repo.settings.event_workflow_job": "Workflow Jobs",
   "repo.settings.event_workflow_job_desc": "Gitea Actions Workflow job queued, waiting, in progress, or completed.",
+  "repo.settings.event_merge_group": "Merge Group",
+  "repo.settings.event_merge_group_desc": "Merge queue checks requested for a queue commit, or the queue commit merged or discarded.",
   "repo.settings.event_package": "Package",
   "repo.settings.event_package_desc": "Package created or deleted in a repository.",
   "repo.settings.branch_filter": "Branch filter",

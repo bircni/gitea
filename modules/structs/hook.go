@@ -775,8 +775,6 @@ type MergeGroupPayload struct {
 	Reason string `json:"reason,omitempty"`
 	// The merge group
 	MergeGroup *MergeGroup `json:"merge_group"`
-	// The organization that owns the repository (if applicable)
-	Organization *Organization `json:"organization,omitempty"`
 	// The repository of the merge queue
 	Repo *Repository `json:"repository"`
 	// The user who triggered the event
