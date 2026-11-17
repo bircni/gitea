@@ -47,6 +47,11 @@ func (ctx *prTmpRepoContext) PrepareGitCmd(cmd *gitcmd.Command) *gitcmd.Command 
 // createTemporaryRepoForPR creates a temporary repo with "base" for pr.BaseBranch and "tracking" for  pr.HeadBranch
 // it also create a second base branch called "original_base"
 func createTemporaryRepoForPR(ctx context.Context, pr *issues_model.PullRequest) (prCtx *prTmpRepoContext, cancel context.CancelFunc, retErr error) {
+	return createTemporaryRepoForPRWithBase(ctx, pr, "")
+}
+
+// createTemporaryRepoForPRWithBase is createTemporaryRepoForPR with "base" set to baseCommitID when given, which must exist in the base repo
+func createTemporaryRepoForPRWithBase(ctx context.Context, pr *issues_model.PullRequest, baseCommitID string) (prCtx *prTmpRepoContext, cancel context.CancelFunc, retErr error) {
 	defer func() {
 		if retErr != nil && cancel != nil {
 			cancel()
@@ -124,6 +129,15 @@ func createTemporaryRepoForPR(ctx context.Context, pr *issues_model.PullRequest)
 		AddDashesAndList(git.BranchPrefix+pr.BaseBranch+":"+git.BranchPrefix+tmpRepoBaseBranch, git.BranchPrefix+pr.BaseBranch+":"+git.BranchPrefix+"original_"+tmpRepoBaseBranch)).
 		RunWithStderr(ctx); err != nil {
 		return nil, nil, fmt.Errorf("unable to fetch origin base branch [%s:%s -> base, original_base in tmpBasePath]: %w\n%s\n%s", pr.BaseRepo.FullName(), pr.BaseBranch, err, prCtx.outbuf.String(), err.Stderr())
+	}
+
+	if baseCommitID != "" {
+		// the objects are reachable through the alternates of the base repo
+		for _, branch := range []string{tmpRepoBaseBranch, "original_" + tmpRepoBaseBranch} {
+			if err := prCtx.PrepareGitCmd(gitcmd.NewCommand("update-ref").AddDynamicArguments(git.BranchPrefix+branch, baseCommitID)).RunWithStderr(ctx); err != nil {
+				return nil, nil, fmt.Errorf("unable to set %s to %s in tmpBasePath: %w\n%s", branch, baseCommitID, err, err.Stderr())
+			}
+		}
 	}
 
 	if err := prCtx.PrepareGitCmd(gitcmd.NewCommand("symbolic-ref").AddDynamicArguments("HEAD", git.BranchPrefix+tmpRepoBaseBranch)).

@@ -451,32 +451,14 @@ type mergeAndPushOptions struct {
 // doMergeAndPush performs the merge operation without changing any pull information in database and pushes it up to the base repository
 func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, message string, opts mergeAndPushOptions) (string, error) { //nolint:unparam // non-error result is never used
 	// Clone base repo.
-	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, opts.expectedHeadCommitID)
+	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, opts.expectedHeadCommitID, "")
 	if err != nil {
 		return "", err
 	}
 	defer cancel()
 
-	// Merge commits.
-	switch mergeStyle {
-	case repo_model.MergeStyleMerge:
-		if err := doMergeStyleMerge(mergeCtx, message); err != nil {
-			return "", err
-		}
-	case repo_model.MergeStyleRebase, repo_model.MergeStyleRebaseMerge:
-		if err := doMergeStyleRebase(mergeCtx, mergeStyle, message); err != nil {
-			return "", err
-		}
-	case repo_model.MergeStyleSquash:
-		if err := doMergeStyleSquash(mergeCtx, message); err != nil {
-			return "", err
-		}
-	case repo_model.MergeStyleFastForwardOnly:
-		if err := doMergeStyleFastForwardOnly(mergeCtx); err != nil {
-			return "", err
-		}
-	default:
-		return "", ErrInvalidMergeStyle{ID: pr.BaseRepo.ID, Style: mergeStyle}
+	if err := doMergeStyle(mergeCtx, mergeStyle, message); err != nil {
+		return "", err
 	}
 
 	// OK we should cache our current head and origin/headbranch
@@ -554,6 +536,22 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 	}
 	mergeCtx.outbuf.Reset()
 	return mergeCommitID, nil
+}
+
+// doMergeStyle merges the tracking branch into the base branch of the temp repo
+func doMergeStyle(mergeCtx *mergeContext, mergeStyle repo_model.MergeStyle, message string) error {
+	switch mergeStyle {
+	case repo_model.MergeStyleMerge:
+		return doMergeStyleMerge(mergeCtx, message)
+	case repo_model.MergeStyleRebase, repo_model.MergeStyleRebaseMerge:
+		return doMergeStyleRebase(mergeCtx, mergeStyle, message)
+	case repo_model.MergeStyleSquash:
+		return doMergeStyleSquash(mergeCtx, message)
+	case repo_model.MergeStyleFastForwardOnly:
+		return doMergeStyleFastForwardOnly(mergeCtx)
+	default:
+		return ErrInvalidMergeStyle{ID: mergeCtx.pr.BaseRepo.ID, Style: mergeStyle}
+	}
 }
 
 func commitAndSignNoAuthor(ctx *mergeContext, message string) error {
